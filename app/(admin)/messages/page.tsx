@@ -12,6 +12,7 @@ interface SavedMessage {
   attachments: string[] | null
   conversation_key: string
   date_email: string | null
+  email_contact: string | null
   created_at: string
 }
 
@@ -22,6 +23,33 @@ export default function MessagesPage() {
   const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; total: number } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'phone' | 'nophone'>('all')
+  const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
+
+  async function handleReply(msg: SavedMessage) {
+    if (!replyText.trim() || !msg.email_contact) return
+    setSending(true)
+    try {
+      const res = await fetch('https://renovr91.app.n8n.cloud/webhook/lbc-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: msg.email_contact,
+          subject: 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin',
+          message: replyText,
+        }),
+      })
+      if (res.ok) {
+        setReplyText('')
+        setReplyTo(null)
+        alert('Reponse envoyee !')
+      } else {
+        alert('Erreur envoi')
+      }
+    } catch { alert('Erreur connexion') }
+    finally { setSending(false) }
+  }
 
   async function loadMessages() {
     try {
@@ -239,6 +267,44 @@ export default function MessagesPage() {
                   </div>
                 )
               })()}
+              {/* Reply box */}
+              {msg.email_contact && (
+                <div className="border-t px-4 py-3 bg-white">
+                  {replyTo === msg.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Votre reponse..."
+                        rows={3}
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleReply(msg)}
+                          disabled={sending || !replyText.trim()}
+                          className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {sending ? 'Envoi...' : 'Envoyer'}
+                        </button>
+                        <button
+                          onClick={() => { setReplyTo(null); setReplyText('') }}
+                          className="text-gray-500 px-4 py-1.5 rounded-lg text-sm hover:bg-gray-100"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setReplyTo(msg.id)}
+                      className="text-blue-600 text-sm font-medium hover:text-blue-800"
+                    >
+                      Repondre
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
