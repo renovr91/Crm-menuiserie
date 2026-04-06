@@ -1,0 +1,303 @@
+{
+  "name": "LeBonCoin Gmail → CRM Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Toutes les 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "filters": {
+          "sender": "messagerie.leboncoin.fr",
+          "readStatus": "unread",
+          "receivedAfter": "={{ $now.minus(1, 'day').toISO() }}"
+        },
+        "options": {
+          "maxResults": 50
+        }
+      },
+      "id": "gmail_search",
+      "name": "Gmail - Chercher emails LBC",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [220, 0],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GMAIL_CREDENTIAL_ID",
+          "name": "Gmail senroll91"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "messageId": "={{ $json.id }}",
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "gmail_read",
+      "name": "Gmail - Lire message complet",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [440, 0],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GMAIL_CREDENTIAL_ID",
+          "name": "Gmail senroll91"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LeBonCoin email\nconst subject = $input.item.json.subject || '';\nconst textBody = $input.item.json.textPlain || $input.item.json.snippet || '';\nconst from = $input.item.json.from || '';\nconst date = $input.item.json.date || new Date().toISOString();\nconst messageId = $input.item.json.id;\n\n// Extract title from subject\nconst titleMatch = subject.match(/Nouveau message pour\\s*[\"\\u201C]([^\"\\u201D]+)[\"\\u201D]/i);\nif (!titleMatch) return []; // Not a client message\nconst titreAnnonce = titleMatch[1].trim();\n\n// Extract contact name from FROM\nlet nomContact = '';\nconst fromMatch = from.match(/^\"?(.+?)\"?\\s+via\\s+leboncoin/i);\nif (fromMatch) nomContact = fromMatch[1].trim();\nif (!nomContact) {\n  const nomMatch = textBody.match(/Nom\\s*:\\s*(.+)/i);\n  if (nomMatch) nomContact = nomMatch[1].trim();\n  else {\n    const nameMatch = textBody.match(/nouveau message\\.\\s*\\n\\s*(.+)/i);\n    if (nameMatch) nomContact = nameMatch[1].trim();\n  }\n}\n\n// Extract message between « »\nlet messageClient = '';\nconst msgMatch = textBody.match(/[«]\\s*([\\s\\S]*?)\\s*[»]/);\nif (msgMatch) messageClient = msgMatch[1].trim();\n\n// Extract phone number\nlet phone = null;\nconst phoneMatch = textBody.match(/(?:0[67])[\\s.\\/-]*(?:\\d[\\s.\\/-]*){8}/g);\nif (phoneMatch) phone = phoneMatch[0].replace(/[\\s.\\/-]/g, '');\n\n// Has attachment\nconst hasAttachment = ($input.item.json.attachments || []).length > 0;\n\n// Conversation key for dedup\nconst conversationKey = (nomContact + '::' + titreAnnonce).toLowerCase();\n\nreturn [{\n  json: {\n    messageId,\n    titreAnnonce,\n    nomContact,\n    messageClient,\n    fullBody: textBody,\n    phone,\n    hasAttachment,\n    conversationKey,\n    date,\n    from\n  },\n  binary: $input.item.binary\n}];"
+      },
+      "id": "parse_email",
+      "name": "Parser le message LBC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "messages",
+        "filterType": "string",
+        "filterString": "source=eq.leboncoin&conversation_key=eq.{{ $json.conversationKey }}",
+        "returnAll": false,
+        "limit": 1
+      },
+      "id": "check_existing",
+      "name": "Supabase - Verifier doublon",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [880, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase CRM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "new_message",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is_new",
+      "name": "Nouveau message ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "messages",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "titre_annonce", "fieldValue": "={{ $('Parser le message LBC').item.json.titreAnnonce }}" },
+            { "fieldName": "nom_contact", "fieldValue": "={{ $('Parser le message LBC').item.json.nomContact }}" },
+            { "fieldName": "telephone", "fieldValue": "={{ $('Parser le message LBC').item.json.phone }}" },
+            { "fieldName": "message_client", "fieldValue": "={{ $('Parser le message LBC').item.json.fullBody }}" },
+            { "fieldName": "has_attachment", "fieldValue": "={{ $('Parser le message LBC').item.json.hasAttachment }}" },
+            { "fieldName": "source", "fieldValue": "leboncoin" },
+            { "fieldName": "conversation_key", "fieldValue": "={{ $('Parser le message LBC').item.json.conversationKey }}" }
+          ]
+        }
+      },
+      "id": "insert_message",
+      "name": "Supabase - Sauver message",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1320, -100],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase CRM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_phone",
+              "leftValue": "={{ $('Parser le message LBC').item.json.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "has_phone",
+      "name": "A un telephone ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "clients",
+        "filterType": "string",
+        "filterString": "telephone=eq.{{ $('Parser le message LBC').item.json.phone }}",
+        "returnAll": false,
+        "limit": 1
+      },
+      "id": "check_client",
+      "name": "Supabase - Client existe ?",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1760, -200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase CRM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "client_new",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "client_new",
+      "name": "Client nouveau ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1980, -200]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "clients",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "nom", "fieldValue": "={{ $('Parser le message LBC').item.json.nomContact }}" },
+            { "fieldName": "telephone", "fieldValue": "={{ $('Parser le message LBC').item.json.phone }}" },
+            { "fieldName": "source", "fieldValue": "leboncoin" },
+            { "fieldName": "notes", "fieldValue": "=Import auto — Annonce: {{ $('Parser le message LBC').item.json.titreAnnonce }}" }
+          ]
+        }
+      },
+      "id": "create_client",
+      "name": "Supabase - Creer client",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2200, -300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase CRM"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Toutes les 15 min": {
+      "main": [[{ "node": "Gmail - Chercher emails LBC", "type": "main", "index": 0 }]]
+    },
+    "Gmail - Chercher emails LBC": {
+      "main": [[{ "node": "Gmail - Lire message complet", "type": "main", "index": 0 }]]
+    },
+    "Gmail - Lire message complet": {
+      "main": [[{ "node": "Parser le message LBC", "type": "main", "index": 0 }]]
+    },
+    "Parser le message LBC": {
+      "main": [[{ "node": "Supabase - Verifier doublon", "type": "main", "index": 0 }]]
+    },
+    "Supabase - Verifier doublon": {
+      "main": [[{ "node": "Nouveau message ?", "type": "main", "index": 0 }]]
+    },
+    "Nouveau message ?": {
+      "main": [
+        [{ "node": "Supabase - Sauver message", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Supabase - Sauver message": {
+      "main": [[{ "node": "A un telephone ?", "type": "main", "index": 0 }]]
+    },
+    "A un telephone ?": {
+      "main": [
+        [{ "node": "Supabase - Client existe ?", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Supabase - Client existe ?": {
+      "main": [[{ "node": "Client nouveau ?", "type": "main", "index": 0 }]]
+    },
+    "Client nouveau ?": {
+      "main": [
+        [{ "node": "Supabase - Creer client", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "CRM" },
+    { "name": "LeBonCoin" }
+  ]
+}

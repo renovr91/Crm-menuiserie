@@ -13,11 +13,14 @@ export default async function ClientsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-8">Clients</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-bold">Clients</h1>
+        <Link href="/clients/nouveau" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">+ Nouveau client</Link>
+      </div>
       {clients.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-          <p className="text-gray-500">Aucun client pour l&apos;instant</p>
-          <p className="text-sm text-gray-400 mt-2">Les clients seront créés automatiquement lors de la création de devis</p>
+          <p className="text-gray-500 mb-4">Aucun client pour l&apos;instant</p>
+          <Link href="/clients/nouveau" className="text-blue-600 hover:underline text-sm">Ajouter votre premier client</Link>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
