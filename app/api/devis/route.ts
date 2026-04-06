@@ -4,7 +4,7 @@ import { envoyerSMS } from '@/lib/sms'
 
 export async function GET() {
   const supabase = createAdminClient()
-  const { data, error } = await supabase.from('devis').select('*, clients(nom, telephone, email, portal_token)').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('devis').select('*, clients(nom, telephone, email, adresse, code_postal, ville, portal_token)').order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

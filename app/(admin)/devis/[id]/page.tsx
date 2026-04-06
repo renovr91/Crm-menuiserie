@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -23,6 +23,7 @@ interface Devis {
 
 export default function DevisDetailPage() {
   const { id } = useParams()
+  const router = useRouter()
   const [devis, setDevis] = useState<Devis | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -30,6 +31,8 @@ export default function DevisDetailPage() {
   useEffect(() => {
     fetch(`/api/devis?id=${id}`).then((res) => res.json()).then((data) => setDevis(Array.isArray(data) ? data[0] : data)).catch(console.error).finally(() => setLoading(false))
   }, [id])
+
+  const [deleting, setDeleting] = useState(false)
 
   async function handleSendSMS() {
     if (!devis) return
@@ -40,6 +43,17 @@ export default function DevisDetailPage() {
       setDevis({ ...devis, status: 'envoye', sent_at: new Date().toISOString() })
     } catch (err) { alert((err as Error).message) }
     finally { setSending(false) }
+  }
+
+  async function handleDelete() {
+    if (!devis || !confirm('Supprimer ce devis ? Cette action est irreversible.')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/devis/${devis.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Erreur suppression')
+      router.push('/devis')
+    } catch (err) { alert((err as Error).message) }
+    finally { setDeleting(false) }
   }
 
   if (loading) return <div className="text-gray-500">Chargement...</div>
@@ -93,13 +107,19 @@ export default function DevisDetailPage() {
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h2 className="text-lg font-semibold mb-4">Actions</h2>
             <div className="space-y-3">
+              {devis.status !== 'signe' && (
+                <Link href={`/devis/${devis.id}/edit`} className="block w-full text-center bg-amber-500 text-white py-3 rounded-lg font-medium hover:bg-amber-600 transition-colors">Modifier</Link>
+              )}
               {devis.status === 'brouillon' && <button onClick={handleSendSMS} disabled={sending} className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">{sending ? 'Envoi...' : 'Envoyer par SMS'}</button>}
               <div><p className="text-xs text-gray-500 mb-1">Lien portail client :</p><div className="flex gap-2"><input type="text" value={portalUrl} readOnly className="flex-1 border rounded px-2 py-1 text-xs font-mono bg-gray-50" /><button onClick={() => navigator.clipboard.writeText(portalUrl)} className="px-3 py-1 border rounded text-xs hover:bg-gray-100">Copier</button></div></div>
               <div className="pt-4 border-t space-y-2 text-xs text-gray-500">
                 <p>Cr\u00e9\u00e9 le {new Date(devis.created_at).toLocaleString('fr-FR')}</p>
                 {devis.sent_at && <p>Envoy\u00e9 le {new Date(devis.sent_at).toLocaleString('fr-FR')}</p>}
                 {devis.read_at && <p>Lu le {new Date(devis.read_at).toLocaleString('fr-FR')}</p>}
-                {devis.signed_at && <p>Sign\u00e9 le {new Date(devis.signed_at).toLocaleString('fr-FR')}</p>}
+                {devis.signed_at && <p>Signe le {new Date(devis.signed_at).toLocaleString('fr-FR')}</p>}
+              </div>
+              <div className="pt-4 border-t">
+                <button onClick={handleDelete} disabled={deleting} className="w-full text-red-600 border border-red-200 py-2 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">{deleting ? 'Suppression...' : 'Supprimer ce devis'}</button>
               </div>
             </div>
           </div>

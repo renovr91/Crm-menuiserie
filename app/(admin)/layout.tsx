@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: '□' },
@@ -12,6 +13,14 @@ const NAV_ITEMS = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    const supabase = createBrowserSupabase()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -34,6 +43,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             )
           })}
         </nav>
+        <div className="p-4 border-t border-gray-800">
+          <button onClick={handleLogout} className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
+            Deconnexion
+          </button>
+        </div>
       </aside>
       <main className="flex-1 p-8">{children}</main>
     </div>
