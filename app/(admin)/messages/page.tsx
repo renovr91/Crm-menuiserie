@@ -224,6 +224,15 @@ export default function MessagesPage() {
                 // Fallback
                 return (
                   <div className="border-t px-4 py-3 bg-gray-50">
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mb-3">
+                        {msg.attachments.map((url: string, i: number) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <img src={url} alt={`PJ ${i + 1}`} className="rounded-lg border max-h-48 object-cover hover:opacity-80 transition-opacity" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed max-h-96 overflow-y-auto">
                       {cleanLbc(msg.message_client || '')}
                     </div>
