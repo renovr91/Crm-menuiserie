@@ -13,6 +13,8 @@ interface SavedMessage {
   conversation_key: string
   date_email: string | null
   email_contact: string | null
+  reponse_generee: string | null
+  reponse_envoyee: boolean
   created_at: string
 }
 
@@ -31,21 +33,24 @@ export default function MessagesPage() {
     if (!replyText.trim() || !msg.email_contact) return
     setSending(true)
     try {
-      const res = await fetch('https://renovr91.app.n8n.cloud/webhook/lbc-reply', {
+      const res = await fetch('/api/gmail/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: msg.email_contact,
           subject: 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin',
           message: replyText,
+          messageId: msg.id,
         }),
       })
       if (res.ok) {
         setReplyText('')
         setReplyTo(null)
-        alert('Reponse envoyee !')
+        // Refresh messages to show the reply
+        loadMessages()
       } else {
-        alert('Erreur envoi')
+        const data = await res.json()
+        alert('Erreur: ' + (data.error || 'Envoi echoue'))
       }
     } catch { alert('Erreur connexion') }
     finally { setSending(false) }
@@ -267,6 +272,16 @@ export default function MessagesPage() {
                   </div>
                 )
               })()}
+              {/* Sent replies */}
+              {msg.reponse_generee && (
+                <div className="border-t px-4 py-3 bg-blue-50 space-y-2">
+                  {msg.reponse_generee.split('\n---\n').map((reply, i) => (
+                    <div key={i} className="rounded-lg p-3 text-sm bg-blue-100 border border-blue-200 ml-8">
+                      <p className="text-blue-800 whitespace-pre-wrap">{reply}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* Reply box */}
               {msg.email_contact && (
                 <div className="border-t px-4 py-3 bg-white">
