@@ -117,10 +117,10 @@ export default function MessagesPage() {
     finally { setSyncing(false) }
   }
 
-  const filtered = messages.filter(m => {
+  const visibleMessages = messages.filter(m => m.statut !== 'archive')
+  const filtered = visibleMessages.filter(m => {
     if (filter === 'phone' && !m.telephone) return false
     if (filter === 'nophone' && m.telephone) return false
-    if (statutFilter !== 'all' && m.statut !== statutFilter) return false
     return true
   })
 
@@ -128,6 +128,7 @@ export default function MessagesPage() {
   const nbNouveau = messages.filter(m => m.statut === 'nouveau').length
   const nbEnCours = messages.filter(m => m.statut === 'en_cours').length
   const nbTraite = messages.filter(m => m.statut === 'traite').length
+  const nbArchive = messages.filter(m => m.statut === 'archive').length
 
   // Clean LeBonCoin junk from text
   const cleanLbc = (t: string) => t
@@ -189,7 +190,7 @@ export default function MessagesPage() {
     <div className="w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Messages LeBonCoin</h1>
-        <span className="text-sm text-gray-400">{messages.length} conversations</span>
+        <span className="text-sm text-gray-400">{visibleMessages.length} conversations{nbArchive > 0 ? ` (${nbArchive} archives)` : ''}</span>
       </div>
 
       {/* Actions */}
@@ -330,6 +331,10 @@ export default function MessagesPage() {
                               → {s === 'nouveau' ? 'Nouveau' : s === 'en_cours' ? 'En cours' : 'Traite'}
                             </button>
                           ))}
+                          <button onClick={(e) => { e.stopPropagation(); if (confirm('Archiver cette conversation ?')) changeStatut(msg.id, 'archive') }}
+                            className="text-xs px-2 py-1 rounded bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600">
+                            Pas interessant
+                          </button>
                           {msg.email_contact && !replyTo && (
                             <div className="flex items-center gap-2 ml-auto">
                               <button onClick={(e) => { e.stopPropagation(); handleAutoReply(msg) }} disabled={sending}
