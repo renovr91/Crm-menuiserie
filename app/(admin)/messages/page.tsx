@@ -31,6 +31,24 @@ export default function MessagesPage() {
   const [replyText, setReplyText] = useState('')
   const [replyFile, setReplyFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
+  const [fetchingPj, setFetchingPj] = useState<string | null>(null)
+
+  async function fetchMissingPj(msg: SavedMessage) {
+    if (fetchingPj) return
+    setFetchingPj(msg.id)
+    try {
+      const res = await fetch('/api/gmail/fetch-pj', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: msg.id }),
+      })
+      const data = await res.json()
+      if (data.success && data.urls?.length > 0) {
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, attachments: [...(m.attachments || []), ...data.urls] } : m))
+      }
+    } catch { /* ignore */ }
+    finally { setFetchingPj(null) }
+  }
 
   async function changeStatut(msgId: string, newStatut: string) {
     await fetch('/api/gmail/statut', {
@@ -244,7 +262,13 @@ export default function MessagesPage() {
                 {col.items.map(msg => (
                   <div key={msg.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden transition-shadow ${expanded === msg.id ? 'shadow-md ring-2 ring-blue-200' : 'hover:shadow-md'}`}>
                     {/* Card header */}
-                    <div className="p-3 cursor-pointer" onClick={() => setExpanded(expanded === msg.id ? null : msg.id)}>
+                    <div className="p-3 cursor-pointer" onClick={() => {
+                      const opening = expanded !== msg.id
+                      setExpanded(opening ? msg.id : null)
+                      if (opening && msg.has_attachment && (!msg.attachments || msg.attachments.length === 0)) {
+                        fetchMissingPj(msg)
+                      }
+                    }}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-sm truncate">{msg.nom_contact || 'Inconnu'}</span>
                         <span className="text-xs text-gray-400">{new Date(msg.date_email || msg.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
@@ -252,7 +276,9 @@ export default function MessagesPage() {
                       <p className="text-xs text-gray-500 truncate">{msg.titre_annonce}</p>
                       <div className="flex items-center gap-1.5 mt-2">
                         {msg.telephone && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{msg.telephone}</span>}
-                        {msg.has_attachment && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">PJ</span>}
+                        {msg.has_attachment && <span className={`text-xs px-1.5 py-0.5 rounded ${msg.attachments && msg.attachments.length > 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {fetchingPj === msg.id ? 'Chargement PJ...' : msg.attachments && msg.attachments.length > 0 ? `${msg.attachments.length} PJ` : 'PJ manquante'}
+                        </span>}
                         {msg.reponse_envoyee && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Repondu</span>}
                       </div>
                     </div>
