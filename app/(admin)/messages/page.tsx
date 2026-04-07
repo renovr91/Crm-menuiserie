@@ -31,24 +31,6 @@ export default function MessagesPage() {
   const [replyText, setReplyText] = useState('')
   const [replyFile, setReplyFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
-  const [fetchingPj, setFetchingPj] = useState<string | null>(null)
-
-  async function fetchMissingPj(msg: SavedMessage) {
-    if (fetchingPj) return
-    setFetchingPj(msg.id)
-    try {
-      const res = await fetch('/api/gmail/fetch-pj', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId: msg.id }),
-      })
-      const data = await res.json()
-      if (data.success && data.urls?.length > 0) {
-        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, attachments: [...(m.attachments || []), ...data.urls] } : m))
-      }
-    } catch { /* ignore */ }
-    finally { setFetchingPj(null) }
-  }
 
   async function changeStatut(msgId: string, newStatut: string) {
     await fetch('/api/gmail/statut', {
@@ -262,13 +244,7 @@ export default function MessagesPage() {
                 {col.items.map(msg => (
                   <div key={msg.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden transition-shadow ${expanded === msg.id ? 'shadow-md ring-2 ring-blue-200' : 'hover:shadow-md'}`}>
                     {/* Card header */}
-                    <div className="p-3 cursor-pointer" onClick={() => {
-                      const opening = expanded !== msg.id
-                      setExpanded(opening ? msg.id : null)
-                      if (opening && msg.has_attachment && (!msg.attachments || msg.attachments.length === 0)) {
-                        fetchMissingPj(msg)
-                      }
-                    }}>
+                    <div className="p-3 cursor-pointer" onClick={() => setExpanded(expanded === msg.id ? null : msg.id)}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-sm truncate">{msg.nom_contact || 'Inconnu'}</span>
                         <span className="text-xs text-gray-400">{new Date(msg.date_email || msg.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
@@ -276,9 +252,8 @@ export default function MessagesPage() {
                       <p className="text-xs text-gray-500 truncate">{msg.titre_annonce}</p>
                       <div className="flex items-center gap-1.5 mt-2">
                         {msg.telephone && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{msg.telephone}</span>}
-                        {msg.has_attachment && <span className={`text-xs px-1.5 py-0.5 rounded ${msg.attachments && msg.attachments.length > 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                          {fetchingPj === msg.id ? 'Chargement PJ...' : msg.attachments && msg.attachments.length > 0 ? `${msg.attachments.length} PJ` : 'PJ manquante'}
-                        </span>}
+                        {msg.attachments && msg.attachments.length > 0 && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{msg.attachments.length} PJ</span>}
+                        {msg.message_client?.includes('pièce jointe') && <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">PJ LBC</span>}
                         {msg.reponse_envoyee && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Repondu</span>}
                       </div>
                     </div>
@@ -296,6 +271,14 @@ export default function MessagesPage() {
                             parsed.forEach((m, i) => {
                               timeline.push({ type: m.author === 'SENROLL' ? 'senroll' : 'client', author: m.author, date: m.date, content: m.content, sortKey: i })
                             })
+
+                            // 1b. Detect LeBonCoin PJ link
+                            const rawText = msg.message_client || ''
+                            if (rawText.includes('pièce jointe')) {
+                              const lbcLink = rawText.match(/\(https:\/\/www\.leboncoin\.fr\/messages\/id\/[^\s)]+\)/)
+                              const url = lbcLink ? lbcLink[0].replace(/[()]/g, '') : 'https://www.leboncoin.fr/messages'
+                              timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 : 0 })
+                            }
 
                             // 2. Add client PJ (from attachments not in replies)
                             const replyPjUrls = new Set((msg.reponse_generee || '').match(/\[PJ\]\s*(https?:\/\/\S+)/g)?.map(m => m.replace('[PJ] ', '')) || [])
@@ -327,11 +310,22 @@ export default function MessagesPage() {
 
                             return timeline.sort((a, b) => a.sortKey - b.sortKey).map((item, i) => {
                               if (item.type === 'pj') {
+                                const isLbc = item.pjUrl?.includes('leboncoin.fr')
+                                const isImage = item.pjUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i)
                                 return (
                                   <div key={`pj-${i}`} className="mr-4">
-                                    <a href={item.pjUrl} target="_blank" rel="noopener noreferrer">
-                                      <img src={item.pjUrl} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
-                                    </a>
+                                    {isLbc ? (
+                                      <a href={item.pjUrl} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-200 font-medium">
+                                        Voir la PJ sur LeBonCoin
+                                      </a>
+                                    ) : isImage ? (
+                                      <a href={item.pjUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={item.pjUrl} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                      </a>
+                                    ) : (
+                                      <a href={item.pjUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Voir la piece jointe</a>
+                                    )}
                                   </div>
                                 )
                               }
