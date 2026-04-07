@@ -257,71 +257,75 @@ export default function MessagesPage() {
                       </div>
                     </div>
 
-                    {/* Expanded: conversation + reply + status */}
+                    {/* Expanded: unified timeline */}
                     {expanded === msg.id && (
                       <div>
-                        {/* Conversation */}
-                        {(() => {
-                          const parsed = parseConversation(msg.message_client || '')
-                          if (parsed.length > 0) {
-                            return (
-                              <div className="border-t px-3 py-2 bg-gray-50 space-y-1.5 max-h-64 overflow-y-auto">
-                                {msg.attachments && msg.attachments.length > 0 && (
-                                  <div className="flex gap-1.5 flex-wrap mb-1.5">
-                                    {msg.attachments.map((url, i) => (
-                                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                        <img src={url} alt={`PJ ${i + 1}`} className="rounded border max-h-32 object-cover hover:opacity-80" />
-                                      </a>
-                                    ))}
-                                  </div>
-                                )}
-                                {parsed.reverse().map((m, i) => (
-                                  <div key={i} className={`rounded p-2 text-xs ${m.author === 'SENROLL' ? 'bg-blue-50 border border-blue-100 ml-4' : 'bg-white border mr-4'}`}>
-                                    <span className={`font-semibold ${m.author === 'SENROLL' ? 'text-blue-700' : 'text-gray-800'}`}>{m.author}</span>
-                                    <span className="text-gray-400 ml-1">{m.date}</span>
-                                    <p className="text-gray-700 whitespace-pre-wrap mt-0.5">{m.content}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          }
-                          return (
-                            <div className="border-t px-3 py-2 bg-gray-50 max-h-64 overflow-y-auto">
-                              {msg.attachments && msg.attachments.length > 0 && (
-                                <div className="flex gap-1.5 flex-wrap mb-1.5">
-                                  {msg.attachments.map((url: string, i: number) => (
-                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                      <img src={url} alt={`PJ ${i + 1}`} className="rounded border max-h-32 object-cover hover:opacity-80" />
-                                    </a>
-                                  ))}
-                                </div>
-                              )}
-                              <p className="text-gray-700 whitespace-pre-wrap text-xs">{cleanLbc(msg.message_client || '')}</p>
-                            </div>
-                          )
-                        })()}
+                        <div className="border-t px-3 py-2 bg-gray-50 space-y-1.5 max-h-80 overflow-y-auto">
+                          {(() => {
+                            // Build unified timeline: parsed messages + sent replies
+                            const timeline: { type: 'client' | 'senroll' | 'pj'; author: string; date: string; content: string; pjUrl?: string; sortKey: number }[] = []
 
-                        {/* Sent replies */}
-                        {msg.reponse_generee && (
-                          <div className="border-t px-3 py-2 bg-blue-50 space-y-1">
-                            {msg.reponse_generee.split('\n---\n').map((reply, i) => {
-                              const pjMatch = reply.match(/\[PJ\]\s*(https?:\/\/\S+)/)
-                              const textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
+                            // 1. Add parsed conversation messages
+                            const parsed = parseConversation(msg.message_client || '')
+                            parsed.forEach((m, i) => {
+                              timeline.push({ type: m.author === 'SENROLL' ? 'senroll' : 'client', author: m.author, date: m.date, content: m.content, sortKey: i })
+                            })
+
+                            // 2. Add client PJ (from attachments not in replies)
+                            const replyPjUrls = new Set((msg.reponse_generee || '').match(/\[PJ\]\s*(https?:\/\/\S+)/g)?.map(m => m.replace('[PJ] ', '')) || [])
+                            if (msg.attachments) {
+                              msg.attachments.filter(url => !replyPjUrls.has(url)).forEach((url, i) => {
+                                timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 + i * 0.01 : i })
+                              })
+                            }
+
+                            // 3. Add sent replies (after conversation messages)
+                            if (msg.reponse_generee) {
+                              msg.reponse_generee.split('\n---\n').forEach((reply, i) => {
+                                const pjMatch = reply.match(/\[PJ\]\s*(https?:\/\/\S+)/)
+                                const textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
+                                timeline.push({
+                                  type: 'senroll', author: 'SENROLL', date: '',
+                                  content: textOnly, pjUrl: pjMatch?.[1],
+                                  sortKey: 1000 + i
+                                })
+                              })
+                            }
+
+                            // If no parsed messages, show cleaned raw text as first item
+                            if (parsed.length === 0 && !msg.reponse_generee) {
+                              timeline.push({ type: 'client', author: msg.nom_contact, date: '', content: cleanLbc(msg.message_client || ''), sortKey: 0 })
+                            } else if (parsed.length === 0) {
+                              timeline.unshift({ type: 'client', author: msg.nom_contact, date: '', content: cleanLbc(msg.message_client || '').substring(0, 300), sortKey: -1 })
+                            }
+
+                            return timeline.sort((a, b) => a.sortKey - b.sortKey).map((item, i) => {
+                              if (item.type === 'pj') {
+                                return (
+                                  <div key={`pj-${i}`} className="mr-4">
+                                    <a href={item.pjUrl} target="_blank" rel="noopener noreferrer">
+                                      <img src={item.pjUrl} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                    </a>
+                                  </div>
+                                )
+                              }
                               return (
-                                <div key={i} className="rounded p-2 text-xs bg-blue-100 border border-blue-200 ml-4">
-                                  <p className="text-blue-800 whitespace-pre-wrap">{textOnly}</p>
-                                  {pjMatch && (
-                                    <a href={pjMatch[1]} target="_blank" rel="noopener noreferrer" className="block mt-1">
-                                      {pjMatch[1].match(/\.(jpg|jpeg|png|gif|webp)$/i)
-                                        ? <img src={pjMatch[1]} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
-                                        : <span className="text-blue-600 underline">📎 Voir la piece jointe</span>}
+                                <div key={i} className={`rounded p-2 text-xs ${item.type === 'senroll' ? 'bg-blue-50 border border-blue-100 ml-4' : 'bg-white border mr-4'}`}>
+                                  <span className={`font-semibold ${item.type === 'senroll' ? 'text-blue-700' : 'text-gray-800'}`}>{item.author}</span>
+                                  {item.date && <span className="text-gray-400 ml-1">{item.date}</span>}
+                                  <p className="text-gray-700 whitespace-pre-wrap mt-0.5">{item.content}</p>
+                                  {item.pjUrl && (
+                                    <a href={item.pjUrl} target="_blank" rel="noopener noreferrer" className="block mt-1">
+                                      {item.pjUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)
+                                        ? <img src={item.pjUrl} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                        : <span className="text-blue-600 underline text-xs">📎 Voir la piece jointe</span>}
                                     </a>
                                   )}
                                 </div>
                               )
-                            })}
-                          </div>
-                        )}
+                            })
+                          })()}
+                        </div>
 
                         {/* Status + Reply */}
                         <div className="border-t px-3 py-2 bg-gray-50 flex items-center gap-2">
