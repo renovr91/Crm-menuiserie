@@ -15,6 +15,7 @@ interface SavedMessage {
   email_contact: string | null
   reponse_generee: string | null
   reponse_envoyee: boolean
+  statut: string
   created_at: string
 }
 
@@ -25,28 +26,57 @@ export default function MessagesPage() {
   const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; total: number } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'phone' | 'nophone'>('all')
+  const [statutFilter, setStatutFilter] = useState<'all' | 'nouveau' | 'en_cours' | 'traite'>('all')
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
+  const [replyFile, setReplyFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
+
+  async function changeStatut(msgId: string, newStatut: string) {
+    await fetch('/api/gmail/statut', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: msgId, statut: newStatut }),
+    })
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, statut: newStatut } : m))
+  }
+
+  const AUTO_REPLY = `Bonjour, merci pour votre message !\nN'hesitez pas a nous envoyer vos dimensions, coloris et toute information utile concernant votre projet, nous le traiterons au plus vite.\nMerci de nous laisser votre numero de telephone afin que nous puissions vous recontacter si besoin de precisions.\nBonne journee !`
+
+  async function handleAutoReply(msg: SavedMessage) {
+    if (!msg.email_contact) return
+    setSending(true)
+    try {
+      const formData = new FormData()
+      formData.append('to', msg.email_contact)
+      formData.append('subject', 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin')
+      formData.append('message', AUTO_REPLY)
+      formData.append('messageId', msg.id)
+      const res = await fetch('/api/gmail/reply', { method: 'POST', body: formData })
+      if (res.ok) {
+        changeStatut(msg.id, 'en_cours')
+        loadMessages()
+      } else alert('Erreur envoi')
+    } catch { alert('Erreur connexion') }
+    finally { setSending(false) }
+  }
 
   async function handleReply(msg: SavedMessage) {
     if (!replyText.trim() || !msg.email_contact) return
     setSending(true)
     try {
-      const res = await fetch('/api/gmail/reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: msg.email_contact,
-          subject: 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin',
-          message: replyText,
-          messageId: msg.id,
-        }),
-      })
+      const formData = new FormData()
+      formData.append('to', msg.email_contact)
+      formData.append('subject', 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin')
+      formData.append('message', replyText)
+      formData.append('messageId', msg.id)
+      if (replyFile) formData.append('file', replyFile)
+
+      const res = await fetch('/api/gmail/reply', { method: 'POST', body: formData })
       if (res.ok) {
         setReplyText('')
+        setReplyFile(null)
         setReplyTo(null)
-        // Refresh messages to show the reply
         loadMessages()
       } else {
         const data = await res.json()
@@ -88,12 +118,16 @@ export default function MessagesPage() {
   }
 
   const filtered = messages.filter(m => {
-    if (filter === 'phone') return !!m.telephone
-    if (filter === 'nophone') return !m.telephone
+    if (filter === 'phone' && !m.telephone) return false
+    if (filter === 'nophone' && m.telephone) return false
+    if (statutFilter !== 'all' && m.statut !== statutFilter) return false
     return true
   })
 
   const nbWithPhone = messages.filter(m => m.telephone).length
+  const nbNouveau = messages.filter(m => m.statut === 'nouveau').length
+  const nbEnCours = messages.filter(m => m.statut === 'en_cours').length
+  const nbTraite = messages.filter(m => m.statut === 'traite').length
 
   // Clean LeBonCoin junk from text
   const cleanLbc = (t: string) => t
@@ -152,7 +186,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Messages LeBonCoin</h1>
         <span className="text-sm text-gray-400">{messages.length} conversations</span>
@@ -187,145 +221,162 @@ export default function MessagesPage() {
         </button>
       </div>
 
-      {/* Messages list */}
+      {/* Kanban columns */}
       {loading ? (
         <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
           <p className="text-gray-500 text-sm">Chargement...</p>
         </div>
-      ) : filtered.length > 0 ? (
-        <div className="space-y-2">
-          {filtered.map((msg) => (
-            <div
-              key={msg.id}
-              className="bg-white rounded-xl shadow-sm border overflow-hidden"
-            >
-              <div
-                className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50"
-                onClick={() => setExpanded(expanded === msg.id ? null : msg.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm">{msg.nom_contact || 'Inconnu'}</span>
-                    <span className="text-gray-400 text-sm">—</span>
-                    <span className="text-sm text-gray-600 truncate">{msg.titre_annonce}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-xs text-gray-400">{new Date(msg.date_email || msg.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    {msg.telephone && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{msg.telephone}</span>}
-                    {msg.has_attachment && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">PJ</span>}
-                  </div>
-                </div>
-                <span className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1">
-                  {expanded === msg.id ? 'Fermer' : 'Voir'}
-                </span>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { key: 'nouveau', label: 'Nouveau', color: 'bg-orange-500', items: filtered.filter(m => m.statut === 'nouveau' || !m.statut) },
+            { key: 'en_cours', label: 'En cours', color: 'bg-blue-500', items: filtered.filter(m => m.statut === 'en_cours') },
+            { key: 'traite', label: 'Traite', color: 'bg-green-500', items: filtered.filter(m => m.statut === 'traite') },
+          ].map(col => (
+            <div key={col.key} className="min-h-[300px]">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <span className={`w-2.5 h-2.5 rounded-full ${col.color}`} />
+                <span className="text-sm font-semibold text-gray-700">{col.label}</span>
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{col.items.length}</span>
               </div>
-
-              {expanded === msg.id && (() => {
-                const parsed = parseConversation(msg.message_client || '')
-
-                if (parsed.length > 0) {
-                  return (
-                    <div className="border-t px-4 py-3 bg-gray-50 space-y-2 max-h-96 overflow-y-auto">
-                      <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
-                        <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-medium">{msg.titre_annonce}</span>
-                        {msg.has_attachment && <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded">PJ</span>}
-                        {msg.telephone && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{msg.telephone}</span>}
+              <div className="space-y-2">
+                {col.items.map(msg => (
+                  <div key={msg.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden transition-shadow ${expanded === msg.id ? 'shadow-md ring-2 ring-blue-200' : 'hover:shadow-md'}`}>
+                    {/* Card header */}
+                    <div className="p-3 cursor-pointer" onClick={() => setExpanded(expanded === msg.id ? null : msg.id)}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-sm truncate">{msg.nom_contact || 'Inconnu'}</span>
+                        <span className="text-xs text-gray-400">{new Date(msg.date_email || msg.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
                       </div>
-                      {/* Attached photos */}
-                      {msg.attachments && msg.attachments.length > 0 && (
-                        <div className="flex gap-2 flex-wrap mb-2">
-                          {msg.attachments.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img src={url} alt={`PJ ${i + 1}`} className="rounded-lg border max-h-48 object-cover hover:opacity-80 transition-opacity" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      {parsed.reverse().map((m, i) => (
-                        <div key={i} className={`rounded-lg p-3 text-sm ${m.author === 'SENROLL' ? 'bg-blue-50 border border-blue-100 ml-8' : 'bg-white border mr-8'}`}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`font-semibold text-xs ${m.author === 'SENROLL' ? 'text-blue-700' : 'text-gray-800'}`}>{m.author}</span>
-                            <span className="text-xs text-gray-400">{m.date}</span>
-                          </div>
-                          <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{m.content}</p>
-                        </div>
-                      ))}
+                      <p className="text-xs text-gray-500 truncate">{msg.titre_annonce}</p>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {msg.telephone && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{msg.telephone}</span>}
+                        {msg.has_attachment && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">PJ</span>}
+                        {msg.reponse_envoyee && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Repondu</span>}
+                      </div>
                     </div>
-                  )
-                }
 
-                // Fallback
-                return (
-                  <div className="border-t px-4 py-3 bg-gray-50">
-                    {msg.attachments && msg.attachments.length > 0 && (
-                      <div className="flex gap-2 flex-wrap mb-3">
-                        {msg.attachments.map((url: string, i: number) => (
-                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                            <img src={url} alt={`PJ ${i + 1}`} className="rounded-lg border max-h-48 object-cover hover:opacity-80 transition-opacity" />
-                          </a>
-                        ))}
+                    {/* Expanded: conversation + reply + status */}
+                    {expanded === msg.id && (
+                      <div>
+                        {/* Conversation */}
+                        {(() => {
+                          const parsed = parseConversation(msg.message_client || '')
+                          if (parsed.length > 0) {
+                            return (
+                              <div className="border-t px-3 py-2 bg-gray-50 space-y-1.5 max-h-64 overflow-y-auto">
+                                {msg.attachments && msg.attachments.length > 0 && (
+                                  <div className="flex gap-1.5 flex-wrap mb-1.5">
+                                    {msg.attachments.map((url, i) => (
+                                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                        <img src={url} alt={`PJ ${i + 1}`} className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                                {parsed.reverse().map((m, i) => (
+                                  <div key={i} className={`rounded p-2 text-xs ${m.author === 'SENROLL' ? 'bg-blue-50 border border-blue-100 ml-4' : 'bg-white border mr-4'}`}>
+                                    <span className={`font-semibold ${m.author === 'SENROLL' ? 'text-blue-700' : 'text-gray-800'}`}>{m.author}</span>
+                                    <span className="text-gray-400 ml-1">{m.date}</span>
+                                    <p className="text-gray-700 whitespace-pre-wrap mt-0.5">{m.content}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div className="border-t px-3 py-2 bg-gray-50 max-h-64 overflow-y-auto">
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="flex gap-1.5 flex-wrap mb-1.5">
+                                  {msg.attachments.map((url: string, i: number) => (
+                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                      <img src={url} alt={`PJ ${i + 1}`} className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                              <p className="text-gray-700 whitespace-pre-wrap text-xs">{cleanLbc(msg.message_client || '')}</p>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Sent replies */}
+                        {msg.reponse_generee && (
+                          <div className="border-t px-3 py-2 bg-blue-50 space-y-1">
+                            {msg.reponse_generee.split('\n---\n').map((reply, i) => {
+                              const pjMatch = reply.match(/\[PJ\]\s*(https?:\/\/\S+)/)
+                              const textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
+                              return (
+                                <div key={i} className="rounded p-2 text-xs bg-blue-100 border border-blue-200 ml-4">
+                                  <p className="text-blue-800 whitespace-pre-wrap">{textOnly}</p>
+                                  {pjMatch && (
+                                    <a href={pjMatch[1]} target="_blank" rel="noopener noreferrer" className="block mt-1">
+                                      {pjMatch[1].match(/\.(jpg|jpeg|png|gif|webp)$/i)
+                                        ? <img src={pjMatch[1]} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
+                                        : <span className="text-blue-600 underline">📎 Voir la piece jointe</span>}
+                                    </a>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* Status + Reply */}
+                        <div className="border-t px-3 py-2 bg-gray-50 flex items-center gap-2">
+                          {['nouveau', 'en_cours', 'traite'].filter(s => s !== msg.statut).map(s => (
+                            <button key={s} onClick={(e) => { e.stopPropagation(); changeStatut(msg.id, s) }}
+                              className={`text-xs px-2 py-1 rounded ${s === 'nouveau' ? 'bg-orange-100 text-orange-700' : s === 'en_cours' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'} hover:opacity-80`}>
+                              → {s === 'nouveau' ? 'Nouveau' : s === 'en_cours' ? 'En cours' : 'Traite'}
+                            </button>
+                          ))}
+                          {msg.email_contact && !replyTo && (
+                            <div className="flex items-center gap-2 ml-auto">
+                              <button onClick={(e) => { e.stopPropagation(); handleAutoReply(msg) }} disabled={sending}
+                                className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 font-medium">
+                                {sending ? '...' : '⚡ Auto'}
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setReplyTo(msg.id) }}
+                                className="text-xs text-blue-600 font-medium hover:text-blue-800">Repondre</button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Reply input */}
+                        {replyTo === msg.id && (
+                          <div className="border-t px-3 py-2 bg-white space-y-2">
+                            <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)}
+                              placeholder="Votre reponse..." rows={2}
+                              className="w-full border rounded px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                            {replyFile && (
+                              <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                                <span>📎 {replyFile.name}</span>
+                                <button onClick={() => setReplyFile(null)} className="text-red-500 hover:text-red-700">×</button>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => handleReply(msg)} disabled={sending || !replyText.trim()}
+                                className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                                {sending ? 'Envoi...' : 'Envoyer'}
+                              </button>
+                              <label className="text-xs px-2 py-1 rounded cursor-pointer bg-gray-100 text-gray-600 hover:bg-gray-200">
+                                + PJ
+                                <input type="file" accept="image/*,.pdf" className="hidden"
+                                  onChange={(e) => { setReplyFile(e.target.files?.[0] || null); e.target.value = '' }}
+                                  onClick={(e) => e.stopPropagation()} />
+                              </label>
+                              <button onClick={() => { setReplyTo(null); setReplyText(''); setReplyFile(null) }}
+                                className="text-gray-500 px-3 py-1 rounded text-xs hover:bg-gray-100">Annuler</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                    <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed max-h-96 overflow-y-auto">
-                      {cleanLbc(msg.message_client || '')}
-                    </div>
                   </div>
-                )
-              })()}
-              {/* Sent replies */}
-              {msg.reponse_generee && (
-                <div className="border-t px-4 py-3 bg-blue-50 space-y-2">
-                  {msg.reponse_generee.split('\n---\n').map((reply, i) => (
-                    <div key={i} className="rounded-lg p-3 text-sm bg-blue-100 border border-blue-200 ml-8">
-                      <p className="text-blue-800 whitespace-pre-wrap">{reply}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Reply box */}
-              {msg.email_contact && (
-                <div className="border-t px-4 py-3 bg-white">
-                  {replyTo === msg.id ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Votre reponse..."
-                        rows={3}
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleReply(msg)}
-                          disabled={sending || !replyText.trim()}
-                          className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {sending ? 'Envoi...' : 'Envoyer'}
-                        </button>
-                        <button
-                          onClick={() => { setReplyTo(null); setReplyText('') }}
-                          className="text-gray-500 px-4 py-1.5 rounded-lg text-sm hover:bg-gray-100"
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setReplyTo(msg.id)}
-                      className="text-blue-600 text-sm font-medium hover:text-blue-800"
-                    >
-                      Repondre
-                    </button>
-                  )}
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           ))}
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-          <p className="text-gray-500 text-sm">Aucun message. Cliquez &quot;Mettre a jour depuis Gmail&quot; pour importer.</p>
         </div>
       )}
     </div>
