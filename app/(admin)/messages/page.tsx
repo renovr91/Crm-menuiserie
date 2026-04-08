@@ -214,9 +214,14 @@ export default function MessagesPage() {
   function buildTimeline(msg: SavedMessage) {
     const timeline: { type: 'client' | 'senroll' | 'pj'; author: string; date: string; content: string; pjUrl?: string; sortKey: number }[] = []
     const parsed = parseConversation(msg.message_client || '')
+
+    // Count SENROLL messages already in the parsed conversation (LBC reflects them)
+    const parsedSenrollCount = parsed.filter(m => m.author === 'SENROLL').length
+
     parsed.forEach((m, i) => {
       timeline.push({ type: m.author === 'SENROLL' ? 'senroll' : 'client', author: m.author, date: m.date, content: m.content, sortKey: i })
     })
+
     const replyPjUrls = new Set((msg.reponse_generee || '').match(/\[PJ\]\s*(https?:\/\/\S+)/g)?.map(m => m.replace('[PJ] ', '')) || [])
     const hasRealPJ = msg.attachments && msg.attachments.length > 0
     if (hasRealPJ) {
@@ -229,13 +234,20 @@ export default function MessagesPage() {
       const url = lbcLink ? lbcLink[0].replace(/[()]/g, '') : 'https://www.leboncoin.fr/messages'
       timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 : 0 })
     }
+
+    // Add only NEW replies (skip ones already visible in parsed conversation)
     if (msg.reponse_generee) {
-      msg.reponse_generee.split('\n---\n').forEach((reply, i) => {
+      const allReplies = msg.reponse_generee.split('\n---\n')
+      const newReplies = allReplies.slice(parsedSenrollCount) // Skip already-integrated replies
+      newReplies.forEach((reply, i) => {
         const pjMatch = reply.match(/\[PJ\]\s*(https?:\/\/\S+)/)
         const textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
-        timeline.push({ type: 'senroll', author: 'SENROLL', date: '', content: textOnly, pjUrl: pjMatch?.[1], sortKey: 1000 + i })
+        if (!textOnly) return
+        // Place right after the last parsed message, not at 1000
+        timeline.push({ type: 'senroll', author: 'SENROLL', date: '', content: textOnly, pjUrl: pjMatch?.[1], sortKey: parsed.length + i + 0.5 })
       })
     }
+
     if (parsed.length === 0 && !msg.reponse_generee) {
       timeline.push({ type: 'client', author: msg.nom_contact, date: '', content: cleanLbc(msg.message_client || ''), sortKey: 0 })
     } else if (parsed.length === 0) {
