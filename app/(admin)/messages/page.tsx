@@ -255,10 +255,18 @@ export default function MessagesPage() {
   const nbArchive = messages.filter(m => m.statut === 'archive').length
   const nbNewMessages = visibleMessages.filter(m => m.nouveau_message).length
 
+  const statutLabels: Record<string, string> = {
+    nouveau: 'Nouveau',
+    en_cours: 'En cours',
+    devis_envoye: 'Devis envoye',
+    devis_accepte: 'Devis accepte',
+  }
+
   const columns = [
     { key: 'nouveau', label: 'Nouveau', gradient: 'from-amber-500 to-orange-500', bg: 'bg-amber-50', countBg: 'bg-amber-500', items: filtered.filter(m => m.statut === 'nouveau' || !m.statut) },
     { key: 'en_cours', label: 'En cours', gradient: 'from-blue-500 to-indigo-500', bg: 'bg-blue-50', countBg: 'bg-blue-500', items: filtered.filter(m => m.statut === 'en_cours') },
-    { key: 'traite', label: 'Traite', gradient: 'from-emerald-500 to-green-500', bg: 'bg-emerald-50', countBg: 'bg-emerald-500', items: filtered.filter(m => m.statut === 'traite') },
+    { key: 'devis_envoye', label: 'Devis envoye', gradient: 'from-purple-500 to-violet-500', bg: 'bg-purple-50', countBg: 'bg-purple-500', items: filtered.filter(m => m.statut === 'devis_envoye' || m.statut === 'traite') },
+    { key: 'devis_accepte', label: 'Devis accepte', gradient: 'from-emerald-500 to-green-500', bg: 'bg-emerald-50', countBg: 'bg-emerald-500', items: filtered.filter(m => m.statut === 'devis_accepte') },
   ]
 
   // --- Render ---
@@ -314,7 +322,7 @@ export default function MessagesPage() {
 
       {/* Kanban */}
       {loading ? (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-4 gap-5">
           {[0, 1, 2].map(col => (
             <div key={col}>
               <div className="h-24 bg-gray-100 rounded-2xl mb-4 animate-pulse" />
@@ -325,7 +333,7 @@ export default function MessagesPage() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-4 gap-5">
           {columns.map(col => {
             const colNewCount = col.items.filter(m => m.nouveau_message).length
             return (
@@ -534,22 +542,25 @@ export default function MessagesPage() {
               {/* Status row */}
               <div className="flex items-center gap-2 px-8 py-3 border-b border-gray-50">
                 <span className="text-xs text-gray-400 mr-1 font-medium">Statut :</span>
-                {['nouveau', 'en_cours', 'traite'].map(s => (
-                  <button key={s} onClick={() => {
-                    changeStatut(selectedMsg.id, s)
-                    setSelectedMsg(prev => prev ? { ...prev, statut: s } : null)
-                  }}
-                    className={`text-xs px-4 py-1.5 rounded-full font-semibold transition-all duration-200
-                      ${selectedMsg.statut === s
-                        ? (s === 'nouveau' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/25'
-                          : s === 'en_cours' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/25'
-                          : 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25')
-                        : (s === 'nouveau' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200'
-                          : s === 'en_cours' ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
-                          : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200')}`}>
-                    {s === 'nouveau' ? 'Nouveau' : s === 'en_cours' ? 'En cours' : 'Traite'}
-                  </button>
-                ))}
+                {['nouveau', 'en_cours', 'devis_envoye', 'devis_accepte'].map(s => {
+                  const colors: Record<string, { active: string; inactive: string }> = {
+                    nouveau: { active: 'bg-amber-500 text-white shadow-md shadow-amber-500/25', inactive: 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200' },
+                    en_cours: { active: 'bg-blue-500 text-white shadow-md shadow-blue-500/25', inactive: 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200' },
+                    devis_envoye: { active: 'bg-purple-500 text-white shadow-md shadow-purple-500/25', inactive: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200' },
+                    devis_accepte: { active: 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25', inactive: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200' },
+                  }
+                  const isActive = selectedMsg.statut === s || (s === 'devis_envoye' && selectedMsg.statut === 'traite')
+                  return (
+                    <button key={s} onClick={() => {
+                      changeStatut(selectedMsg.id, s)
+                      setSelectedMsg(prev => prev ? { ...prev, statut: s } : null)
+                    }}
+                      className={`text-xs px-4 py-1.5 rounded-full font-semibold transition-all duration-200
+                        ${isActive ? colors[s].active : colors[s].inactive}`}>
+                      {statutLabels[s]}
+                    </button>
+                  )
+                })}
                 <button onClick={() => { if (confirm('Archiver cette conversation ?')) { changeStatut(selectedMsg.id, 'archive'); closeModal() } }}
                   className="text-xs px-4 py-1.5 rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 font-medium ml-auto transition-colors border border-red-100">
                   Archiver
