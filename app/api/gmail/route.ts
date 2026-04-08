@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         // Only update if this email is NEWER or LONGER (don't overwrite newer content with older)
         const existingDate = existing.date_email ? new Date(existing.date_email).getTime() : 0
         const newDate = conv.lastDate ? new Date(conv.lastDate).getTime() : 0
-        const isNewer = newDate >= existingDate
+        const isNewer = newDate > existingDate
         const isLonger = fullMessage.length > (existing.message_client?.length || 0)
         const isDifferent = fullMessage !== existing.message_client
 
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
             date_email: isNewer ? conv.lastDate.toISOString() : undefined,
             telephone: conv.phone || undefined,
             has_attachment: conv.hasAttachment || undefined,
-            nouveau_message: isLonger,
+            nouveau_message: isNewer,  // rouge seulement si vraie nouvelle date
             email_contact: conv.emailContact || undefined,
             ...(conv.phoneContext ? { phone_context: conv.phoneContext } : {}),
           }).eq('id', existing.id)
