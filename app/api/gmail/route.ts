@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
             message_client: fullMessage,
             telephone: conv.phone,
             has_attachment: conv.hasAttachment,
+            nouveau_message: true,
           }).eq('id', existing.id)
           updated++
         } else {
