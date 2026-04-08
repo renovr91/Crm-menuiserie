@@ -35,10 +35,17 @@ export async function POST(request: NextRequest) {
     let imported = 0, updated = 0, skipped = 0
 
     for (const conv of conversations) {
-      const sorted = [...conv.messages].sort((a, b) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      // Build full conversation: all messages sorted chronologically (oldest first)
+      const chronological = [...conv.messages].sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
       )
-      const fullMessage = (sorted[0] as { fullText?: string; text: string })?.fullText || sorted[0]?.text || ''
+      const fullMessage = chronological
+        .map(m => {
+          const dateStr = new Date(m.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          const text = m.text || m.fullText || ''
+          return `[${dateStr}] ${text}`
+        })
+        .join('\n---\n')
 
       // Check if conversation already exists
       const { data: existing } = await supabase

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface SavedMessage {
   id: string
@@ -32,6 +32,7 @@ export default function MessagesPage() {
   const [replyFile, setReplyFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
   const [showReply, setShowReply] = useState(false)
+  const devisFileRef = useRef<HTMLInputElement>(null)
 
   // --- Data ---
   const loadMessages = useCallback(async () => {
@@ -86,14 +87,35 @@ export default function MessagesPage() {
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, nouveau_message: false } : m))
   }
 
-  async function markDevisEnvoye(msgId: string) {
-    await fetch('/api/gmail/statut', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: msgId, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() }),
-    })
-    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() } : m))
-    setSelectedMsg(prev => prev ? { ...prev, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() } : null)
+  // Envoyer devis = envoie le PDF en PJ par email + marque le statut devis_envoye
+  async function handleEnvoyerDevis(msg: SavedMessage, file: File) {
+    if (!msg.email_contact) { alert('Pas d\'email pour ce contact'); return }
+    setSending(true)
+    try {
+      const formData = new FormData()
+      formData.append('to', msg.email_contact)
+      formData.append('subject', 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin')
+      formData.append('message', `Bonjour,\n\nVeuillez trouver ci-joint notre devis concernant votre demande.\n\nN'hesitez pas a nous contacter pour toute question.\n\nCordialement,\nRENOV-R 91`)
+      formData.append('messageId', msg.id)
+      formData.append('file', file)
+      const res = await fetch('/api/gmail/reply', { method: 'POST', body: formData })
+      if (res.ok) {
+        // Marquer comme devis envoye
+        const now = new Date().toISOString()
+        await fetch('/api/gmail/statut', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: msg.id, statut: 'devis_envoye', devis_envoye_at: now }),
+        })
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, statut: 'devis_envoye', devis_envoye_at: now } : m))
+        setSelectedMsg(prev => prev ? { ...prev, statut: 'devis_envoye', devis_envoye_at: now } : null)
+        loadMessages()
+      } else {
+        const data = await res.json()
+        alert('Erreur envoi: ' + (data.error || 'Echec'))
+      }
+    } catch { alert('Erreur connexion') }
+    finally { setSending(false) }
   }
 
   function openModal(msg: SavedMessage) {
@@ -599,15 +621,20 @@ export default function MessagesPage() {
                         className="flex-1 text-left px-5 py-3 bg-gray-50 rounded-2xl text-sm text-gray-400 hover:bg-gray-100 transition-colors border border-gray-100">
                         Ecrire une reponse...
                       </button>
-                      <button onClick={() => markDevisEnvoye(selectedMsg.id)}
+                      <button onClick={() => devisFileRef.current?.click()} disabled={sending || !!selectedMsg.devis_envoye_at}
                         className={`text-xs px-5 py-3 rounded-2xl font-bold transition-all shadow-lg ${
                           selectedMsg.devis_envoye_at
                             ? 'bg-violet-100 text-violet-500 border border-violet-200 shadow-none cursor-default'
                             : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-violet-500/20'
-                        }`}
-                        disabled={!!selectedMsg.devis_envoye_at}>
-                        {selectedMsg.devis_envoye_at ? `Devis envoye le ${new Date(selectedMsg.devis_envoye_at).toLocaleDateString('fr-FR')}` : 'Devis envoye'}
+                        }`}>
+                        {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? `Devis envoye le ${new Date(selectedMsg.devis_envoye_at).toLocaleDateString('fr-FR')}` : 'Envoyer devis'}
                       </button>
+                      <input ref={devisFileRef} type="file" accept=".pdf,image/*" className="hidden"
+                        onChange={e => {
+                          const f = e.target.files?.[0]
+                          if (f && selectedMsg) handleEnvoyerDevis(selectedMsg, f)
+                          e.target.value = ''
+                        }} />
                       <button onClick={() => handleAutoReply(selectedMsg)} disabled={sending}
                         className="text-xs px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-white font-bold hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 transition-all shadow-lg shadow-amber-500/20">
                         {sending ? '...' : 'Reponse auto'}
@@ -635,14 +662,13 @@ export default function MessagesPage() {
                           <input type="file" accept="image/*,.pdf" className="hidden"
                             onChange={e => { setReplyFile(e.target.files?.[0] || null); e.target.value = '' }} />
                         </label>
-                        <button onClick={() => markDevisEnvoye(selectedMsg.id)}
+                        <button onClick={() => devisFileRef.current?.click()} disabled={sending || !!selectedMsg.devis_envoye_at}
                           className={`text-xs px-4 py-2.5 rounded-2xl font-semibold transition-all ${
                             selectedMsg.devis_envoye_at
                               ? 'bg-violet-50 text-violet-400 border border-violet-200 cursor-default'
                               : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-md shadow-violet-500/20'
-                          }`}
-                          disabled={!!selectedMsg.devis_envoye_at}>
-                          {selectedMsg.devis_envoye_at ? 'Devis envoye' : 'Devis envoye'}
+                          }`}>
+                          {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? 'Devis envoye' : 'Envoyer devis'}
                         </button>
                         <button onClick={() => handleAutoReply(selectedMsg)} disabled={sending}
                           className="text-xs px-4 py-2.5 rounded-2xl bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold border border-amber-200 disabled:opacity-50 transition-colors">
