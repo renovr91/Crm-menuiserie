@@ -274,8 +274,10 @@ export default function MessagesPage() {
     const timeline: { type: 'client' | 'senroll' | 'pj'; author: string; date: string; content: string; pjUrl?: string; sortKey: number }[] = []
     const parsed = parseConversation(msg.message_client || '')
 
-    // Count SENROLL messages already in the parsed conversation (LBC reflects them)
-    const parsedSenrollCount = parsed.filter(m => m.author === 'SENROLL').length
+    // Collect SENROLL content already visible in parsed conversation (for dedup)
+    const parsedSenrollTexts = parsed
+      .filter(m => m.author === 'SENROLL')
+      .map(m => m.content.substring(0, 50).toLowerCase().trim())
 
     parsed.forEach((m, i) => {
       timeline.push({ type: m.author === 'SENROLL' ? 'senroll' : 'client', author: m.author, date: m.date, content: m.content, sortKey: i })
@@ -294,16 +296,23 @@ export default function MessagesPage() {
       timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 : 0 })
     }
 
-    // Add only NEW replies (skip ones already visible in parsed conversation)
+    // Add replies — dedup by CONTENT (not by count)
     if (msg.reponse_generee) {
       const allReplies = msg.reponse_generee.split('\n---\n')
-      const newReplies = allReplies.slice(parsedSenrollCount) // Skip already-integrated replies
-      newReplies.forEach((reply, i) => {
+      let addedCount = 0
+      allReplies.forEach((reply) => {
         const pjMatch = reply.match(/\[PJ\]\s*(https?:\/\/\S+)/)
-        const textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
+        let textOnly = reply.replace(/\n\[PJ\]\s*https?:\/\/\S+/, '').trim()
+        // Strip date prefix like "[8 avr., 07:36] SENROLL: "
+        textOnly = textOnly.replace(/^\[.*?\]\s*SENROLL\s*:\s*/i, '').trim()
         if (!textOnly) return
-        // Place right after the last parsed message, not at 1000
-        timeline.push({ type: 'senroll', author: 'SENROLL', date: '', content: textOnly, pjUrl: pjMatch?.[1], sortKey: parsed.length + i + 0.5 })
+        // Check if this reply content already exists in the parsed conversation
+        const replyStart = textOnly.substring(0, 50).toLowerCase().trim()
+        const alreadyVisible = parsedSenrollTexts.some(t => t === replyStart || replyStart.includes(t) || t.includes(replyStart))
+        if (alreadyVisible) return
+        // Place after all parsed messages
+        timeline.push({ type: 'senroll', author: 'SENROLL', date: '', content: textOnly, pjUrl: pjMatch?.[1], sortKey: parsed.length + addedCount + 0.5 })
+        addedCount++
       })
     }
 
