@@ -279,7 +279,7 @@ export default function MessagesPage() {
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Messagerie</h1>
             <p className="text-gray-400 text-sm mt-1">
               {visibleMessages.length} conversations
-              {nbArchive > 0 && <span> &middot; {nbArchive} archivees</span>}
+              {nbArchive > 0 && <span> · {nbArchive} archivees</span>}
               {nbNewMessages > 0 && (
                 <span className="ml-2 inline-flex items-center gap-1.5 text-red-600 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse-dot" />
@@ -290,7 +290,7 @@ export default function MessagesPage() {
           </div>
           <button onClick={handleSync} disabled={syncing}
             className="inline-flex items-center gap-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-2xl font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all text-sm shadow-lg shadow-blue-500/20">
-            <span className={`text-lg ${syncing ? 'animate-spin' : ''}`}>&#x21bb;</span>
+            <span className={`text-lg ${syncing ? 'animate-spin' : ''}`}>↻</span>
             {syncing ? 'Synchronisation...' : 'Synchroniser Gmail'}
           </button>
         </div>
@@ -488,7 +488,7 @@ export default function MessagesPage() {
                           {isLbc ? (
                             <a href={item.pjUrl} target="_blank" rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 text-xs text-violet-700 font-semibold hover:text-violet-900">
-                              Voir la PJ sur LeBonCoin &#x2197;
+                              Voir la PJ sur LeBonCoin ↗
                             </a>
                           ) : isImage ? (
                             <a href={item.pjUrl} target="_blank" rel="noopener noreferrer">
