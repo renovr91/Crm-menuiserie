@@ -47,13 +47,30 @@ export async function POST(request: NextRequest) {
         })
         .join('\n---\n')
 
-      // Check if conversation already exists
-      const { data: existing } = await supabase
+      // Check if conversation already exists (try exact match, then fuzzy without special chars)
+      const normalizedKey = conv.conversationKey.replace(/[''`]/g, '').replace(/\s+/g, ' ').trim()
+      let { data: existing } = await supabase
         .from('messages')
-        .select('id, message_client')
+        .select('id, message_client, conversation_key')
         .eq('source', 'leboncoin')
-        .eq('conversation_key', conv.conversationKey)
+        .eq('conversation_key', normalizedKey)
         .single()
+
+      // Fuzzy match: try matching by titre_annonce + similar nom_contact
+      if (!existing) {
+        const { data: fuzzyMatch } = await supabase
+          .from('messages')
+          .select('id, message_client, conversation_key')
+          .eq('source', 'leboncoin')
+          .ilike('conversation_key', `%::${conv.titreAnnonce.toLowerCase()}`)
+          .ilike('conversation_key', `${conv.nomContact.toLowerCase().substring(0, 3)}%`)
+          .single()
+        if (fuzzyMatch) {
+          existing = fuzzyMatch
+          // Update the old conversation_key to the normalized one
+          await supabase.from('messages').update({ conversation_key: normalizedKey }).eq('id', fuzzyMatch.id)
+        }
+      }
 
       if (existing) {
         // Update if the message content changed (new messages in conversation)

@@ -116,7 +116,7 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
               fullBody: textBody || htmlBody.replace(/<[^>]+>/g, ' '),
               hasAttachment: realAttachments.length > 0,
               attachments: realAttachments,
-              conversationKey: `${nomContact}::${extracted.titreAnnonce}`.toLowerCase(),
+              conversationKey: `${nomContact}::${extracted.titreAnnonce}`.toLowerCase().replace(/[''`]/g, '').replace(/\s+/g, ' ').trim(),
             })
           }
         } catch {
