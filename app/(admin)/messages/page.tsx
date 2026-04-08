@@ -224,6 +224,23 @@ export default function MessagesPage() {
 
   const parseConversation = (text: string) => {
     const msgs: { author: string; date: string; content: string }[] = []
+
+    // Format 1: New format with dates [DD/MM/YYYY HH:MM] message\n---\n
+    const dateBlockPattern = /\[(\d{2}\/\d{2}\/\d{4}[\s,]+\d{2}:\d{2})\]\s*([\s\S]*?)(?=\n---\n|\n\[\d{2}\/|$)/g
+    let dateMatch
+    let hasNewFormat = false
+    while ((dateMatch = dateBlockPattern.exec(text)) !== null) {
+      hasNewFormat = true
+      const date = dateMatch[1].trim()
+      const content = cleanLbc(dateMatch[2])
+      if (!content || content.length < 3) continue
+      // Detect if it's our reply (contains typical SENROLL signatures)
+      const isSenroll = /RENOV-R|Cordialement|Bonne journ|N'hesitez pas a nous/i.test(content)
+      msgs.push({ author: isSenroll ? 'SENROLL' : 'client', date, content })
+    }
+    if (hasNewFormat) return msgs // Already chronological (oldest first)
+
+    // Format 2: Legacy LeBonCoin email format
     const currentMatch = text.match(/nouveau message\.\s*\n\s*(?:Nom\s*:\s*)?(.+?)\s*\n[\s\S]*?[«]\s*([\s\S]*?)\s*[»]/)
     if (currentMatch) {
       msgs.push({ author: currentMatch[1].trim(), date: 'Dernier message', content: cleanLbc(currentMatch[2]) })
@@ -241,7 +258,8 @@ export default function MessagesPage() {
         msgs.push({ author, date: date.replace(/:\d{2}$/, ''), content })
       }
     }
-    return msgs
+    // Reverse legacy format: LBC puts newest first, we want oldest first (chronological)
+    return msgs.reverse()
   }
 
   function buildTimeline(msg: SavedMessage) {
