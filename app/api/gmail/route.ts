@@ -53,16 +53,20 @@ export async function POST(request: NextRequest) {
 
       // Fuzzy match: try matching by titre_annonce + similar nom_contact
       if (!existing) {
-        const { data: fuzzyMatch } = await supabase
+        const { data: fuzzyMatches } = await supabase
           .from('messages')
           .select('id, message_client, conversation_key')
           .eq('source', 'leboncoin')
           .ilike('conversation_key', `%::${conv.titreAnnonce.toLowerCase()}`)
           .ilike('conversation_key', `${conv.nomContact.toLowerCase().substring(0, 3)}%`)
-          .single()
-        if (fuzzyMatch) {
-          existing = fuzzyMatch
-          await supabase.from('messages').update({ conversation_key: normalizedKey }).eq('id', fuzzyMatch.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        if (fuzzyMatches && fuzzyMatches.length > 0) {
+          existing = fuzzyMatches[0]
+          await supabase.from('messages').update({
+            conversation_key: normalizedKey,
+            nom_contact: conv.nomContact,
+          }).eq('id', fuzzyMatches[0].id)
         }
       }
 
