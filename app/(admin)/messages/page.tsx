@@ -383,7 +383,7 @@ export default function MessagesPage() {
                                 <p className={`text-sm font-semibold truncate ${isNew ? 'text-red-700' : 'text-gray-900'}`}>
                                   {msg.nom_contact || 'Inconnu'}
                                 </p>
-                                <p className="text-[11px] text-gray-400 truncate">{msg.titre_annonce}</p>
+                                <p className="text-xs text-gray-600 font-medium truncate">{msg.titre_annonce}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
