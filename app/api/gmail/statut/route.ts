@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
 
   if (body.statut) update.statut = body.statut
   if (body.nouveau_message !== undefined) update.nouveau_message = body.nouveau_message
+  if (body.devis_envoye_at) update.devis_envoye_at = body.devis_envoye_at
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'Rien a mettre a jour' }, { status: 400 })

@@ -18,6 +18,7 @@ interface SavedMessage {
   statut: string
   created_at: string
   nouveau_message: boolean
+  devis_envoye_at: string | null
 }
 
 export default function MessagesPage() {
@@ -83,6 +84,16 @@ export default function MessagesPage() {
       body: JSON.stringify({ id: msgId, nouveau_message: false }),
     })
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, nouveau_message: false } : m))
+  }
+
+  async function markDevisEnvoye(msgId: string) {
+    await fetch('/api/gmail/statut', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: msgId, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() }),
+    })
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() } : m))
+    setSelectedMsg(prev => prev ? { ...prev, statut: 'devis_envoye', devis_envoye_at: new Date().toISOString() } : null)
   }
 
   function openModal(msg: SavedMessage) {
@@ -588,6 +599,15 @@ export default function MessagesPage() {
                         className="flex-1 text-left px-5 py-3 bg-gray-50 rounded-2xl text-sm text-gray-400 hover:bg-gray-100 transition-colors border border-gray-100">
                         Ecrire une reponse...
                       </button>
+                      <button onClick={() => markDevisEnvoye(selectedMsg.id)}
+                        className={`text-xs px-5 py-3 rounded-2xl font-bold transition-all shadow-lg ${
+                          selectedMsg.devis_envoye_at
+                            ? 'bg-violet-100 text-violet-500 border border-violet-200 shadow-none cursor-default'
+                            : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-violet-500/20'
+                        }`}
+                        disabled={!!selectedMsg.devis_envoye_at}>
+                        {selectedMsg.devis_envoye_at ? `Devis envoye le ${new Date(selectedMsg.devis_envoye_at).toLocaleDateString('fr-FR')}` : 'Devis envoye'}
+                      </button>
                       <button onClick={() => handleAutoReply(selectedMsg)} disabled={sending}
                         className="text-xs px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-white font-bold hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 transition-all shadow-lg shadow-amber-500/20">
                         {sending ? '...' : 'Reponse auto'}
@@ -615,6 +635,15 @@ export default function MessagesPage() {
                           <input type="file" accept="image/*,.pdf" className="hidden"
                             onChange={e => { setReplyFile(e.target.files?.[0] || null); e.target.value = '' }} />
                         </label>
+                        <button onClick={() => markDevisEnvoye(selectedMsg.id)}
+                          className={`text-xs px-4 py-2.5 rounded-2xl font-semibold transition-all ${
+                            selectedMsg.devis_envoye_at
+                              ? 'bg-violet-50 text-violet-400 border border-violet-200 cursor-default'
+                              : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-md shadow-violet-500/20'
+                          }`}
+                          disabled={!!selectedMsg.devis_envoye_at}>
+                          {selectedMsg.devis_envoye_at ? 'Devis envoye' : 'Devis envoye'}
+                        </button>
                         <button onClick={() => handleAutoReply(selectedMsg)} disabled={sending}
                           className="text-xs px-4 py-2.5 rounded-2xl bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold border border-amber-200 disabled:opacity-50 transition-colors">
                           Reponse auto
