@@ -102,6 +102,10 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
           const extracted = extractLeboncoinContent(subject, textBody, htmlBody)
           if (extracted) {
             const nomContact = extracted.nomContact || fromName
+            // Skip own auto-replies (SENROLL, RENOV-R, Yacine Senane)
+            // Only skip if the FROM header name matches (not body content)
+            const skipNames = ['senroll', 'renov-r', 'renov r', 'yacine senane']
+            if (skipNames.some(s => fromName.toLowerCase().includes(s))) continue
             // Extract real attachments (images, not tracking pixels)
             const realAttachments: AttachmentData[] = (parsed.attachments || [])
               .filter(a => !a.contentType?.includes('text') && (a.size || 0) > 500)
@@ -136,19 +140,41 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
     await client.logout()
   }
 
-  // Group by conversation (same contact + same annonce)
+  // Group by conversation — PRIMARY key: emailContact+titreAnnonce (same person same ad)
+  // FALLBACK key: conversationKey (nomContact::titreAnnonce) for emails without emailContact
   const convMap = new Map<string, LeboncoinConversation>()
+  // Index by emailContact+titreAnnonce to merge name variants (Xavier, Xavier ADAM, Xav = same person)
+  const emailKeyIndex = new Map<string, string>() // emailKey -> convMap key
+
   for (const msg of allMessages) {
-    const existing = convMap.get(msg.conversationKey)
-    if (existing) {
+    // Build email-based key if available (best dedup: same relay email + same ad)
+    const emailKey = msg.emailContact
+      ? `${msg.emailContact}::${msg.titreAnnonce.toLowerCase()}`
+      : null
+
+    // Find existing group: first by emailKey, then by conversationKey
+    let targetKey: string | undefined
+    if (emailKey && emailKeyIndex.has(emailKey)) {
+      targetKey = emailKeyIndex.get(emailKey)!
+    } else if (convMap.has(msg.conversationKey)) {
+      targetKey = msg.conversationKey
+    }
+
+    if (targetKey && convMap.has(targetKey)) {
+      const existing = convMap.get(targetKey)!
       existing.messages.push({ date: msg.date, text: msg.messageClient, fullText: msg.fullBody })
       if (msg.date > existing.lastDate) {
         existing.lastDate = msg.date
         existing.lastMessage = msg.messageClient
+        // Use the name from the most recent email
+        existing.nomContact = msg.nomContact
+        existing.conversationKey = msg.conversationKey
       }
       if (msg.hasAttachment) existing.hasAttachment = true
       if (msg.attachments.length > 0) existing.attachments.push(...msg.attachments)
       if (msg.emailContact && !existing.emailContact) existing.emailContact = msg.emailContact
+      // Register this emailKey to point to the same group
+      if (emailKey) emailKeyIndex.set(emailKey, targetKey)
     } else {
       convMap.set(msg.conversationKey, {
         conversationKey: msg.conversationKey,
@@ -164,6 +190,8 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
         emailContact: msg.emailContact,
         attachments: [...msg.attachments],
       })
+      // Register the emailKey index
+      if (emailKey) emailKeyIndex.set(emailKey, msg.conversationKey)
     }
   }
 
@@ -246,15 +274,33 @@ function extractLeboncoinContent(subject: string, body: string, htmlBody?: strin
 
   // Extract the actual message — it's between « and » (or unicode equivalents)
   let messageClient = ''
-  const msgMatch = text.match(/[\u00AB\u201C«"]\s*([\s\S]*?)\s*[\u00BB\u201D»"]\s*[\n\r]/)
-  if (msgMatch) {
-    messageClient = msgMatch[1].trim()
+  // Try multiple patterns from most specific to least
+  const quotePatterns = [
+    /[\u00AB\u201C«]\s*([\s\S]*?)\s*[\u00BB\u201D»]\s*[\n\r]/,  // « msg » + newline
+    /[\u00AB\u201C«]\s*([\s\S]*?)\s*[\u00BB\u201D»]/,            // « msg » (no newline needed)
+    /\u00AB\s*([\s\S]*?)\s*\u00BB/,                                // only « » chars
+    /«\s*([\s\S]*?)\s*»/,                                         // raw « » chars
+  ]
+  for (const pattern of quotePatterns) {
+    const match = text.match(pattern)
+    if (match && match[1].trim()) {
+      messageClient = match[1].trim()
+      break
+    }
   }
-  // Fallback: try without requiring newline after closing quote
-  if (!messageClient) {
-    const msgMatch2 = text.match(/[\u00AB\u201C«"]\s*([\s\S]*?)\s*[\u00BB\u201D»"]/)
-    if (msgMatch2) {
-      messageClient = msgMatch2[1].trim()
+
+  // Last resort fallback: if subject matches LBC but no « » found,
+  // try to extract the first non-empty line after the contact name
+  if (!messageClient && nomContact) {
+    const nameIdx = text.indexOf(nomContact)
+    if (nameIdx >= 0) {
+      const afterName = text.substring(nameIdx + nomContact.length)
+      const lines = afterName.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+      // Skip "Répondre" buttons and links, take first real content line
+      const contentLine = lines.find(l => !l.startsWith('http') && !l.startsWith('(http') && !l.includes('Répondre') && l.length > 1 && l.length < 500)
+      if (contentLine) {
+        messageClient = contentLine
+      }
     }
   }
 

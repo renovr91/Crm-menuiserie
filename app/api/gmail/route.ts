@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         if (conv.emailContact) {
           const { data: emailMatch } = await supabase
             .from('messages')
-            .select('id, message_client, conversation_key')
+            .select('id, message_client, conversation_key, date_email')
             .eq('source', 'leboncoin')
             .eq('email_contact', conv.emailContact)
             .ilike('titre_annonce', conv.titreAnnonce)
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         // 2. Exact match on conversation_key
         const { data: exactMatch } = await supabase
           .from('messages')
-          .select('id, message_client, conversation_key')
+          .select('id, message_client, conversation_key, date_email')
           .eq('source', 'leboncoin')
           .eq('conversation_key', normalizedKey)
           .limit(1)
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         // 3. Fuzzy: same titre_annonce + similar nom_contact prefix
         const { data: fuzzyMatches } = await supabase
           .from('messages')
-          .select('id, message_client, conversation_key')
+          .select('id, message_client, conversation_key, date_email')
           .eq('source', 'leboncoin')
           .ilike('conversation_key', `%::${conv.titreAnnonce.toLowerCase()}`)
           .ilike('conversation_key', `${conv.nomContact.toLowerCase().substring(0, 3)}%`)
@@ -91,13 +91,21 @@ export async function POST(request: NextRequest) {
       })()
 
       if (existing) {
-        // Always update if content changed (new messages in conversation)
-        if (fullMessage.length > (existing.message_client?.length || 0) || fullMessage !== existing.message_client) {
+        // Only update if this email is NEWER or LONGER (don't overwrite newer content with older)
+        const existingDate = existing.date_email ? new Date(existing.date_email).getTime() : 0
+        const newDate = conv.lastDate ? new Date(conv.lastDate).getTime() : 0
+        const isNewer = newDate >= existingDate
+        const isLonger = fullMessage.length > (existing.message_client?.length || 0)
+        const isDifferent = fullMessage !== existing.message_client
+
+        if ((isNewer || isLonger) && isDifferent) {
           await supabase.from('messages').update({
             message_client: fullMessage,
-            telephone: conv.phone,
-            has_attachment: conv.hasAttachment,
-            nouveau_message: fullMessage.length > (existing.message_client?.length || 0),
+            date_email: isNewer ? conv.lastDate.toISOString() : undefined,
+            telephone: conv.phone || undefined,
+            has_attachment: conv.hasAttachment || undefined,
+            nouveau_message: isLonger,
+            email_contact: conv.emailContact || undefined,
             ...(conv.phoneContext ? { phone_context: conv.phoneContext } : {}),
           }).eq('id', existing.id)
           updated++
