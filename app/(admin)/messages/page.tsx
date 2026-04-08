@@ -272,20 +272,19 @@ export default function MessagesPage() {
                               timeline.push({ type: m.author === 'SENROLL' ? 'senroll' : 'client', author: m.author, date: m.date, content: m.content, sortKey: i })
                             })
 
-                            // 1b. Detect LeBonCoin PJ link
-                            const rawText = msg.message_client || ''
-                            if (rawText.includes('pièce jointe')) {
+                            // 1b. Add client PJ (from attachments)
+                            const replyPjUrls = new Set((msg.reponse_generee || '').match(/\[PJ\]\s*(https?:\/\/\S+)/g)?.map(m => m.replace('[PJ] ', '')) || [])
+                            const hasRealPJ = msg.attachments && msg.attachments.length > 0
+                            if (hasRealPJ) {
+                              msg.attachments!.filter(url => !replyPjUrls.has(url)).forEach((url, i) => {
+                                timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 + i * 0.01 : i })
+                              })
+                            } else if ((msg.message_client || '').includes('pièce jointe')) {
+                              // Fallback: show LeBonCoin link only if no downloaded PJ
+                              const rawText = msg.message_client || ''
                               const lbcLink = rawText.match(/\(https:\/\/www\.leboncoin\.fr\/messages\/id\/[^\s)]+\)/)
                               const url = lbcLink ? lbcLink[0].replace(/[()]/g, '') : 'https://www.leboncoin.fr/messages'
                               timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 : 0 })
-                            }
-
-                            // 2. Add client PJ (from attachments not in replies)
-                            const replyPjUrls = new Set((msg.reponse_generee || '').match(/\[PJ\]\s*(https?:\/\/\S+)/g)?.map(m => m.replace('[PJ] ', '')) || [])
-                            if (msg.attachments) {
-                              msg.attachments.filter(url => !replyPjUrls.has(url)).forEach((url, i) => {
-                                timeline.push({ type: 'pj', author: msg.nom_contact, date: '', content: '', pjUrl: url, sortKey: parsed.length > 0 ? 0.5 + i * 0.01 : i })
-                              })
                             }
 
                             // 3. Add sent replies (after conversation messages)
@@ -311,7 +310,7 @@ export default function MessagesPage() {
                             return timeline.sort((a, b) => a.sortKey - b.sortKey).map((item, i) => {
                               if (item.type === 'pj') {
                                 const isLbc = item.pjUrl?.includes('leboncoin.fr')
-                                const isImage = item.pjUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i)
+                                const isImage = item.pjUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i) || item.pjUrl?.startsWith('data:image/')
                                 return (
                                   <div key={`pj-${i}`} className="mr-4">
                                     {isLbc ? (
@@ -336,7 +335,7 @@ export default function MessagesPage() {
                                   <p className="text-gray-700 whitespace-pre-wrap mt-0.5">{item.content}</p>
                                   {item.pjUrl && (
                                     <a href={item.pjUrl} target="_blank" rel="noopener noreferrer" className="block mt-1">
-                                      {item.pjUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)
+                                      {(item.pjUrl.match(/\.(jpg|jpeg|png|gif|webp)/i) || item.pjUrl.startsWith('data:image/'))
                                         ? <img src={item.pjUrl} alt="PJ" className="rounded border max-h-32 object-cover hover:opacity-80" />
                                         : <span className="text-blue-600 underline text-xs">📎 Voir la piece jointe</span>}
                                     </a>
