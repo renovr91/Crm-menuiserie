@@ -19,6 +19,7 @@ interface SavedMessage {
   created_at: string
   nouveau_message: boolean
   devis_envoye_at: string | null
+  phone_context: string | null
 }
 
 export default function MessagesPage() {
@@ -310,6 +311,14 @@ export default function MessagesPage() {
         timeline.push({ type: 'senroll', author: 'SENROLL', date: '', content: textOnly, pjUrl: pjMatch?.[1], sortKey: parsed.length + addedCount + 0.5 })
         addedCount++
       })
+    }
+
+    // Show phone context if the phone number isn't visible in any timeline message
+    if (msg.phone_context && msg.telephone) {
+      const phoneVisible = timeline.some(t => t.content.includes(msg.telephone!))
+      if (!phoneVisible) {
+        timeline.push({ type: 'client', author: msg.nom_contact, date: '', content: `${msg.phone_context}`, sortKey: parsed.length > 0 ? parsed.length - 0.1 : 0.9 })
+      }
     }
 
     if (parsed.length === 0 && !msg.reponse_generee) {

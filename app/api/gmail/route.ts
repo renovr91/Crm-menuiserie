@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
             telephone: conv.phone,
             has_attachment: conv.hasAttachment,
             nouveau_message: fullMessage.length > (existing.message_client?.length || 0),
+            ...(conv.phoneContext ? { phone_context: conv.phoneContext } : {}),
           }).eq('id', existing.id)
           updated++
         } else {
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
         titre_annonce: conv.titreAnnonce,
         nom_contact: conv.nomContact,
         telephone: conv.phone,
+        phone_context: conv.phoneContext,
         message_client: fullMessage,
         has_attachment: conv.hasAttachment,
         source: 'leboncoin',

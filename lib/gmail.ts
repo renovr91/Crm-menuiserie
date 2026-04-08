@@ -30,6 +30,7 @@ export interface LeboncoinConversation {
   hasAttachment: boolean
   hasPhone: boolean
   phone: string | null
+  phoneContext: string | null
   attachments: AttachmentData[]
 }
 
@@ -153,6 +154,7 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
         hasAttachment: msg.hasAttachment,
         hasPhone: false,
         phone: null,
+        phoneContext: null,
         attachments: [...msg.attachments],
       })
     }
@@ -178,6 +180,24 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
     if (phoneMatch) {
       conv.hasPhone = true
       conv.phone = phoneMatch[0].replace(/[\s./-]/g, '')
+      // Find the message text that contains the phone number
+      const phoneRaw = phoneMatch[0]
+      for (const m of conv.messages) {
+        if (m.text.includes(phoneRaw) || m.fullText.includes(phoneRaw)) {
+          // Extract the « » message containing the phone, or the surrounding lines
+          const sourceText = m.text.includes(phoneRaw) ? m.text : m.fullText
+          const lines = sourceText.split('\n')
+          const phoneLine = lines.findIndex(l => l.includes(phoneRaw))
+          if (phoneLine >= 0) {
+            const start = Math.max(0, phoneLine - 2)
+            const end = Math.min(lines.length, phoneLine + 3)
+            conv.phoneContext = lines.slice(start, end).join('\n').trim()
+          } else {
+            conv.phoneContext = m.text || null
+          }
+          break
+        }
+      }
     }
   }
 
