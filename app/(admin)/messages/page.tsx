@@ -203,6 +203,17 @@ export default function MessagesPage() {
     finally { setSyncing(false) }
   }
 
+  // --- Date helper (locale-safe, no hydration mismatch) ---
+  const MOIS = ['jan', 'fev', 'mar', 'avr', 'mai', 'jun', 'jul', 'aou', 'sep', 'oct', 'nov', 'dec']
+  const formatDate = (d: string) => {
+    const date = new Date(d)
+    return `${date.getDate()} ${MOIS[date.getMonth()]}`
+  }
+  const formatDateFull = (d: string) => {
+    const date = new Date(d)
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+  }
+
   // --- Text helpers ---
   const cleanLbc = (t: string) => t
     .replace(/\(https?:\/\/[^)]*\)/g, '')
@@ -476,7 +487,7 @@ export default function MessagesPage() {
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[11px] text-gray-400">
-                                {new Date(msg.date_email || msg.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                                {formatDate(msg.date_email || msg.created_at)}
                               </span>
                               {isNew && (
                                 <span className="bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse-dot shadow-lg shadow-red-500/40">
@@ -663,7 +674,7 @@ export default function MessagesPage() {
                             ? 'bg-violet-100 text-violet-500 border border-violet-200 shadow-none cursor-default'
                             : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-violet-500/20'
                         }`}>
-                        {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? `Devis envoye le ${new Date(selectedMsg.devis_envoye_at).toLocaleDateString('fr-FR')}` : 'Envoyer devis'}
+                        {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? `Devis envoye le ${formatDateFull(selectedMsg.devis_envoye_at)}` : 'Envoyer devis'}
                       </button>
                       <input ref={devisFileRef} type="file" accept=".pdf,image/*" className="hidden"
                         onChange={e => {
