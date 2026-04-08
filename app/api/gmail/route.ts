@@ -42,17 +42,36 @@ export async function POST(request: NextRequest) {
       )
       const fullMessage = sorted[0]?.fullText || sorted[0]?.text || ''
 
-      // Check if conversation already exists (try exact match, then fuzzy without special chars)
+      // Check if conversation already exists
       const normalizedKey = conv.conversationKey.replace(/[''`]/g, '').replace(/\s+/g, ' ').trim()
-      let { data: existing } = await supabase
-        .from('messages')
-        .select('id, message_client, conversation_key')
-        .eq('source', 'leboncoin')
-        .eq('conversation_key', normalizedKey)
-        .single()
-
-      // Fuzzy match: try matching by titre_annonce + similar nom_contact
-      if (!existing) {
+      let { data: existing } = await (async () => {
+        // 1. BEST: Match by email_contact + titre_annonce (same person same ad)
+        if (conv.emailContact) {
+          const { data: emailMatch } = await supabase
+            .from('messages')
+            .select('id, message_client, conversation_key')
+            .eq('source', 'leboncoin')
+            .eq('email_contact', conv.emailContact)
+            .ilike('titre_annonce', conv.titreAnnonce)
+            .order('created_at', { ascending: false })
+            .limit(1)
+          if (emailMatch && emailMatch.length > 0) {
+            await supabase.from('messages').update({
+              conversation_key: normalizedKey,
+              nom_contact: conv.nomContact,
+            }).eq('id', emailMatch[0].id)
+            return { data: emailMatch[0] }
+          }
+        }
+        // 2. Exact match on conversation_key
+        const { data: exactMatch } = await supabase
+          .from('messages')
+          .select('id, message_client, conversation_key')
+          .eq('source', 'leboncoin')
+          .eq('conversation_key', normalizedKey)
+          .limit(1)
+        if (exactMatch && exactMatch.length > 0) return { data: exactMatch[0] }
+        // 3. Fuzzy: same titre_annonce + similar nom_contact prefix
         const { data: fuzzyMatches } = await supabase
           .from('messages')
           .select('id, message_client, conversation_key')
@@ -62,13 +81,14 @@ export async function POST(request: NextRequest) {
           .order('created_at', { ascending: false })
           .limit(1)
         if (fuzzyMatches && fuzzyMatches.length > 0) {
-          existing = fuzzyMatches[0]
           await supabase.from('messages').update({
             conversation_key: normalizedKey,
             nom_contact: conv.nomContact,
           }).eq('id', fuzzyMatches[0].id)
+          return { data: fuzzyMatches[0] }
         }
-      }
+        return { data: null }
+      })()
 
       if (existing) {
         // Always update if content changed (new messages in conversation)
@@ -111,7 +131,8 @@ export async function POST(request: NextRequest) {
         message_client: fullMessage,
         has_attachment: conv.hasAttachment,
         source: 'leboncoin',
-        conversation_key: conv.conversationKey,
+        conversation_key: normalizedKey,
+        email_contact: conv.emailContact,
         attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
       })
       imported++

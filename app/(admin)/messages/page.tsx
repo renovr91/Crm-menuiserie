@@ -29,6 +29,7 @@ export default function MessagesPage() {
   const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; total: number } | null>(null)
   const [selectedMsg, setSelectedMsg] = useState<SavedMessage | null>(null)
   const [filter, setFilter] = useState<'all' | 'phone' | 'nophone'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [replyText, setReplyText] = useState('')
   const [replyFile, setReplyFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
@@ -334,6 +335,13 @@ export default function MessagesPage() {
   const filtered = visibleMessages.filter(m => {
     if (filter === 'phone' && !m.telephone) return false
     if (filter === 'nophone' && m.telephone) return false
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      const nameMatch = (m.nom_contact || '').toLowerCase().includes(q)
+      const titleMatch = (m.titre_annonce || '').toLowerCase().includes(q)
+      const phoneMatch = (m.telephone || '').includes(q)
+      if (!nameMatch && !titleMatch && !phoneMatch) return false
+    }
     return true
   })
   const nbWithPhone = visibleMessages.filter(m => m.telephone).length
@@ -388,8 +396,25 @@ export default function MessagesPage() {
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 mb-8">
+      {/* Filters + Search */}
+      <div className="flex items-center gap-3 mb-8">
+        <div className="relative">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Rechercher un contact, annonce, tel..."
+            className="pl-10 pr-4 py-2.5 w-72 rounded-2xl text-xs bg-white border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-400"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">
+              ×
+            </button>
+          )}
+        </div>
+        <div className="h-6 w-px bg-gray-200" />
         {[
           { key: 'all' as const, label: `Tous (${visibleMessages.length})` },
           { key: 'phone' as const, label: `Avec tel. (${nbWithPhone})` },
@@ -403,6 +428,11 @@ export default function MessagesPage() {
             {f.label}
           </button>
         ))}
+        {searchQuery && (
+          <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
+            {filtered.length} resultat{filtered.length > 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {/* Kanban */}

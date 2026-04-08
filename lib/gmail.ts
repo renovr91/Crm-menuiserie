@@ -18,6 +18,7 @@ export interface LeboncoinMessage {
   hasAttachment: boolean
   attachments: AttachmentData[]
   conversationKey: string
+  emailContact: string | null
 }
 
 export interface LeboncoinConversation {
@@ -31,6 +32,7 @@ export interface LeboncoinConversation {
   hasPhone: boolean
   phone: string | null
   phoneContext: string | null
+  emailContact: string | null
   attachments: AttachmentData[]
 }
 
@@ -94,6 +96,8 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
           if (fromMatch) {
             fromName = fromMatch[1].trim()
           }
+          // Extract the LBC relay email (unique per contact)
+          const emailContact = parsed.from?.value?.[0]?.address || null
 
           const extracted = extractLeboncoinContent(subject, textBody, htmlBody)
           if (extracted) {
@@ -118,6 +122,7 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
               hasAttachment: realAttachments.length > 0,
               attachments: realAttachments,
               conversationKey: `${nomContact}::${extracted.titreAnnonce}`.toLowerCase().replace(/[''`]/g, '').replace(/\s+/g, ' ').trim(),
+              emailContact,
             })
           }
         } catch {
@@ -143,6 +148,7 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
       }
       if (msg.hasAttachment) existing.hasAttachment = true
       if (msg.attachments.length > 0) existing.attachments.push(...msg.attachments)
+      if (msg.emailContact && !existing.emailContact) existing.emailContact = msg.emailContact
     } else {
       convMap.set(msg.conversationKey, {
         conversationKey: msg.conversationKey,
@@ -155,6 +161,7 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
         hasPhone: false,
         phone: null,
         phoneContext: null,
+        emailContact: msg.emailContact,
         attachments: [...msg.attachments],
       })
     }
