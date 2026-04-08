@@ -2,13 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
-  const { id, statut } = await request.json()
-  if (!id || !statut) return NextResponse.json({ error: 'id et statut requis' }, { status: 400 })
+  const body = await request.json()
+  const { id } = body
+  if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
 
   const supabase = createAdminClient()
+  const update: Record<string, unknown> = {}
+
+  if (body.statut) update.statut = body.statut
+  if (body.nouveau_message !== undefined) update.nouveau_message = body.nouveau_message
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'Rien a mettre a jour' }, { status: 400 })
+  }
+
   const { error } = await supabase
     .from('messages')
-    .update({ statut })
+    .update(update)
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
