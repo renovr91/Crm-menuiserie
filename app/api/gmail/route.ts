@@ -35,18 +35,12 @@ export async function POST(request: NextRequest) {
     let imported = 0, updated = 0, skipped = 0
 
     for (const conv of conversations) {
-      // Build full conversation: all messages sorted chronologically (oldest first)
-      const chronological = [...conv.messages].sort((a, b) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
+      // Use the LATEST email's full body — it contains the complete conversation
+      // (client messages + SENROLL replies with names and dates in "Messages précédents")
+      const sorted = [...conv.messages].sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
       )
-      const fullMessage = chronological
-        .map(m => {
-          const d = new Date(m.date)
-          const dateStr = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
-          const text = m.text || m.fullText || ''
-          return `[${dateStr}] ${text}`
-        })
-        .join('\n---\n')
+      const fullMessage = sorted[0]?.fullText || sorted[0]?.text || ''
 
       // Check if conversation already exists (try exact match, then fuzzy without special chars)
       const normalizedKey = conv.conversationKey.replace(/[''`]/g, '').replace(/\s+/g, ' ').trim()
@@ -68,22 +62,18 @@ export async function POST(request: NextRequest) {
           .single()
         if (fuzzyMatch) {
           existing = fuzzyMatch
-          // Update the old conversation_key to the normalized one
           await supabase.from('messages').update({ conversation_key: normalizedKey }).eq('id', fuzzyMatch.id)
         }
       }
 
       if (existing) {
-        // Update if content changed (compare message count, not length — format may vary)
-        const existingMsgCount = (existing.message_client || '').split('\n---\n').length
-        const newMsgCount = conv.messages.length
-        const contentChanged = newMsgCount > existingMsgCount || fullMessage !== existing.message_client
-        if (contentChanged) {
+        // Always update if content changed (new messages in conversation)
+        if (fullMessage.length > (existing.message_client?.length || 0) || fullMessage !== existing.message_client) {
           await supabase.from('messages').update({
             message_client: fullMessage,
             telephone: conv.phone,
             has_attachment: conv.hasAttachment,
-            nouveau_message: newMsgCount > existingMsgCount,
+            nouveau_message: fullMessage.length > (existing.message_client?.length || 0),
           }).eq('id', existing.id)
           updated++
         } else {
