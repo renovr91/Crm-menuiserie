@@ -203,15 +203,15 @@ export default function MessagesPage() {
     finally { setSyncing(false) }
   }
 
-  // --- Date helper (locale-safe, no hydration mismatch) ---
+  // --- Date helper (UTC-safe, no hydration mismatch server/client) ---
   const MOIS = ['jan', 'fev', 'mar', 'avr', 'mai', 'jun', 'jul', 'aou', 'sep', 'oct', 'nov', 'dec']
   const formatDate = (d: string) => {
     const date = new Date(d)
-    return `${date.getDate()} ${MOIS[date.getMonth()]}`
+    return `${date.getUTCDate()} ${MOIS[date.getUTCMonth()]}`
   }
   const formatDateFull = (d: string) => {
     const date = new Date(d)
-    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+    return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`
   }
 
   // --- Text helpers ---
@@ -561,7 +561,7 @@ export default function MessagesPage() {
                 )}
                 <button onClick={closeModal}
                   className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors text-xl">
-                  &times;
+                  ×
                 </button>
               </div>
             </div>

@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
       )
       const fullMessage = chronological
         .map(m => {
-          const dateStr = new Date(m.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          const d = new Date(m.date)
+          const dateStr = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
           const text = m.text || m.fullText || ''
           return `[${dateStr}] ${text}`
         })
@@ -73,13 +74,16 @@ export async function POST(request: NextRequest) {
       }
 
       if (existing) {
-        // Update if the message content changed (new messages in conversation)
-        if (fullMessage.length > (existing.message_client?.length || 0)) {
+        // Update if content changed (compare message count, not length — format may vary)
+        const existingMsgCount = (existing.message_client || '').split('\n---\n').length
+        const newMsgCount = conv.messages.length
+        const contentChanged = newMsgCount > existingMsgCount || fullMessage !== existing.message_client
+        if (contentChanged) {
           await supabase.from('messages').update({
             message_client: fullMessage,
             telephone: conv.phone,
             has_attachment: conv.hasAttachment,
-            nouveau_message: true,
+            nouveau_message: newMsgCount > existingMsgCount,
           }).eq('id', existing.id)
           updated++
         } else {
