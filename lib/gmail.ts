@@ -102,10 +102,6 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
           const extracted = extractLeboncoinContent(subject, textBody, htmlBody)
           if (extracted) {
             const nomContact = extracted.nomContact || fromName
-            // Skip own auto-replies (SENROLL, RENOV-R, Yacine Senane)
-            // Only skip if the FROM header name matches (not body content)
-            const skipNames = ['senroll', 'renov-r', 'renov r', 'yacine senane']
-            if (skipNames.some(s => fromName.toLowerCase().includes(s))) continue
             // Extract real attachments (images, not tracking pixels)
             const realAttachments: AttachmentData[] = (parsed.attachments || [])
               .filter(a => !a.contentType?.includes('text') && (a.size || 0) > 500)
