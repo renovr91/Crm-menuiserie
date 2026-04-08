@@ -33,6 +33,7 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [showReply, setShowReply] = useState(false)
   const devisFileRef = useRef<HTMLInputElement>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   // --- Data ---
   const loadMessages = useCallback(async () => {
@@ -54,6 +55,13 @@ export default function MessagesPage() {
       if (updated) setSelectedMsg(updated)
     }
   }, [messages])
+
+  // Auto-scroll to bottom of conversation (like WhatsApp)
+  useEffect(() => {
+    if (selectedMsg) {
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    }
+  }, [selectedMsg])
 
   // Modal: lock scroll + escape key
   useEffect(() => {
@@ -597,6 +605,7 @@ export default function MessagesPage() {
                     </div>
                   )
                 })}
+                <div ref={chatEndRef} />
               </div>
             </div>
 
