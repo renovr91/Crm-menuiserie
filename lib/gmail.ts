@@ -56,22 +56,34 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
   const allMessages: LeboncoinMessage[] = []
 
   try {
-    const lock = await client.getMailboxLock('INBOX')
+    // Use "All Mail" to catch emails in any tab/category (Primary, Updates, Promotions...)
+    // Gmail IMAP: English = "[Gmail]/All Mail", French = "[Gmail]/Tous les messages"
+    let mailboxName = 'INBOX'
+    try {
+      const mailboxes = await client.list()
+      const allMail = mailboxes.find((mb: { specialUse?: string }) => mb.specialUse === '\\All')
+      if (allMail) mailboxName = allMail.path
+    } catch { /* fallback to INBOX */ }
+
+    const lock = await client.getMailboxLock(mailboxName)
     try {
       const since = new Date()
       since.setDate(since.getDate() - 10)
 
-      // Step 1: Get all recent messages (Gmail IMAP search returns threads, not individual messages)
+      // Step 1: Get all recent messages
       const searchResults = await client.search({ since })
       if (!searchResults || !Array.isArray(searchResults) || searchResults.length === 0) return []
 
-      // Step 2: Fetch envelopes to find "Nouveau message pour" subjects
+      // Step 2: Fetch envelopes to find LeBonCoin messages
+      // Filter by FROM address (@messagerie.leboncoin.fr) OR subject "Nouveau message pour"
+      // This catches both initial messages AND follow-up replies
       const clientUids: number[] = []
       const uidStr = searchResults.join(',')
 
       for await (const msg of client.fetch(uidStr, { envelope: true }, { uid: true })) {
         const subject = msg.envelope?.subject || ''
-        if (subject.includes('Nouveau message pour')) {
+        const fromAddr = msg.envelope?.from?.[0]?.address || ''
+        if (subject.includes('Nouveau message pour') || fromAddr.includes('@messagerie.leboncoin.fr')) {
           clientUids.push(msg.uid)
         }
       }
@@ -245,12 +257,23 @@ export async function fetchLeboncoinEmails(): Promise<LeboncoinConversation[]> {
 function extractLeboncoinContent(subject: string, body: string, htmlBody?: string): { titreAnnonce: string; nomContact: string; messageClient: string } | null {
   // Subject: Nouveau message pour "Titre Annonce" sur leboncoin
   let titreAnnonce = ''
+  // Try multiple subject patterns for LBC notifications
   const subjectMatch = subject.match(/Nouveau message pour\s*["\u201C]([^"\u201D]+)["\u201D]/i)
   if (subjectMatch) {
     titreAnnonce = subjectMatch[1].trim()
-  } else {
-    return null // Not a client message
   }
+  // Fallback: try "Réponse" or other LBC follow-up patterns
+  if (!titreAnnonce) {
+    const replyMatch = subject.match(/(?:Nouvelle?\s+r[ée]ponse|R[ée]ponse)\s+.*?["\u201C]([^"\u201D]+)["\u201D]/i)
+    if (replyMatch) titreAnnonce = replyMatch[1].trim()
+  }
+  // Last resort: extract titre from body (LBC emails always contain the ad title + price)
+  if (!titreAnnonce) {
+    const bodyText = body || (htmlBody ? htmlBody.replace(/<[^>]+>/g, ' ') : '')
+    const titleInBody = bodyText.match(/\n([^\n]{5,80})\n\d+\s*[€]/)
+    if (titleInBody) titreAnnonce = titleInBody[1].trim()
+  }
+  if (!titreAnnonce) return null // Not a LBC message at all
 
   // Use body text, or strip HTML as fallback
   const text = body || (htmlBody ? htmlBody.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ') : '')

@@ -47,20 +47,62 @@ export async function POST(request: NextRequest) {
       let { data: existing } = await (async () => {
         // 1. BEST: Match by email_contact + titre_annonce (same person same ad)
         if (conv.emailContact) {
-          const { data: emailMatch } = await supabase
+          const { data: emailMatches } = await supabase
             .from('messages')
-            .select('id, message_client, conversation_key, date_email')
+            .select('id, message_client, conversation_key, date_email, statut, reponse_generee')
             .eq('source', 'leboncoin')
             .eq('email_contact', conv.emailContact)
             .ilike('titre_annonce', conv.titreAnnonce)
             .order('created_at', { ascending: false })
-            .limit(1)
-          if (emailMatch && emailMatch.length > 0) {
+          if (emailMatches && emailMatches.length > 0) {
+            // If multiple entries with same email_contact+annonce, MERGE them
+            if (emailMatches.length > 1) {
+              // Keep the one with most data (has reply, or best statut)
+              const statusPriority: Record<string, number> = { 'devis_accepte': 4, 'devis_envoye': 3, 'en_cours': 2, 'nouveau': 1, 'archive': 0 }
+              const sorted = [...emailMatches].sort((a, b) => {
+                const sa = statusPriority[a.statut || 'nouveau'] || 0
+                const sb = statusPriority[b.statut || 'nouveau'] || 0
+                if (sa !== sb) return sb - sa // best statut first
+                if (a.reponse_generee && !b.reponse_generee) return -1
+                if (!a.reponse_generee && b.reponse_generee) return 1
+                return 0
+              })
+              const keeper = sorted[0]
+              const toDelete = sorted.slice(1).map(m => m.id)
+              // Merge data from duplicates: keep best content + all replies
+              const allReplies = sorted.map(m => m.reponse_generee).filter(Boolean)
+              const uniqueReplies = [...new Set(allReplies)].join('\n---\n')
+              // Find the entry with the most recent date_email (best content)
+              const newestContent = [...emailMatches].sort((a, b) => {
+                const da = a.date_email ? new Date(a.date_email).getTime() : 0
+                const db = b.date_email ? new Date(b.date_email).getTime() : 0
+                return db - da
+              })[0]
+              const mergeUpdate: Record<string, unknown> = {}
+              if (uniqueReplies) mergeUpdate.reponse_generee = uniqueReplies
+              // Transfer newest content to keeper
+              if (newestContent.id !== keeper.id && newestContent.date_email) {
+                mergeUpdate.message_client = newestContent.message_client
+                mergeUpdate.date_email = newestContent.date_email
+              }
+              if (Object.keys(mergeUpdate).length > 0) {
+                await supabase.from('messages').update(mergeUpdate).eq('id', keeper.id)
+              }
+              // Delete duplicates
+              if (toDelete.length > 0) {
+                await supabase.from('messages').delete().in('id', toDelete)
+              }
+              await supabase.from('messages').update({
+                conversation_key: normalizedKey,
+                nom_contact: conv.nomContact,
+              }).eq('id', keeper.id)
+              return { data: keeper }
+            }
             await supabase.from('messages').update({
               conversation_key: normalizedKey,
               nom_contact: conv.nomContact,
-            }).eq('id', emailMatch[0].id)
-            return { data: emailMatch[0] }
+            }).eq('id', emailMatches[0].id)
+            return { data: emailMatches[0] }
           }
         }
         // 2. Exact match on conversation_key
