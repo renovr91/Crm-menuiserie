@@ -98,14 +98,19 @@ export default function MessagesPage() {
   }
 
   // Envoyer devis = envoie le PDF en PJ par email + marque le statut devis_envoye
+  const [sendError, setSendError] = useState<string | null>(null)
   async function handleEnvoyerDevis(msg: SavedMessage, file: File) {
-    if (!msg.email_contact) { alert('Pas d\'email pour ce contact'); return }
+    setSendError(null)
+    if (!msg.email_contact) {
+      setSendError('Pas d\'adresse email LeBonCoin pour ce contact')
+      return
+    }
     setSending(true)
     try {
       const formData = new FormData()
       formData.append('to', msg.email_contact)
       formData.append('subject', 'Re: Nouveau message pour "' + msg.titre_annonce + '" sur leboncoin')
-      formData.append('message', `Bonjour,\n\nVeuillez trouver ci-joint notre devis concernant votre demande.\n\nN'hesitez pas a nous contacter pour toute question.\n\nCordialement,\nRENOV-R 91`)
+      formData.append('message', `Bonjour,\nVeuillez trouver votre devis.\nNous restons a votre disposition au 06 32 30 59 72 pour toute question ou pour valider votre commande.\nAfin de faciliter les echanges, nous vous remercions de privilegier le contact direct par telephone plutot que via Leboncoin.\nMerci d'avance.`)
       formData.append('messageId', msg.id)
       formData.append('file', file)
       const res = await fetch('/api/gmail/reply', { method: 'POST', body: formData })
@@ -119,12 +124,13 @@ export default function MessagesPage() {
         })
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, statut: 'devis_envoye', devis_envoye_at: now } : m))
         setSelectedMsg(prev => prev ? { ...prev, statut: 'devis_envoye', devis_envoye_at: now } : null)
+        setSendError(null)
         loadMessages()
       } else {
-        const data = await res.json()
-        alert('Erreur envoi: ' + (data.error || 'Echec'))
+        const data = await res.json().catch(() => ({}))
+        setSendError('Erreur envoi: ' + (data.error || 'Echec de l\'envoi'))
       }
-    } catch { alert('Erreur connexion') }
+    } catch { setSendError('Erreur de connexion au serveur') }
     finally { setSending(false) }
   }
 
@@ -133,6 +139,7 @@ export default function MessagesPage() {
     setShowReply(false)
     setReplyText('')
     setReplyFile(null)
+    setSendError(null)
     if (msg.nouveau_message) markAsRead(msg.id)
   }
 
@@ -684,33 +691,49 @@ export default function MessagesPage() {
               </div>
 
               {/* Reply area */}
-              {selectedMsg.email_contact && (
-                <div className="px-8 py-4">
-                  {!showReply ? (
-                    <div className="flex items-center gap-3">
+              <div className="px-8 py-4">
+                {sendError && (
+                  <div className="mb-3 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-4 py-2.5 rounded-xl animate-slide-up">
+                    <span className="shrink-0">⚠</span>
+                    <span>{sendError}</span>
+                    <button onClick={() => setSendError(null)} className="ml-auto text-red-400 hover:text-red-600">×</button>
+                  </div>
+                )}
+                {!showReply ? (
+                  <div className="flex items-center gap-3">
+                    {selectedMsg.email_contact ? (
                       <button onClick={() => setShowReply(true)}
                         className="flex-1 text-left px-5 py-3 bg-gray-50 rounded-2xl text-sm text-gray-400 hover:bg-gray-100 transition-colors border border-gray-100">
                         Ecrire une reponse...
                       </button>
-                      <button onClick={() => devisFileRef.current?.click()} disabled={sending || !!selectedMsg.devis_envoye_at}
-                        className={`text-xs px-5 py-3 rounded-2xl font-bold transition-all shadow-lg ${
-                          selectedMsg.devis_envoye_at
+                    ) : (
+                      <div className="flex-1 px-5 py-3 bg-orange-50 rounded-2xl text-xs text-orange-600 border border-orange-200">
+                        Pas d&apos;email LeBonCoin — reponse impossible (ancien message sans email_contact)
+                      </div>
+                    )}
+                    <button onClick={() => devisFileRef.current?.click()} disabled={sending || !!selectedMsg.devis_envoye_at || !selectedMsg.email_contact}
+                      className={`text-xs px-5 py-3 rounded-2xl font-bold transition-all shadow-lg ${
+                        !selectedMsg.email_contact
+                          ? 'bg-gray-100 text-gray-400 border border-gray-200 shadow-none cursor-not-allowed'
+                          : selectedMsg.devis_envoye_at
                             ? 'bg-violet-100 text-violet-500 border border-violet-200 shadow-none cursor-default'
                             : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-violet-500/20'
-                        }`}>
-                        {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? `Devis envoye le ${formatDateFull(selectedMsg.devis_envoye_at)}` : 'Envoyer devis'}
-                      </button>
-                      <input ref={devisFileRef} type="file" accept=".pdf,image/*" className="hidden"
-                        onChange={e => {
-                          const f = e.target.files?.[0]
-                          if (f && selectedMsg) handleEnvoyerDevis(selectedMsg, f)
-                          e.target.value = ''
-                        }} />
+                      }`}>
+                      {sending ? 'Envoi...' : selectedMsg.devis_envoye_at ? `Devis envoye le ${formatDateFull(selectedMsg.devis_envoye_at)}` : 'Envoyer devis'}
+                    </button>
+                    <input ref={devisFileRef} type="file" accept=".pdf,image/*" className="hidden"
+                      onChange={e => {
+                        const f = e.target.files?.[0]
+                        if (f && selectedMsg) handleEnvoyerDevis(selectedMsg, f)
+                        e.target.value = ''
+                      }} />
+                    {selectedMsg.email_contact && (
                       <button onClick={() => handleAutoReply(selectedMsg)} disabled={sending}
                         className="text-xs px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-white font-bold hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 transition-all shadow-lg shadow-amber-500/20">
                         {sending ? '...' : 'Reponse auto'}
                       </button>
-                    </div>
+                    )}
+                  </div>
                   ) : (
                     <div className="space-y-3 animate-slide-up">
                       <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
@@ -753,7 +776,6 @@ export default function MessagesPage() {
                     </div>
                   )}
                 </div>
-              )}
             </div>
           </div>
         </div>
