@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import SignatureCanvas from 'react-signature-canvas'
 
 interface DevisData {
   id: string
@@ -135,7 +134,6 @@ export default function DevisClientPage() {
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [slideConfirmed, setSlideConfirmed] = useState(false)
-  const sigCanvas = useRef<SignatureCanvas | null>(null)
 
   useEffect(() => {
     fetch(`/api/d/${token}`)
@@ -188,24 +186,16 @@ export default function DevisClientPage() {
   }
 
   async function handleSign() {
-    if (!sigCanvas.current || sigCanvas.current.isEmpty() || !devis) {
-      setOtpError('Veuillez dessiner votre signature')
-      return
-    }
-    if (!consent) {
-      setOtpError('Veuillez cocher la case de consentement')
-      return
-    }
+    if (!devis || !consent) return
     setSubmitting(true)
     setOtpError('')
     try {
-      const signatureData = sigCanvas.current.toDataURL()
       const res = await fetch('/api/signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           devis_id: devis.id,
-          signature_data: signatureData,
+          signature_data: 'slide-to-confirm',
           otp_id: otpId
         })
       })
@@ -382,29 +372,7 @@ export default function DevisClientPage() {
                   </span>
                 </label>
 
-                {/* Signature */}
-                <p className="font-semibold text-gray-900 mb-3">
-                  Dessinez votre signature ci-dessous :
-                </p>
-                <div className="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 mb-4">
-                  <SignatureCanvas
-                    ref={sigCanvas}
-                    canvasProps={{
-                      className: 'w-full rounded-xl',
-                      style: { width: '100%', height: '180px', touchAction: 'none' }
-                    }}
-                    penColor="black"
-                    backgroundColor="rgb(249, 250, 251)"
-                  />
-                </div>
-
-                <div className="flex justify-between items-center mb-5">
-                  <button
-                    onClick={() => sigCanvas.current?.clear()}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-                  >
-                    Effacer la signature
-                  </button>
+                <div className="flex justify-end mb-5">
                   <button
                     onClick={() => { setStep('view'); setCode(''); setConsent(false); setSlideConfirmed(false) }}
                     className="text-sm text-gray-500 hover:text-gray-700"
