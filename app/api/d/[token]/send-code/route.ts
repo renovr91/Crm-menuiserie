@@ -61,8 +61,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     await sendSMS(phone, `RENOV-R 91 - Votre code de signature : ${code}`)
   } catch (err) {
-    console.error('Erreur envoi SMS:', err)
-    return NextResponse.json({ error: 'Erreur envoi SMS' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Erreur envoi SMS:', msg)
+    return NextResponse.json({ error: `Erreur envoi SMS: ${msg}` }, { status: 500 })
   }
 
   // Masquer le numéro pour l'affichage
