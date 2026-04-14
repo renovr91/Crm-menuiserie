@@ -10,8 +10,8 @@ async function ovhRequest(method: string, path: string, body?: object) {
   const url = `${BASE}${path}`
   const bodyStr = body ? JSON.stringify(body) : ''
 
-  // Get OVH server time
-  const timeResp = await fetch(`${BASE}/auth/time`)
+  // Get OVH server time (no-store to prevent Next.js caching stale timestamps)
+  const timeResp = await fetch(`${BASE}/auth/time`, { cache: 'no-store' })
   const serverTime = (await timeResp.text()).trim()
 
   // Build signature
@@ -20,6 +20,7 @@ async function ovhRequest(method: string, path: string, body?: object) {
 
   const resp = await fetch(url, {
     method,
+    cache: 'no-store',
     headers: {
       'X-Ovh-Application': AK,
       'X-Ovh-Timestamp': serverTime,
