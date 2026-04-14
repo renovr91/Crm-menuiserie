@@ -18,14 +18,26 @@ interface DevisData {
   client_nom: string
 }
 
+type Step = 'view' | 'send_code' | 'enter_code' | 'sign'
+
 export default function DevisClientPage() {
   const { token } = useParams()
   const [devis, setDevis] = useState<DevisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showSignature, setShowSignature] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [signed, setSigned] = useState(false)
+
+  // OTP state
+  const [step, setStep] = useState<Step>('view')
+  const [phoneMasked, setPhoneMasked] = useState('')
+  const [code, setCode] = useState('')
+  const [otpId, setOtpId] = useState('')
+  const [otpError, setOtpError] = useState('')
+  const [sending, setSending] = useState(false)
+
+  // Signature state
+  const [consent, setConsent] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const sigCanvas = useRef<SignatureCanvas | null>(null)
 
   useEffect(() => {
@@ -42,27 +54,72 @@ export default function DevisClientPage() {
       .finally(() => setLoading(false))
   }, [token])
 
+  async function handleSendCode() {
+    setSending(true)
+    setOtpError('')
+    try {
+      const res = await fetch(`/api/d/${token}/send-code`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setPhoneMasked(data.phone_masked)
+      setStep('enter_code')
+    } catch (err) {
+      setOtpError((err as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function handleVerifyCode() {
+    setSending(true)
+    setOtpError('')
+    try {
+      const res = await fetch(`/api/d/${token}/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setOtpId(data.otp_id)
+      setStep('sign')
+    } catch (err) {
+      setOtpError((err as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
+
   async function handleSign() {
     if (!sigCanvas.current || sigCanvas.current.isEmpty() || !devis) {
-      alert('Veuillez dessiner votre signature')
+      setOtpError('Veuillez dessiner votre signature')
+      return
+    }
+    if (!consent) {
+      setOtpError('Veuillez cocher la case de consentement')
       return
     }
     setSubmitting(true)
+    setOtpError('')
     try {
       const signatureData = sigCanvas.current.toDataURL()
       const res = await fetch('/api/signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ devis_id: devis.id, signature_data: signatureData })
+        body: JSON.stringify({
+          devis_id: devis.id,
+          signature_data: signatureData,
+          otp_id: otpId
+        })
       })
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || 'Erreur lors de la signature')
       }
       setSigned(true)
-      setShowSignature(false)
+      setStep('view')
     } catch (err) {
-      alert((err as Error).message)
+      setOtpError((err as Error).message)
     } finally {
       setSubmitting(false)
     }
@@ -83,7 +140,7 @@ export default function DevisClientPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white p-8 rounded-2xl shadow-sm border text-center max-w-md">
-          <div className="text-4xl mb-4">🔗</div>
+          <div className="text-4xl mb-4">&#128279;</div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Lien invalide</h1>
           <p className="text-gray-500">{error || 'Ce devis n\'existe pas ou le lien a expiré.'}</p>
         </div>
@@ -149,23 +206,86 @@ export default function DevisClientPage() {
           </div>
         </div>
 
-        {/* Signature */}
+        {/* Bloc signature avec OTP */}
         {!signed && (
           <div className="bg-white rounded-2xl shadow-sm border p-6">
-            {!showSignature ? (
+            {/* Étape 1 : Bouton initial */}
+            {step === 'view' && (
               <div className="text-center">
                 <p className="text-gray-600 mb-4">
-                  En signant ce devis, vous acceptez les conditions et les tarifs proposés.
+                  Pour accepter ce devis, une vérification par SMS sera effectuée.
                 </p>
                 <button
-                  onClick={() => setShowSignature(true)}
-                  className="bg-black text-white px-8 py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors text-lg w-full sm:w-auto"
+                  onClick={handleSendCode}
+                  disabled={sending}
+                  className="bg-black text-white px-8 py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors text-lg w-full sm:w-auto disabled:opacity-50"
                 >
-                  Accepter et signer ce devis
+                  {sending ? 'Envoi en cours...' : 'Accepter et signer ce devis'}
                 </button>
               </div>
-            ) : (
+            )}
+
+            {/* Étape 2 : Saisie du code OTP */}
+            {step === 'enter_code' && (
+              <div className="max-w-sm mx-auto text-center">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                  <p className="text-blue-800 text-sm font-medium">
+                    Un code de vérification a été envoyé au {phoneMasked}
+                  </p>
+                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Entrez le code reçu par SMS
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  className="w-full text-center text-2xl tracking-[0.5em] font-mono border-2 border-gray-300 rounded-xl py-3 px-4 focus:border-black focus:outline-none mb-4"
+                  placeholder="------"
+                  autoFocus
+                />
+                <button
+                  onClick={handleVerifyCode}
+                  disabled={code.length !== 6 || sending}
+                  className="w-full bg-black text-white py-3 rounded-xl font-semibold hover:bg-gray-800 disabled:opacity-50 transition-colors mb-3"
+                >
+                  {sending ? 'Vérification...' : 'Vérifier le code'}
+                </button>
+                <button
+                  onClick={handleSendCode}
+                  disabled={sending}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Renvoyer le code
+                </button>
+              </div>
+            )}
+
+            {/* Étape 3 : Consentement + Signature */}
+            {step === 'sign' && (
               <div>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-center">
+                  <p className="text-green-700 text-sm font-medium">&#10003; Identité vérifiée par SMS</p>
+                </div>
+
+                {/* Consentement */}
+                <label className="flex items-start gap-3 mb-5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="mt-1 h-5 w-5 rounded border-gray-300 text-black focus:ring-black"
+                  />
+                  <span className="text-sm text-gray-700 leading-snug">
+                    <strong>Lu et approuvé, bon pour accord.</strong> J&apos;accepte les conditions,
+                    les tarifs et les délais indiqués dans ce devis pour un montant total TTC
+                    de {devis.montant_ttc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}.
+                  </span>
+                </label>
+
+                {/* Signature */}
                 <p className="font-semibold text-gray-900 mb-3">
                   Dessinez votre signature ci-dessous :
                 </p>
@@ -189,18 +309,25 @@ export default function DevisClientPage() {
                   </button>
                   <button
                     onClick={handleSign}
-                    disabled={submitting}
+                    disabled={submitting || !consent}
                     className="flex-1 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
                     {submitting ? 'Signature en cours...' : 'Valider ma signature'}
                   </button>
                   <button
-                    onClick={() => setShowSignature(false)}
+                    onClick={() => { setStep('view'); setCode(''); setConsent(false) }}
                     className="px-6 py-3 text-gray-500 text-sm hover:text-gray-700"
                   >
                     Annuler
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Erreur */}
+            {otpError && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                <p className="text-red-700 text-sm">{otpError}</p>
               </div>
             )}
           </div>
