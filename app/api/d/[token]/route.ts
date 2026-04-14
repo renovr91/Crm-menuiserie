@@ -7,7 +7,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data: devis, error } = await supabase
     .from('devis')
-    .select('id, reference, status, montant_ht, tva, montant_ttc, pdf_url, notes, signed_at, created_at, client_id')
+    .select('id, reference, status, montant_ht, tva, montant_ttc, pdf_url, signed_pdf_url, notes, signed_at, created_at, client_id')
     .eq('token', token)
     .single()
 
@@ -42,6 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     tva: devis.tva,
     montant_ttc: devis.montant_ttc,
     pdf_url: devis.pdf_url,
+    signed_pdf_url: devis.signed_pdf_url,
     notes: devis.notes,
     signed_at: devis.signed_at,
     created_at: devis.created_at,
