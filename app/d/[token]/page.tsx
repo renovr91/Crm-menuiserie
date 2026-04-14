@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import SignatureCanvas from 'react-signature-canvas'
 
@@ -20,6 +20,102 @@ interface DevisData {
 
 type Step = 'view' | 'send_code' | 'enter_code' | 'sign'
 
+/* ── Slide to confirm component ── */
+function SlideToConfirm({ onConfirm, disabled, label }: { onConfirm: () => void; disabled: boolean; label: string }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [offsetX, setOffsetX] = useState(0)
+  const [confirmed, setConfirmed] = useState(false)
+  const startX = useRef(0)
+  const maxOffset = useRef(0)
+
+  const handleStart = useCallback((clientX: number) => {
+    if (disabled || confirmed) return
+    setDragging(true)
+    startX.current = clientX - offsetX
+    if (trackRef.current) {
+      maxOffset.current = trackRef.current.offsetWidth - 56
+    }
+  }, [disabled, confirmed, offsetX])
+
+  const handleMove = useCallback((clientX: number) => {
+    if (!dragging) return
+    const x = Math.max(0, Math.min(clientX - startX.current, maxOffset.current))
+    setOffsetX(x)
+  }, [dragging])
+
+  const handleEnd = useCallback(() => {
+    if (!dragging) return
+    setDragging(false)
+    if (offsetX >= maxOffset.current * 0.85) {
+      setOffsetX(maxOffset.current)
+      setConfirmed(true)
+      onConfirm()
+    } else {
+      setOffsetX(0)
+    }
+  }, [dragging, offsetX, onConfirm])
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: MouseEvent) => handleMove(e.clientX)
+    const onUp = () => handleEnd()
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [dragging, handleMove, handleEnd])
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: TouchEvent) => handleMove(e.touches[0].clientX)
+    const onUp = () => handleEnd()
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('touchend', onUp)
+    return () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+  }, [dragging, handleMove, handleEnd])
+
+  const progress = maxOffset.current > 0 ? offsetX / maxOffset.current : 0
+
+  return (
+    <div
+      ref={trackRef}
+      className={`relative h-14 rounded-xl overflow-hidden select-none ${confirmed ? 'bg-green-600' : 'bg-gray-200'}`}
+    >
+      {!confirmed && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-gray-400 font-medium text-sm" style={{ opacity: 1 - progress }}>
+            {label}
+          </span>
+        </div>
+      )}
+      {confirmed && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-white font-semibold">&#10003; Confirmé</span>
+        </div>
+      )}
+      {!confirmed && (
+        <div
+          className="absolute top-1 left-1 h-12 w-12 bg-green-600 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing shadow-lg"
+          style={{ transform: `translateX(${offsetX}px)`, transition: dragging ? 'none' : 'transform 0.3s ease' }}
+          onMouseDown={(e) => handleStart(e.clientX)}
+          onTouchStart={(e) => handleStart(e.touches[0].clientX)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Main page ── */
 export default function DevisClientPage() {
   const { token } = useParams()
   const [devis, setDevis] = useState<DevisData | null>(null)
@@ -38,6 +134,7 @@ export default function DevisClientPage() {
   // Signature state
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [slideConfirmed, setSlideConfirmed] = useState(false)
   const sigCanvas = useRef<SignatureCanvas | null>(null)
 
   useEffect(() => {
@@ -263,7 +360,7 @@ export default function DevisClientPage() {
               </div>
             )}
 
-            {/* Étape 3 : Consentement + Signature */}
+            {/* Étape 3 : Consentement + Signature + Slide */}
             {step === 'sign' && (
               <div>
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-center">
@@ -300,27 +397,43 @@ export default function DevisClientPage() {
                     backgroundColor="rgb(249, 250, 251)"
                   />
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
+
+                <div className="flex justify-between items-center mb-5">
                   <button
                     onClick={() => sigCanvas.current?.clear()}
-                    className="px-6 py-3 border border-gray-300 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
                   >
-                    Effacer
+                    Effacer la signature
                   </button>
                   <button
-                    onClick={handleSign}
-                    disabled={submitting || !consent}
-                    className="flex-1 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
-                  >
-                    {submitting ? 'Signature en cours...' : 'Valider ma signature'}
-                  </button>
-                  <button
-                    onClick={() => { setStep('view'); setCode(''); setConsent(false) }}
-                    className="px-6 py-3 text-gray-500 text-sm hover:text-gray-700"
+                    onClick={() => { setStep('view'); setCode(''); setConsent(false); setSlideConfirmed(false) }}
+                    className="text-sm text-gray-500 hover:text-gray-700"
                   >
                     Annuler
                   </button>
                 </div>
+
+                {/* Slide to confirm */}
+                {consent && !slideConfirmed ? (
+                  <SlideToConfirm
+                    label="Glissez pour signer le devis"
+                    disabled={submitting}
+                    onConfirm={() => {
+                      setSlideConfirmed(true)
+                      handleSign()
+                    }}
+                  />
+                ) : !consent ? (
+                  <div className="h-14 rounded-xl bg-gray-100 flex items-center justify-center">
+                    <span className="text-gray-400 text-sm">Cochez la case ci-dessus pour signer</span>
+                  </div>
+                ) : (
+                  <div className="h-14 rounded-xl bg-green-600 flex items-center justify-center">
+                    <span className="text-white font-semibold">
+                      {submitting ? 'Enregistrement...' : '&#10003; Signature validée'}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
