@@ -12,7 +12,7 @@ async function ovhRequest(method: string, path: string, body?: object) {
 
   // Get OVH server time
   const timeResp = await fetch(`${BASE}/auth/time`)
-  const serverTime = await timeResp.text()
+  const serverTime = (await timeResp.text()).trim()
 
   // Build signature
   const sigRaw = `${AS}+${CK}+${method}+${url}+${bodyStr}+${serverTime}`
