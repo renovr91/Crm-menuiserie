@@ -1,9 +1,9 @@
 import crypto from 'crypto'
 
-const AK = process.env.OVH_APP_KEY!
-const AS = process.env.OVH_APP_SECRET!
-const CK = process.env.OVH_CONSUMER_KEY!
-const SERVICE = process.env.OVH_SMS_SERVICE!
+const AK = (process.env.OVH_APP_KEY || '').trim()
+const AS = (process.env.OVH_APP_SECRET || '').trim()
+const CK = (process.env.OVH_CONSUMER_KEY || '').trim()
+const SERVICE = (process.env.OVH_SMS_SERVICE || '').trim()
 const BASE = 'https://eu.api.ovh.com/1.0'
 
 async function ovhRequest(method: string, path: string, body?: object) {
