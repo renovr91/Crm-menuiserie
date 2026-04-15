@@ -96,7 +96,7 @@ function SlideToConfirm({ onConfirm, disabled, label }: { onConfirm: () => void;
       )}
       {confirmed && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-white font-semibold">&#10003; Confirmé</span>
+          <span className="text-white font-semibold">✓ Confirmé</span>
         </div>
       )}
       {!confirmed && (
@@ -264,7 +264,7 @@ export default function DevisClientPage() {
         {signed && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-2xl">&#10003;</span>
+              <span className="text-2xl">✓</span>
               <div>
                 <p className="font-semibold text-green-800">Devis signé</p>
                 <p className="text-green-600 text-sm">Merci ! Votre accord a bien été enregistré.</p>
@@ -376,7 +376,7 @@ export default function DevisClientPage() {
             {step === 'sign' && (
               <div>
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-center">
-                  <p className="text-green-700 text-sm font-medium">&#10003; Identité vérifiée par SMS</p>
+                  <p className="text-green-700 text-sm font-medium">✓ Identité vérifiée par SMS</p>
                 </div>
 
                 {/* Consentement */}
@@ -420,7 +420,7 @@ export default function DevisClientPage() {
                 ) : (
                   <div className="h-14 rounded-xl bg-green-600 flex items-center justify-center">
                     <span className="text-white font-semibold">
-                      {submitting ? 'Enregistrement...' : '&#10003; Signature validée'}
+                      {submitting ? 'Enregistrement...' : '✓ Signature validée'}
                     </span>
                   </div>
                 )}
