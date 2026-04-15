@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,16 @@ interface Commercial {
   couleur: string
 }
 
+interface DevisItem {
+  id: string
+  reference: string | null
+  status: string
+  montant_ttc: number | null
+  sent_at: string | null
+  signed_at: string | null
+  payment_status: string | null
+}
+
 interface PipelineClient {
   id: string
   nom: string
@@ -59,6 +69,7 @@ interface PipelineClient {
   montant_devis: number | null
   devis_count: number
   commerciaux: { nom: string; couleur: string } | null
+  devis: DevisItem[]
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +446,132 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
 }
 
 // ---------------------------------------------------------------------------
+// Stats bar
+// ---------------------------------------------------------------------------
+
+function StatsBar({ clients, commerciaux }: { clients: PipelineClient[]; commerciaux: Commercial[] }) {
+  const stats = useMemo(() => {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const dayOfWeek = now.getDay() || 7
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - dayOfWeek + 1)
+    weekStart.setHours(0, 0, 0, 0)
+
+    // Collect all signed devis this month / this week
+    let caMonth = 0
+    let caWeek = 0
+    const caByCommercial: Record<string, number> = {}
+
+    for (const client of clients) {
+      for (const d of client.devis || []) {
+        if (d.status !== 'signe' || !d.signed_at) continue
+        const signedDate = new Date(d.signed_at)
+        const montant = Number(d.montant_ttc) || 0
+
+        if (signedDate >= monthStart) {
+          caMonth += montant
+          // Attribute to commercial
+          if (client.commercial_id) {
+            caByCommercial[client.commercial_id] = (caByCommercial[client.commercial_id] || 0) + montant
+          }
+        }
+        if (signedDate >= weekStart) {
+          caWeek += montant
+        }
+      }
+    }
+
+    // Devis en attente
+    const devisEnAttente = clients.filter((c) => c.pipeline_stage === 'devis_envoye')
+    const montantEnAttente = devisEnAttente.reduce((sum, c) => sum + (c.montant_devis || 0), 0)
+
+    // Best seller
+    let bestSeller: { nom: string; montant: number } | null = null
+    for (const [commId, montant] of Object.entries(caByCommercial)) {
+      if (!bestSeller || montant > bestSeller.montant) {
+        const comm = commerciaux.find((c) => c.id === commId)
+        if (comm) bestSeller = { nom: comm.nom, montant }
+      }
+    }
+
+    // Leads a traiter
+    const leadsNouveaux = clients.filter((c) => c.pipeline_stage === 'nouveau').length
+
+    // Relances
+    const relances = clients.filter(
+      (c) => c.alerts.includes('a_relancer') || c.alerts.includes('relance_urgente')
+    ).length
+
+    return { caMonth, caWeek, devisEnAttente: devisEnAttente.length, montantEnAttente, bestSeller, leadsNouveaux, relances }
+  }, [clients, commerciaux])
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 px-6 pt-4 shrink-0">
+      {/* CA Signe (mois) */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">CA Sign\u00e9 (mois)</p>
+        <p className="text-lg font-bold text-green-600">{formatEUR(stats.caMonth)}</p>
+      </div>
+
+      {/* CA Signe (semaine) */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">CA Sign\u00e9 (semaine)</p>
+        <p className="text-lg font-bold text-blue-600">{formatEUR(stats.caWeek)}</p>
+      </div>
+
+      {/* Devis en attente */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">Devis en attente</p>
+        <p className="text-lg font-bold text-orange-500">
+          {stats.devisEnAttente}
+          {stats.montantEnAttente > 0 && (
+            <span className="text-xs font-normal text-gray-400 ml-1">{formatEUR(stats.montantEnAttente)}</span>
+          )}
+        </p>
+      </div>
+
+      {/* Meilleur vendeur */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">Meilleur vendeur</p>
+        {stats.bestSeller ? (
+          <p className="text-sm font-bold text-gray-900 truncate">
+            <span className="mr-1">{'\u{1F3C6}'}</span>
+            {stats.bestSeller.nom}
+            <span className="text-xs font-normal text-gray-400 ml-1">{formatEUR(stats.bestSeller.montant)}</span>
+          </p>
+        ) : (
+          <p className="text-lg font-bold text-gray-300">{'\u2014'}</p>
+        )}
+      </div>
+
+      {/* Leads a traiter */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">Leads \u00e0 traiter</p>
+        <p className={`text-lg font-bold ${stats.leadsNouveaux > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+          {stats.leadsNouveaux}
+        </p>
+      </div>
+
+      {/* Relances */}
+      <div className="bg-white rounded-lg shadow-sm border p-3">
+        <p className="text-xs text-gray-500 mb-1">Relances</p>
+        <p className="text-lg font-bold text-gray-900">
+          {stats.relances > 0 ? (
+            <span className="inline-flex items-center gap-1">
+              {stats.relances}
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+            </span>
+          ) : (
+            <span className="text-gray-300">0</span>
+          )}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -539,6 +676,9 @@ export default function PipelinePage() {
           </button>
         </div>
       </div>
+
+      {/* Stats bar */}
+      {!loading && <StatsBar clients={clients} commerciaux={commerciaux} />}
 
       {/* Kanban board */}
       {loading ? (
