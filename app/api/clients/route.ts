@@ -14,7 +14,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const supabase = createAdminClient()
   const body = await request.json()
-  const { nom, telephone, email, adresse, code_postal, ville, notes } = body
+  const { nom, telephone, email, adresse, code_postal, ville, notes, source, pipeline_stage, commercial_id } = body
 
   if (!nom) return NextResponse.json({ error: 'Nom requis' }, { status: 400 })
 
@@ -41,6 +41,9 @@ export async function POST(request: NextRequest) {
       code_postal: code_postal || null,
       ville: ville || null,
       notes: notes || null,
+      source: source || null,
+      pipeline_stage: pipeline_stage || 'nouveau',
+      commercial_id: commercial_id || null,
     })
     .select()
     .single()

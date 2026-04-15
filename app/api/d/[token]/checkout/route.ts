@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase'
 import Stripe from 'stripe'
 
 function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-03-25.dahlia' })
+  const key = (process.env.STRIPE_SECRET_KEY || '').trim()
+  if (!key) throw new Error('STRIPE_SECRET_KEY manquante')
+  return new Stripe(key)
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -41,46 +43,57 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ? `Acompte ${acomptePct}% — Devis ${devis.reference || devis.id}`
     : `Paiement — Devis ${devis.reference || devis.id}`
 
-  // Créer la session Stripe Checkout
-  const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'https://crm-menuiserie-pi.vercel.app'
+  // Construire l'URL de retour depuis la requête (plus fiable que l'env var)
+  const reqUrl = new URL(request.url)
+  const origin = `${reqUrl.protocol}//${reqUrl.host}`
 
-  const stripe = getStripe()
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ['card'],
-    line_items: [{
-      price_data: {
-        currency: 'eur',
-        product_data: {
-          name: description,
-          description: `RENOV-R 91 — ${devis.reference || 'Devis'}`,
+  try {
+    const stripe = getStripe()
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: description,
+            description: `RENOV-R 91 — ${devis.reference || 'Devis'}`,
+          },
+          unit_amount: montantCentimes,
         },
-        unit_amount: montantCentimes,
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${origin}/d/${token}?paid=1`,
+      cancel_url: `${origin}/d/${token}`,
+      metadata: {
+        devis_id: devis.id,
+        token,
       },
-      quantity: 1,
-    }],
-    mode: 'payment',
-    success_url: `${origin}/d/${token}?paid=1`,
-    cancel_url: `${origin}/d/${token}`,
-    metadata: {
+    })
+
+    if (!session.url) {
+      return NextResponse.json({ error: 'Stripe n\'a pas retourné d\'URL' }, { status: 500 })
+    }
+
+    // Enregistrer le paiement en attente
+    await supabase.from('payments').insert({
       devis_id: devis.id,
-      token,
-    },
-  })
+      montant,
+      methode: 'stripe',
+      status: 'en_attente',
+      stripe_session_id: session.id,
+    })
 
-  // Enregistrer le paiement en attente
-  await supabase.from('payments').insert({
-    devis_id: devis.id,
-    montant,
-    methode: 'stripe',
-    status: 'en_attente',
-    stripe_session_id: session.id,
-  })
+    // Mettre à jour le statut paiement
+    await supabase
+      .from('devis')
+      .update({ payment_status: 'en_attente' })
+      .eq('id', devis.id)
 
-  // Mettre à jour le statut paiement
-  await supabase
-    .from('devis')
-    .update({ payment_status: 'en_attente' })
-    .eq('id', devis.id)
-
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Stripe checkout error:', msg)
+    return NextResponse.json({ error: `Erreur Stripe: ${msg}` }, { status: 500 })
+  }
 }

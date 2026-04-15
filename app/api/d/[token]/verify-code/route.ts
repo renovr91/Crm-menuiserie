@@ -48,10 +48,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Code incorrect' }, { status: 400 })
   }
 
-  // Marquer comme vérifié
+  // Marquer comme vérifié avec horodatage
   await supabase
     .from('otp_codes')
-    .update({ verified: true })
+    .update({ verified: true, verified_at: new Date().toISOString() })
     .eq('id', otp.id)
 
   return NextResponse.json({ success: true, otp_id: otp.id })

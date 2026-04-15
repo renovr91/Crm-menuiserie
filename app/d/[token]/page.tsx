@@ -428,14 +428,16 @@ export default function DevisClientPage() {
 
                 {/* Slide to confirm */}
                 {consent && !slideConfirmed ? (
-                  <SlideToConfirm
-                    label="Glissez pour signer le devis"
-                    disabled={submitting}
-                    onConfirm={() => {
-                      setSlideConfirmed(true)
-                      handleSign()
-                    }}
-                  />
+                  <div className="max-w-xs mx-auto">
+                    <SlideToConfirm
+                      label="Glissez pour signer"
+                      disabled={submitting}
+                      onConfirm={() => {
+                        setSlideConfirmed(true)
+                        handleSign()
+                      }}
+                    />
+                  </div>
                 ) : !consent ? (
                   <div className="h-14 rounded-xl bg-gray-100 flex items-center justify-center">
                     <span className="text-gray-400 text-sm">Cochez la case ci-dessus pour signer</span>

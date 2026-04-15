@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
   const { error: sigError } = await supabase.from('signatures').insert({
     devis_id,
     signature_data,
+    signer_name: signerName,
     signer_ip: signerIp,
     document_hash: documentHash,
     otp_id: otp_id || null,

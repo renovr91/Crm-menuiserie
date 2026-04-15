@@ -1,0 +1,177 @@
+<h2>Vue Pipeline — Écran principal du CRM</h2>
+<p class="subtitle">Le Kanban avec les étapes de ton process. Chaque carte = un lead/client. Clique sur une carte → fiche complète.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Pipeline — Vue Kanban</div>
+  <div class="mockup-body" style="padding:16px;overflow-x:auto;">
+    <!-- Top bar -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-weight:700;font-size:18px;">Pipeline</span>
+        <select style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;">
+          <option>Tous les commerciaux</option>
+          <option>Yacine</option>
+          <option>Karim</option>
+          <option>Jdis</option>
+          <option>Samir</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button style="padding:6px 14px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">+ Nouveau lead</button>
+        <button style="padding:6px 14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer;">📋 Coller un message</button>
+      </div>
+    </div>
+
+    <!-- Kanban columns -->
+    <div style="display:flex;gap:12px;min-width:1200px;">
+      <!-- Nouveau -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#dbeafe;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#1e40af;display:flex;justify-content:space-between;">
+          <span>Nouveau</span><span style="background:#1e40af;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">3</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;space-y:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Benali</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Fenêtres PVC × 4</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">LeBonCoin</span>
+              <span style="color:#9ca3af;">Yacine</span>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">Mme Rousseau</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Porte garage sectionnelle</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:4px;">Téléphone</span>
+              <span style="color:#9ca3af;">Karim</span>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Da Silva</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">VR rénovation × 6</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#fce7f3;color:#9d174d;padding:1px 6px;border-radius:4px;">Email</span>
+              <span style="color:#9ca3af;">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contacté -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#fef9c3;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#854d0e;display:flex;justify-content:space-between;">
+          <span>Contacté</span><span style="background:#854d0e;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">2</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Petit</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Baie coulissante alu</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">LeBonCoin</span>
+              <span style="color:#9ca3af;">Jdis</span>
+            </div>
+            <div style="margin-top:6px;font-size:10px;color:#ef4444;font-weight:500;">⏰ Relance dans 2j</div>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Martin</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Fenêtres + VR</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;">Bouche à oreille</span>
+              <span style="color:#9ca3af;">Samir</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visite -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#e0e7ff;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#3730a3;display:flex;justify-content:space-between;">
+          <span>Visite</span><span style="background:#3730a3;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">1</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">Mme Leroy</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Rénovation complète</div>
+            <div style="font-size:11px;color:#6366f1;margin-top:4px;">📅 Visite 17/04 à 14h</div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+              <span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:4px;">Téléphone</span>
+              <span style="color:#9ca3af;">Yacine</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Devis envoyé -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#fed7aa;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#9a3412;display:flex;justify-content:space-between;">
+          <span>Devis envoyé</span><span style="background:#9a3412;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">2</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Durand</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">PG sectionnelle + portillon</div>
+            <div style="font-weight:600;font-size:12px;color:#059669;margin-top:4px;">2 450 € TTC</div>
+            <div style="margin-top:4px;font-size:10px;color:#f59e0b;font-weight:500;">⚠️ Sans réponse depuis 5j</div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;">
+              <span style="color:#9ca3af;">Karim</span>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Garcia</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">VR DP45 × 3</div>
+            <div style="font-weight:600;font-size:12px;color:#059669;margin-top:4px;">1 140 € TTC</div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;">
+              <span style="color:#9ca3af;">Yacine</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signé -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#bbf7d0;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#166534;display:flex;justify-content:space-between;">
+          <span>Signé</span><span style="background:#166534;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">1</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">M. Nguyen</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Fenêtres alu × 5</div>
+            <div style="font-weight:600;font-size:12px;color:#059669;margin-top:4px;">4 800 € TTC</div>
+            <div style="font-size:11px;color:#059669;margin-top:4px;">✅ Payé 40%</div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;">
+              <span style="color:#9ca3af;">Jdis</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Commandé -->
+      <div style="flex:1;min-width:180px;">
+        <div style="background:#c4b5fd;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:#5b21b6;display:flex;justify-content:space-between;">
+          <span>Commandé</span><span style="background:#5b21b6;color:#fff;border-radius:99px;padding:0 8px;font-size:11px;line-height:20px;">1</span>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;cursor:pointer;">
+            <div style="font-weight:600;font-size:13px;">Mme Blanc</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">PG enroulable Univers 77</div>
+            <div style="font-size:11px;color:#7c3aed;margin-top:4px;">📦 Commande Univers — livraison ~02/05</div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;">
+              <span style="color:#9ca3af;">Samir</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;">
+  <h3>Ce que tu vois sur chaque carte :</h3>
+  <ul style="font-size:14px;color:#4b5563;line-height:1.8;">
+    <li><strong>Nom client</strong> + besoin résumé</li>
+    <li><strong>Montant</strong> du devis (quand il existe)</li>
+    <li><strong>Source</strong> du lead (LBC, tel, email, bouche à oreille)</li>
+    <li><strong>Commercial</strong> assigné</li>
+    <li><strong>Alertes</strong> : relance à faire, sans réponse, date visite...</li>
+  </ul>
+</div>

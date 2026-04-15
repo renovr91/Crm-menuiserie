@@ -39,20 +39,35 @@ async function ovhRequest(method: string, path: string, body?: object) {
   return resp.json()
 }
 
-export async function sendSMS(phone: string, message: string) {
-  // Format phone: 0632... -> +33632...
+function formatPhone(phone: string) {
   let formatted = phone.replace(/\s/g, '')
   if (formatted.startsWith('0')) {
     formatted = '+33' + formatted.slice(1)
   } else if (!formatted.startsWith('+')) {
     formatted = '+33' + formatted
   }
+  return formatted
+}
 
+// SMS transactionnel (OTP, codes) — pas de clause STOP, pas d'URL
+export async function sendSMS(phone: string, message: string) {
   return ovhRequest('POST', `/sms/${SERVICE}/jobs`, {
     message,
-    receivers: [formatted],
-    sender: '+33179725225',
+    receivers: [formatPhone(phone)],
+    sender: process.env.OVH_SMS_SENDER || '+33179725225',
     noStopClause: true,
+    priority: 'high',
+  })
+}
+
+// SMS notification (envoi devis, relances) — avec URL possible
+export async function sendNotifSMS(phone: string, message: string) {
+  const sender = process.env.OVH_SMS_SENDER
+  return ovhRequest('POST', `/sms/${SERVICE}/jobs`, {
+    message,
+    receivers: [formatPhone(phone)],
+    ...(sender ? { sender } : { senderForResponse: true }),
+    noStopClause: false,
     priority: 'high',
   })
 }

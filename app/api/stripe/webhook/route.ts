@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase'
 import Stripe from 'stripe'
 
 function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-03-25.dahlia' })
+  const key = (process.env.STRIPE_SECRET_KEY || '').trim()
+  if (!key) throw new Error('STRIPE_SECRET_KEY manquante')
+  return new Stripe(key)
 }
 
 export async function POST(request: NextRequest) {
