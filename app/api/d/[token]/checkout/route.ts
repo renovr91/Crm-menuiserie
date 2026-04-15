@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     : `Paiement — Devis ${devis.reference || devis.id}`
 
   // Créer la session Stripe Checkout
-  const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || ''
+  const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'https://crm-menuiserie-pi.vercel.app'
 
   const stripe = getStripe()
   const session = await stripe.checkout.sessions.create({
