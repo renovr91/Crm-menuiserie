@@ -14,9 +14,10 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 }
 
 interface Devis {
-  id: string; reference: string; status: string
+  id: string; reference: string; status: string; token: string
   lignes: { description: string; quantite: number; prix_unitaire: number; total: number }[]
   montant_ht: number; tva: number; montant_ttc: number; notes: string
+  pdf_url: string | null; signed_pdf_url: string | null
   sent_at: string | null; read_at: string | null; signed_at: string | null; created_at: string
   clients: { nom: string; telephone: string; email: string; portal_token: string }
 }
@@ -111,12 +112,36 @@ export default function DevisDetailPage() {
                 <Link href={`/devis/${devis.id}/edit`} className="block w-full text-center bg-amber-500 text-white py-3 rounded-lg font-medium hover:bg-amber-600 transition-colors">Modifier</Link>
               )}
               {devis.status === 'brouillon' && <button onClick={handleSendSMS} disabled={sending} className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">{sending ? 'Envoi...' : 'Envoyer par SMS'}</button>}
+
+              {/* PDF */}
+              {devis.pdf_url && (
+                <a href={devis.pdf_url} target="_blank" rel="noopener noreferrer" className="block w-full text-center bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors text-sm">
+                  Voir le PDF original
+                </a>
+              )}
+              {devis.status === 'signe' && devis.signed_pdf_url && (
+                <a href={devis.signed_pdf_url} target="_blank" rel="noopener noreferrer" className="block w-full text-center bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 transition-colors text-sm">
+                  Télécharger le PDF signé
+                </a>
+              )}
+
+              {/* Lien signature client */}
+              {devis.token && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Lien signature client :</p>
+                  <div className="flex gap-2">
+                    <input type="text" value={`${window.location.origin}/d/${devis.token}`} readOnly className="flex-1 border rounded px-2 py-1 text-xs font-mono bg-gray-50" />
+                    <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/d/${devis.token}`)} className="px-3 py-1 border rounded text-xs hover:bg-gray-100">Copier</button>
+                  </div>
+                </div>
+              )}
+
               <div><p className="text-xs text-gray-500 mb-1">Lien portail client :</p><div className="flex gap-2"><input type="text" value={portalUrl} readOnly className="flex-1 border rounded px-2 py-1 text-xs font-mono bg-gray-50" /><button onClick={() => navigator.clipboard.writeText(portalUrl)} className="px-3 py-1 border rounded text-xs hover:bg-gray-100">Copier</button></div></div>
               <div className="pt-4 border-t space-y-2 text-xs text-gray-500">
-                <p>Cr\u00e9\u00e9 le {new Date(devis.created_at).toLocaleString('fr-FR')}</p>
-                {devis.sent_at && <p>Envoy\u00e9 le {new Date(devis.sent_at).toLocaleString('fr-FR')}</p>}
+                <p>Créé le {new Date(devis.created_at).toLocaleString('fr-FR')}</p>
+                {devis.sent_at && <p>Envoyé le {new Date(devis.sent_at).toLocaleString('fr-FR')}</p>}
                 {devis.read_at && <p>Lu le {new Date(devis.read_at).toLocaleString('fr-FR')}</p>}
-                {devis.signed_at && <p>Signe le {new Date(devis.signed_at).toLocaleString('fr-FR')}</p>}
+                {devis.signed_at && <p>Signé le {new Date(devis.signed_at).toLocaleString('fr-FR')}</p>}
               </div>
               <div className="pt-4 border-t">
                 <button onClick={handleDelete} disabled={deleting} className="w-full text-red-600 border border-red-200 py-2 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">{deleting ? 'Suppression...' : 'Supprimer ce devis'}</button>
