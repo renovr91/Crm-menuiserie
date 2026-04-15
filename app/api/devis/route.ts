@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     clientId = newClient.id
   }
 
-  const { data: newDevis, error: devisError } = await supabase.from('devis').insert({ client_id: clientId, lignes: devis.lignes, montant_ht: devis.montant_ht, tva: devis.tva, montant_ttc: devis.montant_ttc, notes: devis.notes || null, status: sendSMS ? 'envoye' : 'brouillon', sent_at: sendSMS ? new Date().toISOString() : null }).select().single()
+  const { data: newDevis, error: devisError } = await supabase.from('devis').insert({ client_id: clientId, reference: devis.reference || null, lignes: devis.lignes || [], montant_ht: devis.montant_ht, tva: devis.tva, montant_ttc: devis.montant_ttc, notes: devis.notes || null, status: sendSMS ? 'envoye' : 'brouillon', sent_at: sendSMS ? new Date().toISOString() : null }).select().single()
   if (devisError) return NextResponse.json({ error: devisError.message }, { status: 500 })
 
   if (sendSMS) {
