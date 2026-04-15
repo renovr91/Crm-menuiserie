@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 interface DevisData {
   id: string
@@ -16,6 +16,8 @@ interface DevisData {
   signed_at: string | null
   created_at: string
   client_nom: string
+  payment_status: string | null
+  acompte_pct: number
 }
 
 type Step = 'view' | 'send_code' | 'enter_code' | 'sign'
@@ -118,6 +120,7 @@ function SlideToConfirm({ onConfirm, disabled, label }: { onConfirm: () => void;
 /* ── Main page ── */
 export default function DevisClientPage() {
   const { token } = useParams()
+  const searchParams = useSearchParams()
   const [devis, setDevis] = useState<DevisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -136,6 +139,11 @@ export default function DevisClientPage() {
   const [submitting, setSubmitting] = useState(false)
   const [slideConfirmed, setSlideConfirmed] = useState(false)
 
+  // Payment state
+  const [paymentTab, setPaymentTab] = useState<'cb' | 'virement'>('cb')
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paid, setPaid] = useState(false)
+
   useEffect(() => {
     fetch(`/api/d/${token}`)
       .then((res) => {
@@ -145,6 +153,7 @@ export default function DevisClientPage() {
       .then((data) => {
         setDevis(data)
         if (data.status === 'signe') setSigned(true)
+        if (data.payment_status === 'paye' || searchParams.get('paid') === '1') setPaid(true)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -213,6 +222,20 @@ export default function DevisClientPage() {
       setOtpError((err as Error).message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleCheckout() {
+    setPaymentLoading(true)
+    try {
+      const res = await fetch(`/api/d/${token}/checkout`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      window.location.href = data.url
+    } catch (err) {
+      alert((err as Error).message)
+    } finally {
+      setPaymentLoading(false)
     }
   }
 
@@ -433,6 +456,108 @@ export default function DevisClientPage() {
                 <p className="text-red-700 text-sm">{otpError}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Bloc paiement — affiché après signature */}
+        {signed && !paid && devis.payment_status !== 'paye' && (
+          <div className="bg-white rounded-2xl shadow-sm border p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Paiement</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              {devis.acompte_pct > 0
+                ? `Acompte de ${devis.acompte_pct}% soit ${(devis.montant_ttc * devis.acompte_pct / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`
+                : `Montant à régler : ${devis.montant_ttc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`
+              }
+            </p>
+
+            {/* Onglets CB / Virement */}
+            <div className="flex rounded-lg bg-gray-100 p-1 mb-5">
+              <button
+                onClick={() => setPaymentTab('cb')}
+                className={`flex-1 py-2.5 rounded-md text-sm font-medium transition-colors ${paymentTab === 'cb' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Carte bancaire
+              </button>
+              <button
+                onClick={() => setPaymentTab('virement')}
+                className={`flex-1 py-2.5 rounded-md text-sm font-medium transition-colors ${paymentTab === 'virement' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Virement bancaire
+              </button>
+            </div>
+
+            {/* Contenu CB */}
+            {paymentTab === 'cb' && (
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-4">Paiement sécurisé par carte bancaire via Stripe</p>
+                <button
+                  onClick={handleCheckout}
+                  disabled={paymentLoading}
+                  className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold hover:bg-blue-700 transition-colors text-lg disabled:opacity-50"
+                >
+                  {paymentLoading ? 'Redirection...' : `Payer ${devis.acompte_pct > 0
+                    ? (devis.montant_ttc * devis.acompte_pct / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
+                    : devis.montant_ttc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
+                  } par carte`}
+                </button>
+                <div className="flex items-center justify-center gap-3 mt-3 text-gray-400 text-xs">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <span>Paiement chiffré et sécurisé</span>
+                </div>
+              </div>
+            )}
+
+            {/* Contenu Virement */}
+            {paymentTab === 'virement' && (
+              <div>
+                <p className="text-sm text-gray-600 mb-4">Effectuez un virement bancaire avec les coordonnées suivantes :</p>
+                <div className="bg-gray-50 rounded-xl p-5 space-y-3 border">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Titulaire</span>
+                    <span className="font-medium text-gray-900">RENOV.R</span>
+                  </div>
+                  <div className="border-t" />
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm text-gray-500">IBAN</span>
+                    <span className="font-mono text-sm font-medium text-gray-900 text-right">FR76 1695 8000 0178<br/>2658 5461 456</span>
+                  </div>
+                  <div className="border-t" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">BIC</span>
+                    <span className="font-mono text-sm font-medium text-gray-900">QNTOFRP1XXX</span>
+                  </div>
+                  <div className="border-t" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Montant</span>
+                    <span className="font-bold text-lg text-gray-900">
+                      {devis.acompte_pct > 0
+                        ? (devis.montant_ttc * devis.acompte_pct / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
+                        : devis.montant_ttc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
+                      }
+                    </span>
+                  </div>
+                  <div className="border-t" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Référence</span>
+                    <span className="font-mono font-medium text-gray-900">{devis.reference || devis.id.slice(0, 8)}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-3 text-center">
+                  Indiquez la référence dans le libellé du virement. Votre paiement sera validé sous 24 à 48h ouvrées.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bandeau payé */}
+        {paid && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+            <span className="text-2xl">✓</span>
+            <div>
+              <p className="font-semibold text-blue-800">Paiement enregistré</p>
+              <p className="text-blue-600 text-sm">Merci ! Votre paiement a bien été pris en compte.</p>
+            </div>
           </div>
         )}
 

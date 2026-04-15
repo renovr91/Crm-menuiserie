@@ -18,8 +18,14 @@ interface Devis {
   lignes: { description: string; quantite: number; prix_unitaire: number; total: number }[]
   montant_ht: number; tva: number; montant_ttc: number; notes: string
   pdf_url: string | null; signed_pdf_url: string | null
+  payment_status: string | null; acompte_pct: number
   sent_at: string | null; read_at: string | null; signed_at: string | null; created_at: string
   clients: { nom: string; telephone: string; email: string; portal_token: string }
+}
+
+interface Payment {
+  id: string; montant: number; methode: string; status: string
+  stripe_session_id: string | null; created_at: string; confirmed_at: string | null
 }
 
 export default function DevisDetailPage() {
@@ -28,12 +34,28 @@ export default function DevisDetailPage() {
   const [devis, setDevis] = useState<Devis | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [markingPaid, setMarkingPaid] = useState(false)
 
   useEffect(() => {
     fetch(`/api/devis?id=${id}`).then((res) => res.json()).then((data) => setDevis(Array.isArray(data) ? data[0] : data)).catch(console.error).finally(() => setLoading(false))
+    fetch(`/api/devis/${id}/payment`).then((res) => res.json()).then((data) => { if (Array.isArray(data)) setPayments(data) }).catch(console.error)
   }, [id])
 
   const [deleting, setDeleting] = useState(false)
+
+  async function handleMarkPaid() {
+    if (!devis || !confirm('Confirmer la réception du virement ?')) return
+    setMarkingPaid(true)
+    try {
+      const res = await fetch(`/api/devis/${devis.id}/payment`, { method: 'POST' })
+      if (!res.ok) throw new Error('Erreur')
+      setDevis({ ...devis, payment_status: 'paye' })
+      const updatedPayments = await fetch(`/api/devis/${devis.id}/payment`).then(r => r.json())
+      if (Array.isArray(updatedPayments)) setPayments(updatedPayments)
+    } catch (err) { alert((err as Error).message) }
+    finally { setMarkingPaid(false) }
+  }
 
   async function handleSendSMS() {
     if (!devis) return
@@ -137,6 +159,44 @@ export default function DevisDetailPage() {
               )}
 
               <div><p className="text-xs text-gray-500 mb-1">Lien portail client :</p><div className="flex gap-2"><input type="text" value={portalUrl} readOnly className="flex-1 border rounded px-2 py-1 text-xs font-mono bg-gray-50" /><button onClick={() => navigator.clipboard.writeText(portalUrl)} className="px-3 py-1 border rounded text-xs hover:bg-gray-100">Copier</button></div></div>
+
+              {/* Paiement */}
+              {devis.status === 'signe' && (
+                <div className="pt-4 border-t">
+                  <h3 className="text-sm font-semibold mb-2">Paiement</h3>
+                  {devis.payment_status === 'paye' ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-green-700 text-sm font-medium">Payé</p>
+                      {payments.filter(p => p.status === 'confirme').map(p => (
+                        <p key={p.id} className="text-green-600 text-xs mt-1">
+                          {p.montant.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} par {p.methode === 'stripe' ? 'carte bancaire' : 'virement'}
+                          {p.confirmed_at && ` — ${new Date(p.confirmed_at).toLocaleDateString('fr-FR')}`}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-amber-700 text-sm font-medium">En attente de paiement</p>
+                        <p className="text-amber-600 text-xs mt-1">
+                          {Number(devis.acompte_pct) > 0
+                            ? `Acompte ${devis.acompte_pct}% : ${(devis.montant_ttc * Number(devis.acompte_pct) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`
+                            : `Total : ${devis.montant_ttc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`
+                          }
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleMarkPaid}
+                        disabled={markingPaid}
+                        className="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                      >
+                        {markingPaid ? 'Enregistrement...' : 'Marquer virement reçu'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-4 border-t space-y-2 text-xs text-gray-500">
                 <p>Créé le {new Date(devis.created_at).toLocaleString('fr-FR')}</p>
                 {devis.sent_at && <p>Envoyé le {new Date(devis.sent_at).toLocaleString('fr-FR')}</p>}
