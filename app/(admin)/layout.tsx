@@ -3,22 +3,20 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
-import { useState } from 'react'
 
 const NAV_ITEMS = [
-  { href: '/pipeline', label: 'Pipeline', icon: '\ud83d\udcca' },
-  { href: '/clients', label: 'Clients', icon: '\ud83d\udc65' },
-  { href: '/devis', label: 'Devis', icon: '\ud83d\udcc4' },
-  { href: '/livraisons', label: 'Livraisons', icon: '\ud83d\udce6' },
-  { href: '/planning', label: 'Planning', icon: '\ud83d\udd27' },
-  { href: '/sav', label: 'SAV', icon: '\ud83c\udfab' },
-  { href: '/equipe', label: '\u00c9quipe', icon: '\ud83d\udc54' },
+  { href: '/pipeline', label: 'Pipeline', icon: '📊' },
+  { href: '/clients', label: 'Clients', icon: '👥' },
+  { href: '/devis', label: 'Devis', icon: '📄' },
+  { href: '/livraisons', label: 'Livraisons', icon: '📦' },
+  { href: '/planning', label: 'Planning', icon: '🔧' },
+  { href: '/sav', label: 'SAV', icon: '🎫' },
+  { href: '/equipe', label: 'Équipe', icon: '👔' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   async function handleLogout() {
     const supabase = createBrowserSupabase()
@@ -28,39 +26,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 flex flex-col transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:z-auto ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Top nav bar */}
+      <header className="bg-gray-900 flex items-center h-12 shrink-0 px-4 gap-6">
         {/* Logo */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800">
-          <div>
-            <h1 className="text-lg font-bold text-white">RENOV-R 91</h1>
-            <p className="text-xs text-gray-500">CRM Menuiserie</p>
-          </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-gray-400 hover:text-white"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        <Link href="/pipeline" className="flex items-center gap-2 shrink-0 mr-2">
+          <span className="text-white font-bold text-sm">RENOV-R 91</span>
+          <span className="text-gray-500 text-xs hidden sm:inline">CRM</span>
+        </Link>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex items-center gap-1 overflow-x-auto flex-1">
           {NAV_ITEMS.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -69,51 +45,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
                   isActive
-                    ? 'bg-gray-800 text-white'
+                    ? 'bg-gray-700 text-white'
                     : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                 }`}
               >
-                <span className="text-lg">{item.icon}</span>
-                {item.label}
+                <span className="text-sm">{item.icon}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </Link>
             )
           })}
         </nav>
 
-        {/* Logout button */}
-        <div className="px-3 py-4 border-t border-gray-800">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            D\u00e9connexion
-          </button>
-        </div>
-      </aside>
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className="text-gray-500 hover:text-white text-xs flex items-center gap-1.5 shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span className="hidden md:inline">Déconnexion</span>
+        </button>
+      </header>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
-        {/* Mobile header */}
-        <header className="lg:hidden bg-white border-b px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <span className="font-semibold text-gray-900">RENOV-R 91</span>
-        </header>
-
-        <main className="flex-1 bg-gray-50 p-8">{children}</main>
-      </div>
+      {/* Main content — takes all remaining height, no scroll on body */}
+      <main className="flex-1 bg-gray-50 overflow-auto p-4">{children}</main>
     </div>
   )
 }
