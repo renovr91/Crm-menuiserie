@@ -110,19 +110,14 @@ h1, h2, h3, h4 {
   font-family: var(--font-mono), 'SF Mono', Monaco, monospace;
 }
 
-/* ───────── Tailwind color overrides for dark mode ───────── */
-.bg-white { background-color: var(--surface-2) !important; backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
-.bg-gray-50 { background-color: var(--bg-sunken) !important; }
-.bg-gray-100 { background-color: var(--surface-1) !important; }
-.bg-gray-200 { background-color: var(--surface-3) !important; }
+/* ───────── Cards stay white, only background is dark ───────── */
+.bg-white { background-color: #FFFFFF !important; color: #0F172A; }
+.bg-gray-50 { background-color: transparent !important; }
+.bg-gray-100 { background-color: #F1F5F9 !important; }
+.bg-gray-200 { background-color: #E2E8F0 !important; }
 
-.text-gray-900 { color: var(--text-primary) !important; }
-.text-gray-800 { color: var(--text-primary) !important; }
-.text-gray-700 { color: #B8C0D0 !important; }
-.text-gray-600 { color: var(--text-secondary) !important; }
-.text-gray-500 { color: var(--text-secondary) !important; }
-.text-gray-400 { color: var(--text-muted) !important; }
-.text-gray-300 { color: var(--text-muted) !important; }
+/* Text colors revert to normal inside white cards
+   (they only apply globally here — Tailwind classes override this automatically inside cards) */
 
 .border, .border-gray-100, .border-gray-200, .border-gray-300 {
   border-color: var(--border-default) !important;
@@ -136,72 +131,10 @@ h1, h2, h3, h4 {
 .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-subtle) !important; }
 .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-subtle) !important; }
 
-/* Soft tint backgrounds (badges etc.) — remap to dark-friendly versions */
-.bg-blue-50 { background-color: rgba(34, 211, 238, 0.1) !important; }
-.bg-blue-100 { background-color: rgba(34, 211, 238, 0.15) !important; }
-.bg-blue-200 { background-color: rgba(34, 211, 238, 0.2) !important; }
+/* Tint backgrounds (bg-blue-50, bg-red-100, etc.) stay default Tailwind
+   — they look great on white cards */
 
-.bg-green-50 { background-color: rgba(16, 185, 129, 0.1) !important; }
-.bg-green-100 { background-color: rgba(16, 185, 129, 0.15) !important; }
-.bg-green-200 { background-color: rgba(16, 185, 129, 0.2) !important; }
-.bg-emerald-50 { background-color: rgba(16, 185, 129, 0.1) !important; }
-.bg-emerald-100 { background-color: rgba(16, 185, 129, 0.15) !important; }
-
-.bg-red-50 { background-color: rgba(244, 63, 94, 0.1) !important; }
-.bg-red-100 { background-color: rgba(244, 63, 94, 0.15) !important; }
-.bg-red-200 { background-color: rgba(244, 63, 94, 0.2) !important; }
-
-.bg-amber-50 { background-color: rgba(245, 158, 11, 0.1) !important; }
-.bg-amber-100 { background-color: rgba(245, 158, 11, 0.15) !important; }
-.bg-amber-200 { background-color: rgba(245, 158, 11, 0.2) !important; }
-
-.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.1) !important; }
-.bg-yellow-100 { background-color: rgba(245, 158, 11, 0.15) !important; }
-
-.bg-orange-50 { background-color: rgba(249, 115, 22, 0.1) !important; }
-.bg-orange-100 { background-color: rgba(249, 115, 22, 0.15) !important; }
-
-.bg-purple-50 { background-color: rgba(168, 85, 247, 0.1) !important; }
-.bg-purple-100 { background-color: rgba(168, 85, 247, 0.15) !important; }
-.bg-purple-200 { background-color: rgba(168, 85, 247, 0.2) !important; }
-
-.bg-indigo-50 { background-color: rgba(99, 102, 241, 0.1) !important; }
-.bg-indigo-100 { background-color: rgba(99, 102, 241, 0.15) !important; }
-.bg-indigo-200 { background-color: rgba(99, 102, 241, 0.2) !important; }
-
-.bg-violet-50 { background-color: rgba(139, 92, 246, 0.1) !important; }
-.bg-violet-100 { background-color: rgba(139, 92, 246, 0.15) !important; }
-
-.bg-teal-50 { background-color: rgba(20, 184, 166, 0.1) !important; }
-.bg-teal-100 { background-color: rgba(20, 184, 166, 0.15) !important; }
-
-.bg-pink-50 { background-color: rgba(236, 72, 153, 0.1) !important; }
-.bg-pink-100 { background-color: rgba(236, 72, 153, 0.15) !important; }
-
-.bg-cyan-50 { background-color: rgba(6, 182, 212, 0.1) !important; }
-.bg-cyan-100 { background-color: rgba(6, 182, 212, 0.15) !important; }
-
-/* Text colors for tinted backgrounds */
-.text-blue-600, .text-blue-700, .text-blue-800 { color: #67E8F9 !important; }
-.text-green-600, .text-green-700, .text-green-800 { color: #6EE7B7 !important; }
-.text-emerald-600, .text-emerald-700 { color: #6EE7B7 !important; }
-.text-red-600, .text-red-700, .text-red-800 { color: #FDA4AF !important; }
-.text-amber-600, .text-amber-700, .text-amber-800 { color: #FCD34D !important; }
-.text-yellow-600, .text-yellow-700 { color: #FCD34D !important; }
-.text-orange-600, .text-orange-700 { color: #FDBA74 !important; }
-.text-purple-600, .text-purple-700 { color: #D8B4FE !important; }
-.text-indigo-600, .text-indigo-700 { color: #A5B4FC !important; }
-.text-violet-600, .text-violet-700 { color: #C4B5FD !important; }
-.text-teal-600, .text-teal-700 { color: #5EEAD4 !important; }
-.text-pink-600, .text-pink-700 { color: #F9A8D4 !important; }
-.text-cyan-600, .text-cyan-700 { color: #67E8F9 !important; }
-
-.border-blue-200, .border-blue-300 { border-color: rgba(34, 211, 238, 0.25) !important; }
-.border-green-200, .border-emerald-200 { border-color: rgba(16, 185, 129, 0.25) !important; }
-.border-red-200 { border-color: rgba(244, 63, 94, 0.25) !important; }
-.border-amber-200, .border-yellow-200 { border-color: rgba(245, 158, 11, 0.25) !important; }
-.border-orange-200 { border-color: rgba(249, 115, 22, 0.25) !important; }
-.border-purple-200 { border-color: rgba(168, 85, 247, 0.25) !important; }
+/* Text colors stay default Tailwind (dark text on white cards) */
 
 /* Primary blue buttons → cyan */
 .bg-blue-600 { background: linear-gradient(135deg, #0891B2, #0EA5E9) !important; }
@@ -224,37 +157,31 @@ h1, h2, h3, h4 {
 .shadow-xl { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important; }
 .shadow-2xl { box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1) inset !important; }
 
-/* Inputs */
+/* Inputs — work fine on white cards */
 input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
 input[type="date"], input[type="datetime-local"], input[type="time"],
 input[type="password"], textarea, select {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
+  background-color: #FFFFFF;
+  border-color: #D1D5DB;
+  color: #111827;
   transition: all 150ms;
-}
-
-input[type="text"]::placeholder, input[type="email"]::placeholder,
-input[type="tel"]::placeholder, textarea::placeholder {
-  color: var(--text-muted);
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none !important;
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15) !important;
-  background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Tables */
+/* Tables — clean look inside white cards */
 table thead th {
-  background: rgba(255, 255, 255, 0.02) !important;
-  border-bottom: 1px solid var(--border-default) !important;
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
   font-weight: 500;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-muted) !important;
+  color: #6B7280;
   padding: 0.75rem 1rem;
   text-align: left;
 }
@@ -264,14 +191,14 @@ table tbody tr {
 }
 
 table tbody tr:hover {
-  background: rgba(34, 211, 238, 0.04) !important;
+  background: #F9FAFB;
 }
 
 table tbody td {
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid #F3F4F6;
   padding: 0.875rem 1rem;
   font-size: 0.875rem;
-  color: var(--text-primary);
+  color: #111827;
 }
 
 table tbody tr:last-child td {
