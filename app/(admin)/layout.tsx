@@ -75,6 +75,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               const isActive =
                 pathname === item.href ||
                 (item.href !== '/' && pathname.startsWith(item.href))
+              const inactiveColor = theme === 'dark' ? '#8A92A6' : '#475569'
+              const hoverColor = theme === 'dark' ? '#E8EAF2' : '#0F172A'
+              const activeColor = theme === 'dark' ? '#67E8F9' : '#0891B2'
               return (
                 <Link
                   key={item.href}
@@ -82,11 +85,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   className="relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all rounded"
                   style={{
                     background: isActive ? 'rgba(34, 211, 238, 0.1)' : 'transparent',
-                    color: isActive ? '#67E8F9' : '#8A92A6',
+                    color: isActive ? activeColor : inactiveColor,
                     boxShadow: isActive ? '0 0 20px rgba(34, 211, 238, 0.15), 0 0 0 1px rgba(34, 211, 238, 0.3) inset' : undefined,
                   }}
-                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#E8EAF2' }}
-                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#8A92A6' }}
+                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = hoverColor }}
+                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = inactiveColor }}
                 >
                   <span className="text-sm grayscale" style={{ filter: isActive ? 'none' : 'grayscale(1) opacity(0.7)' }}>{item.icon}</span>
                   <span className="hidden sm:inline">{item.label}</span>
@@ -102,9 +105,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button
             onClick={toggleTheme}
             className="shrink-0 ml-2 w-8 h-8 flex items-center justify-center rounded transition-all"
-            style={{ color: '#8A92A6' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#67E8F9'; e.currentTarget.style.background = 'rgba(34, 211, 238, 0.1)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#8A92A6'; e.currentTarget.style.background = 'transparent' }}
+            style={{ color: theme === 'dark' ? '#8A92A6' : '#475569' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#0891B2'; e.currentTarget.style.background = 'rgba(34, 211, 238, 0.1)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = theme === 'dark' ? '#8A92A6' : '#475569'; e.currentTarget.style.background = 'transparent' }}
             title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
           >
             {theme === 'dark' ? (
@@ -122,9 +125,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button
             onClick={handleLogout}
             className="shrink-0 ml-1 w-8 h-8 flex items-center justify-center rounded transition-all"
-            style={{ color: '#5A6278' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#FDA4AF'; e.currentTarget.style.background = 'rgba(244, 63, 94, 0.1)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#5A6278'; e.currentTarget.style.background = 'transparent' }}
+            style={{ color: theme === 'dark' ? '#5A6278' : '#64748B' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#E11D48'; e.currentTarget.style.background = 'rgba(244, 63, 94, 0.1)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = theme === 'dark' ? '#5A6278' : '#64748B'; e.currentTarget.style.background = 'transparent' }}
             title="Déconnexion"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
