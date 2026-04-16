@@ -249,10 +249,10 @@ export default function QontoPage() {
                           <td className="px-5 py-3 text-gray-600 whitespace-nowrap">
                             {tx.settled_at ? dateFr(tx.settled_at) : '—'}
                           </td>
-                          <td className="px-5 py-3 text-gray-900 font-medium max-w-[200px] truncate">
+                          <td className="px-5 py-3 text-gray-900 font-medium">
                             {tx.label || '—'}
                           </td>
-                          <td className="px-5 py-3 text-gray-500 max-w-[150px] truncate">
+                          <td className="px-5 py-3 text-gray-500 font-mono text-xs">
                             {tx.reference || '—'}
                           </td>
                           <td className="px-5 py-3 text-right font-semibold text-green-600 whitespace-nowrap">
@@ -271,7 +271,7 @@ export default function QontoPage() {
                                 {matchingTxId === tx.id ? (
                                   <div className="flex items-center gap-1">
                                     <select
-                                      className="text-xs border border-gray-300 rounded px-1.5 py-0.5 max-w-[140px]"
+                                      className="text-xs border border-gray-300 rounded px-1.5 py-0.5 max-w-[280px]"
                                       defaultValue=""
                                       onChange={(e) => {
                                         if (e.target.value) {
@@ -284,7 +284,7 @@ export default function QontoPage() {
                                       </option>
                                       {devisNonPayes.map((d) => (
                                         <option key={d.id} value={d.id}>
-                                          {d.reference} — {eur(d.montant_ttc)}
+                                          {d.reference} — {d.clients?.nom || 'Client'} — {eur(d.montant_ttc)}
                                         </option>
                                       ))}
                                     </select>
