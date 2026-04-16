@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 
 const NAV_ITEMS = [
@@ -18,6 +19,21 @@ const NAV_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  // Init theme from localStorage
+  useEffect(() => {
+    const saved = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'
+    setTheme(saved)
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    document.documentElement.setAttribute('data-theme', next)
+    localStorage.setItem('theme', next)
+  }
 
   async function handleLogout() {
     const supabase = createBrowserSupabase()
@@ -28,8 +44,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top nav — glass dark */}
-      <header className="shrink-0 relative z-30 border-b" style={{ borderColor: 'var(--border-default)', background: 'rgba(8, 10, 18, 0.85)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}>
+      {/* Top nav — adapts to theme */}
+      <header
+        className="shrink-0 relative z-30 border-b"
+        style={{
+          borderColor: 'var(--border-default)',
+          background: theme === 'dark' ? 'rgba(8, 10, 18, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        }}
+      >
         <div className="flex items-center h-14 px-5 gap-1">
           {/* Logo */}
           <Link href="/pipeline" className="flex items-center gap-2 shrink-0 mr-6">
@@ -40,7 +64,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="absolute inset-0 rounded animate-pulse" style={{ boxShadow: '0 0 16px rgba(34, 211, 238, 0.5)' }} />
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-white font-bold text-sm tracking-tight">RENOV-R</span>
+              <span className="font-bold text-sm tracking-tight" style={{ color: theme === 'dark' ? '#FFFFFF' : '#0F172A' }}>RENOV-R</span>
               <span className="gradient-text-cyan font-bold text-sm">91</span>
             </div>
           </Link>
@@ -74,10 +98,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </nav>
 
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="shrink-0 ml-2 w-8 h-8 flex items-center justify-center rounded transition-all"
+            style={{ color: '#8A92A6' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#67E8F9'; e.currentTarget.style.background = 'rgba(34, 211, 238, 0.1)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#8A92A6'; e.currentTarget.style.background = 'transparent' }}
+            title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+          >
+            {theme === 'dark' ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            )}
+          </button>
+
           {/* Logout */}
           <button
             onClick={handleLogout}
-            className="shrink-0 ml-3 w-8 h-8 flex items-center justify-center rounded transition-all"
+            className="shrink-0 ml-1 w-8 h-8 flex items-center justify-center rounded transition-all"
             style={{ color: '#5A6278' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = '#FDA4AF'; e.currentTarget.style.background = 'rgba(244, 63, 94, 0.1)' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = '#5A6278'; e.currentTarget.style.background = 'transparent' }}
