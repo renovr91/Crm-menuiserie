@@ -1,32 +1,7 @@
 @import "tailwindcss";
 
-:root, [data-theme="dark"] {
-  /* Blue-dark palette — inspired by Linear / Vercel dashboards */
-  --bg-void: #060B1A;
-  --bg-base: #0A1124;          /* main background — deep navy */
-  --bg-elevated: #131C36;      /* cards — lighter navy */
-  --bg-sunken: #050914;        /* sunken surfaces */
-  --bg-subtle: #1A2544;        /* subtle highlights */
-
-  /* Card surfaces — SOLID colors */
-  --surface-1: #131C36;        /* cards */
-  --surface-2: #1A2544;        /* elevated cards */
-  --surface-3: #223055;        /* hover */
-
-  /* Borders — subtle blue tint */
-  --border-subtle: rgba(99, 131, 200, 0.1);
-  --border-default: rgba(99, 131, 200, 0.16);
-  --border-strong: rgba(99, 131, 200, 0.25);
-
-  /* Text */
-  --text-primary: #E8EAF2;
-  --text-secondary: #9AA3B7;
-  --text-muted: #5A6278;
-  --text-dim: #3D4256;
-}
-
-[data-theme="light"] {
-  /* Light mode — original clean white */
+:root, [data-theme="light"] {
+  /* Light mode — default */
   --bg-void: #F1F5F9;
   --bg-base: #F8FAFC;
   --bg-elevated: #FFFFFF;
@@ -45,6 +20,28 @@
   --text-secondary: #4B5563;
   --text-muted: #6B7280;
   --text-dim: #9CA3AF;
+}
+
+[data-theme="dark"] {
+  /* Dark mode — navy blue cosmic */
+  --bg-void: #060B1A;
+  --bg-base: #0A1124;
+  --bg-elevated: #131C36;
+  --bg-sunken: #050914;
+  --bg-subtle: #1A2544;
+
+  --surface-1: #131C36;
+  --surface-2: #1A2544;
+  --surface-3: #223055;
+
+  --border-subtle: rgba(99, 131, 200, 0.1);
+  --border-default: rgba(99, 131, 200, 0.16);
+  --border-strong: rgba(99, 131, 200, 0.25);
+
+  --text-primary: #E8EAF2;
+  --text-secondary: #9AA3B7;
+  --text-muted: #5A6278;
+  --text-dim: #3D4256;
 
   /* Text */
   --text-primary: #E8EAF2;
