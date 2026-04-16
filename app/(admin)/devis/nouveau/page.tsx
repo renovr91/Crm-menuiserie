@@ -1,17 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+
+interface Client {
+  id: string
+  nom: string
+  telephone: string | null
+  email: string | null
+  adresse: string | null
+  code_postal: string | null
+  ville: string | null
+}
 
 export default function NouveauDevisPage() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [nom, setNom] = useState('')
-  const [telephone, setTelephone] = useState('')
-  const [email, setEmail] = useState('')
-  const [adresse, setAdresse] = useState('')
-  const [codePostal, setCodePostal] = useState('')
-  const [ville, setVille] = useState('')
+  const [clients, setClients] = useState<Client[]>([])
+  const [loadingClients, setLoadingClients] = useState(true)
+  const [search, setSearch] = useState('')
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [showDropdown, setShowDropdown] = useState(false)
+
   const [reference, setReference] = useState('')
   const [montantHT, setMontantHT] = useState(0)
   const [tva, setTva] = useState(20)
@@ -20,17 +31,50 @@ export default function NouveauDevisPage() {
 
   const montantTTC = montantHT * (1 + tva / 100)
 
+  useEffect(() => {
+    fetch('/api/clients')
+      .then((res) => res.json())
+      .then((data) => setClients(Array.isArray(data) ? data : []))
+      .catch(console.error)
+      .finally(() => setLoadingClients(false))
+  }, [])
+
+  const filteredClients = clients.filter((c) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      c.nom?.toLowerCase().includes(q) ||
+      c.telephone?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.ville?.toLowerCase().includes(q)
+    )
+  }).slice(0, 20)
+
+  function handleSelectClient(client: Client) {
+    setSelectedClient(client)
+    setSearch('')
+    setShowDropdown(false)
+  }
+
   async function handleSubmit(e: React.FormEvent, sendSMS: boolean = false) {
     e.preventDefault()
+    if (!selectedClient) { alert('Veuillez sélectionner un client'); return }
     if (!pdfFile) { alert('Veuillez joindre le PDF du devis'); return }
     setSaving(true)
     try {
-      // 1. Créer le devis
+      // 1. Créer le devis (API trouvera le client via son téléphone)
       const res = await fetch('/api/devis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client: { nom, telephone, email, adresse, code_postal: codePostal, ville },
+          client: {
+            nom: selectedClient.nom,
+            telephone: selectedClient.telephone,
+            email: selectedClient.email,
+            adresse: selectedClient.adresse,
+            code_postal: selectedClient.code_postal,
+            ville: selectedClient.ville,
+          },
           devis: { reference, lignes: [], montant_ht: montantHT, tva, montant_ttc: montantTTC, notes },
           sendSMS,
         }),
@@ -54,24 +98,109 @@ export default function NouveauDevisPage() {
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-8">Nouveau devis</h1>
       <form onSubmit={(e) => handleSubmit(e, false)}>
-        {/* Client */}
+
+        {/* Sélection client */}
         <section className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Client</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label><input type="text" value={nom} onChange={(e) => setNom(e.target.value)} required className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="M. Dupont" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label><input type="tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} required className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="06 12 34 56 78" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="dupont@email.fr" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Code postal</label><input type="text" value={codePostal} onChange={(e) => setCodePostal(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="91100" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Ville</label><input type="text" value={ville} onChange={(e) => setVille(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Corbeil" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label><input type="text" value={adresse} onChange={(e) => setAdresse(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="12 rue des Lilas" /></div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Client</h2>
+            <Link
+              href="/clients/nouveau"
+              target="_blank"
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              + Créer un nouveau client
+            </Link>
           </div>
+
+          {!selectedClient ? (
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Rechercher un client
+              </label>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
+                onFocus={() => setShowDropdown(true)}
+                placeholder="Nom, téléphone, email ou ville..."
+                className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {showDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                  {loadingClients ? (
+                    <p className="p-4 text-sm text-gray-500 text-center">Chargement...</p>
+                  ) : filteredClients.length === 0 ? (
+                    <div className="p-4 text-center">
+                      <p className="text-sm text-gray-500 mb-2">Aucun client trouvé</p>
+                      <Link
+                        href="/clients/nouveau"
+                        target="_blank"
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        + Créer un nouveau client
+                      </Link>
+                    </div>
+                  ) : (
+                    filteredClients.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => handleSelectClient(c)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0 transition-colors"
+                      >
+                        <p className="font-medium text-sm text-gray-900">{c.nom}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {c.telephone || '—'}
+                          {c.ville && ` · ${c.ville}`}
+                          {c.email && ` · ${c.email}`}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-semibold text-gray-900">{selectedClient.nom}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {selectedClient.telephone || '—'}
+                    {selectedClient.email && ` · ${selectedClient.email}`}
+                  </p>
+                  {(selectedClient.adresse || selectedClient.ville) && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {[selectedClient.adresse, selectedClient.code_postal, selectedClient.ville].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClient(null)}
+                  className="text-sm text-gray-500 hover:text-red-600"
+                >
+                  Changer
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Devis PDF */}
         <section className="bg-white rounded-xl shadow-sm border p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Devis</h2>
           <div className="space-y-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Référence</label><input type="text" value={reference} onChange={(e) => setReference(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Ex: Menuiseries PVC - Dupont" /></div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Référence</label>
+              <input
+                type="text"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ex: Menuiseries PVC - Dupont"
+              />
+            </div>
 
             {/* Upload PDF */}
             <div>
@@ -117,8 +246,21 @@ export default function NouveauDevisPage() {
 
         {/* Boutons */}
         <div className="flex gap-3">
-          <button type="submit" disabled={saving || !pdfFile} className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium disabled:opacity-50">{saving ? 'Enregistrement...' : 'Enregistrer en brouillon'}</button>
-          <button type="button" onClick={(e) => handleSubmit(e, true)} disabled={saving || !telephone || !pdfFile} className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50">Enregistrer et envoyer par SMS</button>
+          <button
+            type="submit"
+            disabled={saving || !pdfFile || !selectedClient}
+            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
+          >
+            {saving ? 'Enregistrement...' : 'Enregistrer en brouillon'}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, true)}
+            disabled={saving || !selectedClient?.telephone || !pdfFile}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+          >
+            Enregistrer et envoyer par SMS
+          </button>
         </div>
       </form>
     </div>
