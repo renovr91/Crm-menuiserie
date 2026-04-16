@@ -241,51 +241,55 @@ h1, h2, h3, h4 {
 .border-orange-200 { border-color: rgba(249, 115, 22, 0.25) !important; }
 .border-purple-200 { border-color: rgba(168, 85, 247, 0.25) !important; }
 
-/* Primary blue buttons → cyan */
-.bg-blue-600 { background: linear-gradient(135deg, #0891B2, #0EA5E9) !important; }
-.bg-blue-600:hover, .hover\:bg-blue-700:hover { background: linear-gradient(135deg, #0E7490, #0284C7) !important; box-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
-.bg-blue-700 { background: linear-gradient(135deg, #0E7490, #0284C7) !important; }
+/* Primary blue buttons → cyan — dark mode only */
+[data-theme="dark"] .bg-blue-600 { background: linear-gradient(135deg, #0891B2, #0EA5E9) !important; }
+[data-theme="dark"] .bg-blue-600:hover, [data-theme="dark"] .hover\:bg-blue-700:hover { background: linear-gradient(135deg, #0E7490, #0284C7) !important; box-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
+[data-theme="dark"] .bg-blue-700 { background: linear-gradient(135deg, #0E7490, #0284C7) !important; }
 
-.bg-green-600, .bg-emerald-600 { background: linear-gradient(135deg, #059669, #10B981) !important; }
-.bg-green-700, .bg-emerald-700, .hover\:bg-green-700:hover, .hover\:bg-emerald-700:hover { background: linear-gradient(135deg, #047857, #059669) !important; }
+[data-theme="dark"] .bg-green-600, [data-theme="dark"] .bg-emerald-600 { background: linear-gradient(135deg, #059669, #10B981) !important; }
+[data-theme="dark"] .bg-green-700, [data-theme="dark"] .bg-emerald-700,
+[data-theme="dark"] .hover\:bg-green-700:hover, [data-theme="dark"] .hover\:bg-emerald-700:hover { background: linear-gradient(135deg, #047857, #059669) !important; }
 
-.bg-red-600 { background: linear-gradient(135deg, #BE123C, #E11D48) !important; }
-.hover\:bg-red-700:hover { background: linear-gradient(135deg, #9F1239, #BE123C) !important; }
+[data-theme="dark"] .bg-red-600 { background: linear-gradient(135deg, #BE123C, #E11D48) !important; }
+[data-theme="dark"] .hover\:bg-red-700:hover { background: linear-gradient(135deg, #9F1239, #BE123C) !important; }
 
-.bg-black, .hover\:bg-gray-800:hover { background-color: var(--surface-3) !important; }
+[data-theme="dark"] .bg-black, [data-theme="dark"] .hover\:bg-gray-800:hover { background-color: var(--surface-3) !important; }
 
-/* Shadow replacements */
-.shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03) inset !important; }
-.shadow { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset !important; }
-.shadow-md { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset !important; }
-.shadow-lg { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06) inset !important; }
-.shadow-xl { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important; }
-.shadow-2xl { box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1) inset !important; }
+/* Shadow replacements — dark mode only */
+[data-theme="dark"] .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03) inset !important; }
+[data-theme="dark"] .shadow { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset !important; }
+[data-theme="dark"] .shadow-md { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset !important; }
+[data-theme="dark"] .shadow-lg { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06) inset !important; }
+[data-theme="dark"] .shadow-xl { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important; }
+[data-theme="dark"] .shadow-2xl { box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1) inset !important; }
 
-/* Inputs */
-input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
-input[type="date"], input[type="datetime-local"], input[type="time"],
-input[type="password"], textarea, select {
+/* Inputs — dark mode overrides only (light mode uses Tailwind defaults) */
+[data-theme="dark"] input[type="text"], [data-theme="dark"] input[type="email"],
+[data-theme="dark"] input[type="tel"], [data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="date"], [data-theme="dark"] input[type="datetime-local"],
+[data-theme="dark"] input[type="time"], [data-theme="dark"] input[type="password"],
+[data-theme="dark"] textarea, [data-theme="dark"] select {
   background-color: rgba(255, 255, 255, 0.04) !important;
   border-color: var(--border-default) !important;
   color: var(--text-primary) !important;
-  transition: all 150ms;
 }
 
-input[type="text"]::placeholder, input[type="email"]::placeholder,
-input[type="tel"]::placeholder, textarea::placeholder {
+[data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder {
   color: var(--text-muted);
+}
+
+[data-theme="dark"] input:focus, [data-theme="dark"] textarea:focus, [data-theme="dark"] select:focus {
+  background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none !important;
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15) !important;
-  background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Tables */
-table thead th {
+/* Tables — dark mode overrides only */
+[data-theme="dark"] table thead th {
   background: rgba(255, 255, 255, 0.02) !important;
   border-bottom: 1px solid var(--border-default) !important;
   font-weight: 500;
@@ -297,22 +301,22 @@ table thead th {
   text-align: left;
 }
 
-table tbody tr {
+[data-theme="dark"] table tbody tr {
   transition: background-color 120ms;
 }
 
-table tbody tr:hover {
+[data-theme="dark"] table tbody tr:hover {
   background: rgba(34, 211, 238, 0.04) !important;
 }
 
-table tbody td {
+[data-theme="dark"] table tbody td {
   border-bottom: 1px solid var(--border-subtle);
   padding: 0.875rem 1rem;
   font-size: 0.875rem;
   color: var(--text-primary);
 }
 
-table tbody tr:last-child td {
+[data-theme="dark"] table tbody tr:last-child td {
   border-bottom: none;
 }
 
