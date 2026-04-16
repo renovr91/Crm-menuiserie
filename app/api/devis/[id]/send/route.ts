@@ -42,7 +42,7 @@ async function sendEmail(to: string, clientNom: string, reference: string, devis
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'RENOV-R 91 <devis@renov-r.fr>',
+      from: 'RENOV-R 91 <contact@renov-r.com>',
       to: [to],
       subject: `Votre devis ${reference || ''} RENOV-R 91`,
       html,
