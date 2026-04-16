@@ -190,7 +190,10 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div
+        className="relative rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
+        style={{ background: '#FFFFFF', color: '#0F172A' }}
+      >
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
@@ -431,23 +434,18 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
     <div
       className="p-3 cursor-pointer transition-all duration-200 relative group"
       style={{
-        background: 'rgba(255, 255, 255, 0.04)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+        background: '#FFFFFF',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '6px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(34, 211, 238, 0.06)'
-        e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.3)'
         e.currentTarget.style.transform = 'translateY(-1px)'
-        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(34, 211, 238, 0.15)'
+        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.5)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'none'
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.3)'
       }}
       onClick={() => router.push(`/clients/${client.id}`)}
     >
@@ -464,16 +462,16 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
       )}
 
       {/* Client name */}
-      <p className="text-sm font-semibold truncate pr-4" style={{ color: '#F1F5F9' }}>{client.nom}</p>
+      <p className="text-sm font-semibold truncate pr-4" style={{ color: '#0F172A' }}>{client.nom}</p>
 
       {/* Besoin */}
       {client.notes && (
-        <p className="text-xs truncate mt-1 line-clamp-1" style={{ color: '#8A92A6' }}>{client.notes}</p>
+        <p className="text-xs truncate mt-1 line-clamp-1" style={{ color: '#64748B' }}>{client.notes}</p>
       )}
 
       {/* Montant */}
       {client.montant_devis != null && client.montant_devis > 0 && (
-        <p className="text-sm font-mono font-bold mt-1.5 tabular-nums" style={{ color: '#6EE7B7' }}>{formatEUR(client.montant_devis)}</p>
+        <p className="text-sm font-mono font-bold mt-1.5 tabular-nums" style={{ color: '#059669' }}>{formatEUR(client.montant_devis)}</p>
       )}
 
       {/* Tags row */}
@@ -513,7 +511,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: client.commerciaux.couleur || '#9CA3AF' }}
           />
-          <span className="text-[11px] text-gray-400 truncate">{client.commerciaux.nom}</span>
+          <span className="text-[11px] truncate" style={{ color: '#64748B' }}>{client.commerciaux.nom}</span>
         </div>
       )}
 
@@ -602,33 +600,35 @@ function StatCard({
     <div
       className="p-4 relative overflow-hidden transition-all duration-200"
       style={{
-        background: `linear-gradient(135deg, ${accentColor}08, transparent 50%)`,
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+        background: '#FFFFFF',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '8px',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
       }}
     >
-      {/* Top accent bar */}
+      {/* Top accent bar with glow */}
       <div
-        className="absolute top-0 left-0 right-0 h-[2px]"
-        style={{ background: `linear-gradient(90deg, ${accentColor}, transparent)` }}
+        className="absolute top-0 left-0 right-0 h-[3px]"
+        style={{
+          background: `linear-gradient(90deg, ${accentColor}, ${accentColor}60, transparent)`,
+          boxShadow: `0 0 12px ${accentColor}`,
+        }}
       />
       {/* Glow orb decoration */}
       <div
-        className="absolute -top-6 -right-6 w-24 h-24 rounded-full opacity-30 blur-2xl pointer-events-none"
+        className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-10 blur-2xl pointer-events-none"
         style={{ background: accentColor }}
       />
       {/* Icon */}
       <div className="flex items-center gap-2 mb-2 relative">
         <span style={{ color: accentColor }}>{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#8A92A6' }}>{label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#64748B' }}>{label}</span>
       </div>
       {/* Value */}
-      <div className="text-2xl font-bold font-mono tabular-nums relative" style={{ color: '#F1F5F9' }}>{value}</div>
+      <div className="text-2xl font-bold font-mono tabular-nums relative" style={{ color: '#0F172A' }}>{value}</div>
       {/* Secondary */}
       {secondary && (
-        <div className="text-xs mt-1 relative" style={{ color: '#8A92A6' }}>{secondary}</div>
+        <div className="text-xs mt-1 relative" style={{ color: '#64748B' }}>{secondary}</div>
       )}
     </div>
   )
