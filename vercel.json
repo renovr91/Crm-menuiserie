@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/qonto/sync",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
