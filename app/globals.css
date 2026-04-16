@@ -1,21 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  /* Core palette — deep cosmic */
-  --bg-void: #070910;
-  --bg-base: #0B0E17;
-  --bg-elevated: #10141F;
-  --bg-sunken: #080A12;
+  /* Blue-dark palette — inspired by Linear / Vercel dashboards */
+  --bg-void: #060B1A;
+  --bg-base: #0A1124;          /* main background — deep navy */
+  --bg-elevated: #131C36;      /* cards — lighter navy */
+  --bg-sunken: #050914;        /* sunken surfaces */
+  --bg-subtle: #1A2544;        /* subtle highlights */
 
-  /* Surfaces with alpha for glass effect */
-  --surface-1: rgba(255, 255, 255, 0.03);
-  --surface-2: rgba(255, 255, 255, 0.05);
-  --surface-3: rgba(255, 255, 255, 0.07);
+  /* Card surfaces — SOLID colors (no more gray-transparency) */
+  --surface-1: #131C36;        /* cards */
+  --surface-2: #1A2544;        /* elevated cards */
+  --surface-3: #223055;        /* hover */
 
-  /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  /* Borders — subtle blue tint */
+  --border-subtle: rgba(99, 131, 200, 0.1);
+  --border-default: rgba(99, 131, 200, 0.16);
+  --border-strong: rgba(99, 131, 200, 0.25);
 
   /* Text */
   --text-primary: #E8EAF2;
@@ -110,10 +111,10 @@ h1, h2, h3, h4 {
   font-family: var(--font-mono), 'SF Mono', Monaco, monospace;
 }
 
-/* ───────── Tailwind color overrides for dark mode ───────── */
-.bg-white { background-color: var(--surface-2) !important; backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
+/* ───────── Tailwind color overrides — solid blue-dark cards ───────── */
+.bg-white { background-color: var(--surface-1) !important; }
 .bg-gray-50 { background-color: var(--bg-sunken) !important; }
-.bg-gray-100 { background-color: var(--surface-1) !important; }
+.bg-gray-100 { background-color: var(--bg-subtle) !important; }
 .bg-gray-200 { background-color: var(--surface-3) !important; }
 
 .text-gray-900 { color: var(--text-primary) !important; }
