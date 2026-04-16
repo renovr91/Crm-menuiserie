@@ -429,14 +429,12 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
 
   return (
     <div
-      className="bg-white rounded-lg border p-3 cursor-pointer hover:shadow-md transition-all duration-200 relative group"
+      className="bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all duration-200 relative group"
       onClick={() => router.push(`/clients/${client.id}`)}
     >
       {/* Alert dot indicator */}
       {hasAlerts && (
-        <span
-          className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-amber-400'} animate-pulse-dot`}
-        />
+        <span className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-amber-400'}`} />
       )}
 
       {/* Client name */}
@@ -449,7 +447,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
 
       {/* Montant */}
       {client.montant_devis != null && client.montant_devis > 0 && (
-        <p className="text-sm font-mono font-bold mt-1.5 tabular-nums text-emerald-600">{formatEUR(client.montant_devis)}</p>
+        <p className="text-sm font-semibold text-emerald-600 mt-1.5">{formatEUR(client.montant_devis)}</p>
       )}
 
       {/* Tags row */}
@@ -489,7 +487,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: client.commerciaux.couleur || '#9CA3AF' }}
           />
-          <span className="text-[11px] text-gray-500 truncate">{client.commerciaux.nom}</span>
+          <span className="text-[11px] text-gray-400 truncate">{client.commerciaux.nom}</span>
         </div>
       )}
 
@@ -575,30 +573,19 @@ function StatCard({
   icon: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow duration-200 relative overflow-hidden">
-      {/* Top accent bar with glow */}
-      <div
-        className="absolute top-0 left-0 right-0 h-[3px]"
-        style={{
-          background: `linear-gradient(90deg, ${accentColor}, ${accentColor}60, transparent)`,
-          boxShadow: `0 0 12px ${accentColor}`,
-        }}
-      />
-      {/* Glow orb decoration */}
-      <div
-        className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-10 blur-2xl pointer-events-none"
-        style={{ background: accentColor }}
-      />
+    <div className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md transition-shadow duration-200 relative overflow-hidden">
+      {/* Left accent border */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl" style={{ backgroundColor: accentColor }} />
       {/* Icon */}
-      <div className="flex items-center gap-2 mb-2 relative">
+      <div className="flex items-center gap-2 mb-2">
         <span style={{ color: accentColor }}>{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-500">{label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
       </div>
       {/* Value */}
-      <div className="text-2xl font-bold font-mono tabular-nums relative text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900">{value}</div>
       {/* Secondary */}
       {secondary && (
-        <div className="text-xs mt-1 relative text-gray-500">{secondary}</div>
+        <div className="text-sm text-gray-500 mt-0.5">{secondary}</div>
       )}
     </div>
   )
@@ -856,39 +843,30 @@ export default function PipelinePage() {
               return (
                 <div key={stage.code} className="w-72 flex flex-col shrink-0">
                   {/* Column header */}
-                  <div
-                    className="bg-white rounded-t-xl border border-b-0 px-3.5 py-3 relative"
-                    style={{ borderTopColor: stage.color, borderTopWidth: '2px' }}
-                  >
+                  <div className="bg-white rounded-t-xl border border-gray-100 border-b-0 px-3.5 py-3 relative">
+                    {/* Top color accent */}
+                    <div
+                      className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
+                      style={{ backgroundColor: stage.color }}
+                    />
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: stage.color, boxShadow: `0 0 8px ${stage.color}` }}
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: stage.color }}
                         />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
-                          {stage.label}
-                        </span>
+                        <span className="text-sm font-medium text-gray-900">{stage.label}</span>
                       </div>
-                      <span
-                        className="text-[11px] font-mono font-semibold px-2 py-0.5 min-w-[1.75rem] text-center rounded"
-                        style={{
-                          background: `${stage.color}20`,
-                          color: stage.color,
-                          border: `1px solid ${stage.color}40`,
-                        }}
-                      >
+                      <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full min-w-[1.5rem] text-center">
                         {stageClients.length}
                       </span>
                     </div>
                   </div>
 
                   {/* Cards container */}
-                  <div className="flex-1 overflow-y-auto bg-white border border-t-0 rounded-b-xl p-2 space-y-2">
+                  <div className="flex-1 overflow-y-auto bg-white border border-gray-100 border-t-0 rounded-b-xl p-2 space-y-2">
                     {stageClients.length === 0 ? (
-                      <div className="text-center py-12 px-3">
-                        <p className="text-[11px] text-gray-400">Aucun client</p>
-                      </div>
+                      <p className="text-center text-xs text-gray-300 py-10">Aucun client</p>
                     ) : (
                       stageClients.map((client) => (
                         <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} />
