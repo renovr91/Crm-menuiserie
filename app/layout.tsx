@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -8,9 +8,15 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-mono",
+});
+
 export const metadata: Metadata = {
-  title: "CRM Menuiserie — Renov-R",
-  description: "Gestion de devis, portail client et auto-réponse Leboncoin",
+  title: "RENOV-R 91 — CRM",
+  description: "CRM Menuiserie",
 };
 
 export default function RootLayout({
@@ -19,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`h-full antialiased ${inter.variable}`}>
-      <body className="min-h-full flex flex-col bg-gray-50 text-gray-900">
+    <html lang="fr" className={`h-full antialiased ${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-full flex flex-col">
         {children}
       </body>
     </html>
