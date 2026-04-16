@@ -429,25 +429,51 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
 
   return (
     <div
-      className="bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all duration-200 relative group"
+      className="p-3 cursor-pointer transition-all duration-200 relative group"
+      style={{
+        background: 'rgba(255, 255, 255, 0.04)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '6px',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(34, 211, 238, 0.06)'
+        e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.3)'
+        e.currentTarget.style.transform = 'translateY(-1px)'
+        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(34, 211, 238, 0.15)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
       onClick={() => router.push(`/clients/${client.id}`)}
     >
       {/* Alert dot indicator */}
       {hasAlerts && (
-        <span className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-amber-400'}`} />
+        <span
+          className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full"
+          style={{
+            background: isUrgent ? '#F43F5E' : '#F59E0B',
+            boxShadow: isUrgent ? '0 0 10px #F43F5E' : '0 0 10px #F59E0B',
+            animation: 'pulse-dot 1.5s ease-in-out infinite',
+          }}
+        />
       )}
 
       {/* Client name */}
-      <p className="text-sm font-semibold text-gray-900 truncate pr-4">{client.nom}</p>
+      <p className="text-sm font-semibold truncate pr-4" style={{ color: '#F1F5F9' }}>{client.nom}</p>
 
       {/* Besoin */}
       {client.notes && (
-        <p className="text-xs text-gray-500 truncate mt-1 line-clamp-1">{client.notes}</p>
+        <p className="text-xs truncate mt-1 line-clamp-1" style={{ color: '#8A92A6' }}>{client.notes}</p>
       )}
 
       {/* Montant */}
       {client.montant_devis != null && client.montant_devis > 0 && (
-        <p className="text-sm font-semibold text-emerald-600 mt-1.5">{formatEUR(client.montant_devis)}</p>
+        <p className="text-sm font-mono font-bold mt-1.5 tabular-nums" style={{ color: '#6EE7B7' }}>{formatEUR(client.montant_devis)}</p>
       )}
 
       {/* Tags row */}
@@ -573,19 +599,36 @@ function StatCard({
   icon: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md transition-shadow duration-200 relative overflow-hidden">
-      {/* Left accent border */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl" style={{ backgroundColor: accentColor }} />
+    <div
+      className="p-4 relative overflow-hidden transition-all duration-200"
+      style={{
+        background: `linear-gradient(135deg, ${accentColor}08, transparent 50%)`,
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '8px',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+      }}
+    >
+      {/* Top accent bar */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{ background: `linear-gradient(90deg, ${accentColor}, transparent)` }}
+      />
+      {/* Glow orb decoration */}
+      <div
+        className="absolute -top-6 -right-6 w-24 h-24 rounded-full opacity-30 blur-2xl pointer-events-none"
+        style={{ background: accentColor }}
+      />
       {/* Icon */}
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 relative">
         <span style={{ color: accentColor }}>{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#8A92A6' }}>{label}</span>
       </div>
       {/* Value */}
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold font-mono tabular-nums relative" style={{ color: '#F1F5F9' }}>{value}</div>
       {/* Secondary */}
       {secondary && (
-        <div className="text-sm text-gray-500 mt-0.5">{secondary}</div>
+        <div className="text-xs mt-1 relative" style={{ color: '#8A92A6' }}>{secondary}</div>
       )}
     </div>
   )
@@ -843,30 +886,70 @@ export default function PipelinePage() {
               return (
                 <div key={stage.code} className="w-72 flex flex-col shrink-0">
                   {/* Column header */}
-                  <div className="bg-white rounded-t-xl border border-gray-100 border-b-0 px-3.5 py-3 relative">
-                    {/* Top color accent */}
-                    <div
-                      className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
-                      style={{ backgroundColor: stage.color }}
-                    />
+                  <div
+                    className="px-4 py-3 relative"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      borderTop: `2px solid ${stage.color}`,
+                      borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderTopLeftRadius: '8px',
+                      borderTopRightRadius: '8px',
+                      boxShadow: `0 0 30px ${stage.color}15, inset 0 1px 0 rgba(255, 255, 255, 0.03)`,
+                    }}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: stage.color }}
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: stage.color,
+                            boxShadow: `0 0 10px ${stage.color}`,
+                          }}
                         />
-                        <span className="text-sm font-medium text-gray-900">{stage.label}</span>
+                        <span
+                          className="text-[11px] font-semibold uppercase tracking-wider"
+                          style={{ color: '#E8EAF2', letterSpacing: '0.1em' }}
+                        >
+                          {stage.label}
+                        </span>
                       </div>
-                      <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full min-w-[1.5rem] text-center">
+                      <span
+                        className="text-[11px] font-mono font-semibold px-2 py-0.5 min-w-[1.75rem] text-center rounded"
+                        style={{
+                          background: `${stage.color}20`,
+                          color: stage.color,
+                          border: `1px solid ${stage.color}40`,
+                        }}
+                      >
                         {stageClients.length}
                       </span>
                     </div>
                   </div>
 
                   {/* Cards container */}
-                  <div className="flex-1 overflow-y-auto bg-white border border-gray-100 border-t-0 rounded-b-xl p-2 space-y-2">
+                  <div
+                    className="flex-1 overflow-y-auto p-2 space-y-2"
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderBottomLeftRadius: '8px',
+                      borderBottomRightRadius: '8px',
+                    }}
+                  >
                     {stageClients.length === 0 ? (
-                      <p className="text-center text-xs text-gray-300 py-10">Aucun client</p>
+                      <div className="text-center py-12 px-3">
+                        <div
+                          className="w-10 h-10 mx-auto mb-2 rounded-full flex items-center justify-center"
+                          style={{ background: `${stage.color}10`, border: `1px dashed ${stage.color}40` }}
+                        >
+                          <span className="text-lg opacity-40" style={{ color: stage.color }}>—</span>
+                        </div>
+                        <p className="text-[11px]" style={{ color: '#5A6278' }}>Aucun client</p>
+                      </div>
                     ) : (
                       stageClients.map((client) => (
                         <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} />
