@@ -280,7 +280,7 @@ export default function QontoPage() {
                                       }}
                                     >
                                       <option value="" disabled>
-                                        Choisir un devis
+                                        Choisir une affaire
                                       </option>
                                       {devisNonPayes.map((d) => (
                                         <option key={d.id} value={d.id}>
@@ -300,7 +300,7 @@ export default function QontoPage() {
                                     onClick={() => setMatchingTxId(tx.id)}
                                     className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
                                   >
-                                    Lier a un devis
+                                    Lier à une affaire
                                   </button>
                                 )}
                               </div>
