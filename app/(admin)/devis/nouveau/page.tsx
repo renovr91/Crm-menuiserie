@@ -21,7 +21,6 @@ export default function NouveauDevisPage() {
   const [loadingClients, setLoadingClients] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [showDropdown, setShowDropdown] = useState(false)
 
   const [reference, setReference] = useState('')
   const [montantHT, setMontantHT] = useState(0)
@@ -48,12 +47,11 @@ export default function NouveauDevisPage() {
       c.email?.toLowerCase().includes(q) ||
       c.ville?.toLowerCase().includes(q)
     )
-  }).slice(0, 20)
+  })
 
   function handleSelectClient(client: Client) {
     setSelectedClient(client)
     setSearch('')
-    setShowDropdown(false)
   }
 
   async function handleSubmit(e: React.FormEvent, sendSMS: boolean = false) {
@@ -113,52 +111,52 @@ export default function NouveauDevisPage() {
           </div>
 
           {!selectedClient ? (
-            <div className="relative">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Rechercher un client
               </label>
               <input
                 type="text"
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
-                onFocus={() => setShowDropdown(true)}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Nom, téléphone, email ou ville..."
-                className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
               />
-              {showDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                  {loadingClients ? (
-                    <p className="p-4 text-sm text-gray-500 text-center">Chargement...</p>
-                  ) : filteredClients.length === 0 ? (
-                    <div className="p-4 text-center">
-                      <p className="text-sm text-gray-500 mb-2">Aucun client trouvé</p>
-                      <Link
-                        href="/clients/nouveau"
-                        target="_blank"
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        + Créer un nouveau client
-                      </Link>
-                    </div>
-                  ) : (
-                    filteredClients.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => handleSelectClient(c)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0 transition-colors"
-                      >
-                        <p className="font-medium text-sm text-gray-900">{c.nom}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {c.telephone || '—'}
-                          {c.ville && ` · ${c.ville}`}
-                          {c.email && ` · ${c.email}`}
-                        </p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
+              <div className="border rounded-lg max-h-80 overflow-y-auto">
+                {loadingClients ? (
+                  <p className="p-4 text-sm text-gray-500 text-center">Chargement...</p>
+                ) : filteredClients.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-sm text-gray-500 mb-2">Aucun client trouvé</p>
+                    <Link
+                      href="/clients/nouveau"
+                      target="_blank"
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      + Créer un nouveau client
+                    </Link>
+                  </div>
+                ) : (
+                  filteredClients.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectClient(c)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b last:border-b-0 transition-colors"
+                    >
+                      <p className="font-medium text-sm text-gray-900">{c.nom}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {c.telephone || '—'}
+                        {c.ville && ` · ${c.ville}`}
+                        {c.email && ` · ${c.email}`}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                {clients.length} client{clients.length > 1 ? 's' : ''} au total
+              </p>
             </div>
           ) : (
             <div className="border rounded-lg p-4 bg-gray-50">
