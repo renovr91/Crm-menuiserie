@@ -54,13 +54,19 @@ export default function NouveauDevisPage() {
     setSearch('')
   }
 
-  async function handleSubmit(e: React.FormEvent, sendSMS: boolean = false) {
+  async function handleSubmit(e: React.FormEvent, sendMethod: 'none' | 'sms' | 'email' | 'both' = 'none') {
     e.preventDefault()
     if (!selectedClient) { alert('Veuillez sélectionner un client'); return }
     if (!pdfFile) { alert('Veuillez joindre le PDF du devis'); return }
+    if ((sendMethod === 'email' || sendMethod === 'both') && !selectedClient.email) {
+      alert('Ce client n\'a pas d\'email enregistré'); return
+    }
+    if ((sendMethod === 'sms' || sendMethod === 'both') && !selectedClient.telephone) {
+      alert('Ce client n\'a pas de téléphone enregistré'); return
+    }
     setSaving(true)
     try {
-      // 1. Créer le devis (API trouvera le client via son téléphone)
+      // 1. Créer le devis en brouillon (on enverra après le PDF upload)
       const res = await fetch('/api/devis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,7 +80,7 @@ export default function NouveauDevisPage() {
             ville: selectedClient.ville,
           },
           devis: { reference, lignes: [], montant_ht: montantHT, tva, montant_ttc: montantTTC, notes },
-          sendSMS,
+          sendSMS: false,
         }),
       })
       if (!res.ok) throw new Error('Erreur lors de la création')
@@ -86,6 +92,19 @@ export default function NouveauDevisPage() {
       formData.append('devis_id', data.devis.id)
       const uploadRes = await fetch('/api/devis/upload-pdf', { method: 'POST', body: formData })
       if (!uploadRes.ok) throw new Error('Erreur upload PDF')
+
+      // 3. Envoyer selon la méthode choisie
+      if (sendMethod !== 'none') {
+        const sendRes = await fetch(`/api/devis/${data.devis.id}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method: sendMethod }),
+        })
+        if (!sendRes.ok) {
+          const err = await sendRes.json()
+          alert('Devis créé mais envoi échoué : ' + (err.error || 'erreur inconnue'))
+        }
+      }
 
       router.push(`/devis/${data.devis.id}`)
     } catch (error) { alert('Erreur : ' + (error as Error).message) }
@@ -243,21 +262,47 @@ export default function NouveauDevisPage() {
         </section>
 
         {/* Boutons */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
-            type="submit"
+            type="button"
+            onClick={(e) => handleSubmit(e, 'none')}
             disabled={saving || !pdfFile || !selectedClient}
-            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
+            className="bg-gray-600 text-white px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm disabled:opacity-50"
           >
-            {saving ? 'Enregistrement...' : 'Enregistrer en brouillon'}
+            {saving ? 'Enregistrement...' : 'Brouillon'}
           </button>
           <button
             type="button"
-            onClick={(e) => handleSubmit(e, true)}
+            onClick={(e) => handleSubmit(e, 'sms')}
             disabled={saving || !selectedClient?.telephone || !pdfFile}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+            title={!selectedClient?.telephone ? 'Ce client n\'a pas de téléphone' : undefined}
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 flex items-center gap-2"
           >
-            Enregistrer et envoyer par SMS
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            Envoyer par SMS
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, 'email')}
+            disabled={saving || !selectedClient?.email || !pdfFile}
+            title={!selectedClient?.email ? 'Ce client n\'a pas d\'email' : undefined}
+            className="bg-purple-600 text-white px-5 py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            Envoyer par Email
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, 'both')}
+            disabled={saving || !selectedClient?.telephone || !selectedClient?.email || !pdfFile}
+            title={!selectedClient?.telephone || !selectedClient?.email ? 'Client doit avoir téléphone ET email' : undefined}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2.5 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all font-medium text-sm disabled:opacity-50 flex items-center gap-2"
+          >
+            SMS + Email
           </button>
         </div>
       </form>

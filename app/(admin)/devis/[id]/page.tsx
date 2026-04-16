@@ -79,12 +79,17 @@ export default function DevisDetailPage() {
     finally { setMarkingPaid(false) }
   }
 
-  async function handleSendSMS() {
+  async function handleSend(method: 'sms' | 'email' | 'both') {
     if (!devis) return
     setSending(true)
     try {
-      const res = await fetch(`/api/devis/${devis.id}/send`, { method: 'POST' })
-      if (!res.ok) throw new Error('Erreur envoi SMS')
+      const res = await fetch(`/api/devis/${devis.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erreur envoi')
       setDevis({ ...devis, status: 'envoye', sent_at: new Date().toISOString() })
     } catch (err) { alert((err as Error).message) }
     finally { setSending(false) }
@@ -228,7 +233,36 @@ export default function DevisDetailPage() {
               {devis.status !== 'signe' && (
                 <Link href={`/devis/${devis.id}/edit`} className="block w-full text-center bg-amber-500 text-white py-3 rounded-lg font-medium hover:bg-amber-600 transition-colors">Modifier</Link>
               )}
-              {devis.status === 'brouillon' && <button onClick={handleSendSMS} disabled={sending} className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">{sending ? 'Envoi...' : 'Envoyer par SMS'}</button>}
+              {devis.status === 'brouillon' && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Envoyer le devis</p>
+                  <button
+                    onClick={() => handleSend('sms')}
+                    disabled={sending || !client?.telephone}
+                    title={!client?.telephone ? 'Pas de téléphone' : undefined}
+                    className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    📱 Par SMS
+                  </button>
+                  <button
+                    onClick={() => handleSend('email')}
+                    disabled={sending || !client?.email}
+                    title={!client?.email ? 'Pas d\'email' : undefined}
+                    className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    ✉️ Par Email
+                  </button>
+                  <button
+                    onClick={() => handleSend('both')}
+                    disabled={sending || !client?.telephone || !client?.email}
+                    title={!client?.telephone || !client?.email ? 'Téléphone ET email requis' : undefined}
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    SMS + Email
+                  </button>
+                  {sending && <p className="text-xs text-gray-500 text-center">Envoi en cours...</p>}
+                </div>
+              )}
 
               {/* PDF */}
               {devis.pdf_url && (
