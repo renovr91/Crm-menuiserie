@@ -114,7 +114,7 @@ export default function NouveauDevisPage() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-8">Nouveau devis</h1>
-      <form onSubmit={(e) => handleSubmit(e, false)}>
+      <form onSubmit={(e) => handleSubmit(e, 'none')}>
 
         {/* Sélection client */}
         <section className="bg-white rounded-xl shadow-sm border p-6 mb-6">
