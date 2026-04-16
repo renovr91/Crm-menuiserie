@@ -74,6 +74,15 @@ const SOURCE_OPTIONS = [
 // Types
 // ---------------------------------------------------------------------------
 
+interface Photo {
+  id: string
+  file_name: string
+  file_url: string
+  file_size: number | null
+  legende: string | null
+  created_at: string
+}
+
 interface ClientData {
   id: string
   nom: string
@@ -190,8 +199,14 @@ export default function ClientDetailPage() {
   const [savTickets, setSavTickets] = useState<SavTicket[]>([])
   const [commerciaux, setCommerciaux] = useState<Commercial[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'activites' | 'devis' | 'commandes' | 'sav'>('activites')
+  const [activeTab, setActiveTab] = useState<'activites' | 'devis' | 'commandes' | 'sav' | 'photos'>('activites')
   const [deleting, setDeleting] = useState(false)
+
+  // Photos state
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [uploadingPhotos, setUploadingPhotos] = useState<{ total: number; done: number } | null>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
 
   // Inline forms
   const [showNoteForm, setShowNoteForm] = useState(false)
@@ -218,12 +233,13 @@ export default function ClientDetailPage() {
     if (!id) return
     setLoading(true)
     try {
-      const [clientRes, activitesRes, commandesRes, savRes, commerciauxRes] = await Promise.all([
+      const [clientRes, activitesRes, commandesRes, savRes, commerciauxRes, photosRes] = await Promise.all([
         fetch(`/api/clients/${id}`),
         fetch(`/api/activites?client_id=${id}`),
         fetch(`/api/commandes?client_id=${id}`),
         fetch(`/api/sav?client_id=${id}`),
         fetch('/api/commerciaux'),
+        fetch(`/api/clients/${id}/photos`),
       ])
 
       if (clientRes.ok) {
@@ -240,6 +256,7 @@ export default function ClientDetailPage() {
       if (commandesRes.ok) setCommandes(await commandesRes.json())
       if (savRes.ok) setSavTickets(await savRes.json())
       if (commerciauxRes.ok) setCommerciaux(await commerciauxRes.json())
+      if (photosRes.ok) setPhotos(await photosRes.json())
     } catch (err) { console.error('Load error:', err) }
     finally { setLoading(false) }
   }, [id])
@@ -257,6 +274,48 @@ export default function ClientDetailPage() {
     if (res.ok) {
       const updated = await res.json()
       setClient((prev) => prev ? { ...prev, ...updated } : prev)
+    }
+  }
+
+  // --- Photos handlers ---
+  const handleUploadPhotos = async (files: FileList | File[]) => {
+    if (!id) return
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (arr.length === 0) {
+      setPhotoError('Seules les images sont acceptées')
+      return
+    }
+    setPhotoError(null)
+    setUploadingPhotos({ total: arr.length, done: 0 })
+    const uploaded: Photo[] = []
+    for (let i = 0; i < arr.length; i++) {
+      const file = arr[i]
+      const formData = new FormData()
+      formData.append('file', file)
+      try {
+        const res = await fetch(`/api/clients/${id}/photos`, { method: 'POST', body: formData })
+        if (res.ok) {
+          const photo = await res.json()
+          uploaded.push(photo)
+        } else {
+          const err = await res.json()
+          setPhotoError(err.error || 'Erreur upload')
+        }
+      } catch {
+        setPhotoError('Erreur upload')
+      }
+      setUploadingPhotos({ total: arr.length, done: i + 1 })
+    }
+    if (uploaded.length > 0) setPhotos((prev) => [...uploaded, ...prev])
+    setUploadingPhotos(null)
+  }
+
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!id || !confirm('Supprimer cette photo ?')) return
+    const res = await fetch(`/api/clients/${id}/photos/${photoId}`, { method: 'DELETE' })
+    if (res.ok) {
+      setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+      setLightboxIdx(null)
     }
   }
 
@@ -440,12 +499,13 @@ export default function ClientDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Tabs */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {(['activites', 'devis', 'commandes', 'sav'] as const).map((tab) => {
+            {(['activites', 'devis', 'commandes', 'sav', 'photos'] as const).map((tab) => {
               const labels: Record<string, string> = {
                 activites: 'Activites',
                 devis: `Devis (${devisArray.length})`,
                 commandes: `Commandes (${commandes.length})`,
                 sav: `SAV (${savTickets.length})`,
+                photos: `Photos (${photos.length})`,
               }
               return (
                 <button
@@ -786,6 +846,120 @@ export default function ClientDetailPage() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+            </div>
+          )}
+          {/* ---- PHOTOS TAB ---- */}
+          {activeTab === 'photos' && (
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Photos</h2>
+                <label className="cursor-pointer text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+                  + Ajouter des photos
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files) handleUploadPhotos(e.target.files) }}
+                  />
+                </label>
+              </div>
+
+              {/* Dropzone */}
+              <div
+                onDragOver={(e) => { e.preventDefault() }}
+                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) handleUploadPhotos(e.dataTransfer.files) }}
+                className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center text-gray-400 text-sm mb-4 hover:border-blue-400 hover:text-blue-600 transition-colors"
+              >
+                Glissez vos photos ici (cotes, chantier, avant/après...)
+              </div>
+
+              {uploadingPhotos && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 mb-4">
+                  Upload en cours... {uploadingPhotos.done}/{uploadingPhotos.total}
+                </div>
+              )}
+              {photoError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4">
+                  {photoError}
+                </div>
+              )}
+
+              {photos.length === 0 && !uploadingPhotos ? (
+                <p className="text-gray-400 text-sm text-center py-8">Aucune photo pour ce client</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {photos.map((photo, idx) => (
+                    <div key={photo.id} className="relative group aspect-square rounded-lg overflow-hidden border bg-gray-50">
+                      <img
+                        src={photo.file_url}
+                        alt={photo.file_name}
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setLightboxIdx(idx)}
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id) }}
+                        className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Supprimer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lightbox */}
+              {lightboxIdx !== null && photos[lightboxIdx] && (
+                <div
+                  className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+                  onClick={() => setLightboxIdx(null)}
+                >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setLightboxIdx(null) }}
+                    className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+
+                  {lightboxIdx > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx - 1) }}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full w-12 h-12 flex items-center justify-center text-2xl"
+                    >
+                      ‹
+                    </button>
+                  )}
+                  {lightboxIdx < photos.length - 1 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx + 1) }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full w-12 h-12 flex items-center justify-center text-2xl"
+                    >
+                      ›
+                    </button>
+                  )}
+
+                  <div className="max-w-5xl max-h-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                    <img
+                      src={photos[lightboxIdx].file_url}
+                      alt={photos[lightboxIdx].file_name}
+                      className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                    />
+                    <div className="text-center text-white/80 text-sm">
+                      {photos[lightboxIdx].legende && <p className="mb-1">{photos[lightboxIdx].legende}</p>}
+                      <p className="text-xs text-white/50">
+                        {photos[lightboxIdx].file_name} — {new Date(photos[lightboxIdx].created_at).toLocaleDateString('fr-FR')}
+                      </p>
+                      <button
+                        onClick={() => handleDeletePhoto(photos[lightboxIdx].id)}
+                        className="mt-3 bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg text-sm"
+                      >
+                        Supprimer cette photo
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
