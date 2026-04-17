@@ -61,19 +61,19 @@
 
   /* HubSpot-style Kanban palette — adapted for dark */
   --kanban-col-bg: rgba(255, 255, 255, 0.02);
-  --kanban-col-border: rgba(99, 131, 200, 0.40);
-  --kanban-col-header-bg: rgba(34, 211, 238, 0.10);
+  --kanban-col-border: rgba(99, 131, 200, 0.45);
+  --kanban-col-header-bg: #1E3A8A;
   --kanban-col-header-text: #FFFFFF;
   --kanban-card-bg: #1A2440;
-  --kanban-card-border: rgba(99, 131, 200, 0.40);
-  --kanban-card-border-hover: rgba(34, 211, 238, 0.6);
+  --kanban-card-border: rgba(99, 131, 200, 0.45);
+  --kanban-card-border-hover: rgba(34, 211, 238, 0.7);
   --kanban-label: #8A9CB8;
   --kanban-text: #E0E6F2;
   --kanban-link: #22D3EE;
-  --kanban-count-bg: rgba(34, 211, 238, 0.20);
-  --kanban-count-text: #67E8F9;
+  --kanban-count-bg: rgba(255, 255, 255, 0.25);
+  --kanban-count-text: #FFFFFF;
   --kanban-avatar-bg: rgba(99, 131, 200, 0.15);
-  --kanban-footer-border: rgba(99, 131, 200, 0.30);
+  --kanban-footer-border: rgba(99, 131, 200, 0.35);
 
   /* Text */
   --text-primary: #E8EAF2;
@@ -496,11 +496,19 @@ button:focus-visible {
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
 }
+
+[data-theme="dark"] .kanban-column-header {
+  background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 100%);
+  border-bottom: 2px solid rgba(34, 211, 238, 0.5) !important;
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+}
+
 .kanban-column-header .kanban-text {
   color: var(--kanban-col-header-text);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   font-size: 12px;
+  font-weight: 700;
 }
 .kanban-column-footer {
   border-color: var(--kanban-col-border) !important;
