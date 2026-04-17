@@ -20,6 +20,20 @@
   --text-secondary: #4B5563;
   --text-muted: #6B7280;
   --text-dim: #9CA3AF;
+
+  /* HubSpot-style Kanban palette — light */
+  --kanban-col-bg: #F5F8FA;
+  --kanban-col-border: #CBD6E2;
+  --kanban-card-bg: #FFFFFF;
+  --kanban-card-border: #CBD6E2;
+  --kanban-card-border-hover: #7C98B6;
+  --kanban-label: #516F90;
+  --kanban-text: #33475B;
+  --kanban-link: #0091AE;
+  --kanban-count-bg: #DCE4EC;
+  --kanban-count-text: #516F90;
+  --kanban-avatar-bg: #EAF0F6;
+  --kanban-footer-border: #EAF0F6;
 }
 
 [data-theme="dark"] {
@@ -42,6 +56,20 @@
   --text-secondary: #9AA3B7;
   --text-muted: #5A6278;
   --text-dim: #3D4256;
+
+  /* HubSpot-style Kanban palette — adapted for dark */
+  --kanban-col-bg: rgba(255, 255, 255, 0.02);
+  --kanban-col-border: rgba(99, 131, 200, 0.18);
+  --kanban-card-bg: #1A2440;
+  --kanban-card-border: rgba(99, 131, 200, 0.20);
+  --kanban-card-border-hover: rgba(34, 211, 238, 0.5);
+  --kanban-label: #8A9CB8;
+  --kanban-text: #E0E6F2;
+  --kanban-link: #22D3EE;
+  --kanban-count-bg: rgba(99, 131, 200, 0.15);
+  --kanban-count-text: #B8C4DB;
+  --kanban-avatar-bg: rgba(99, 131, 200, 0.15);
+  --kanban-footer-border: rgba(99, 131, 200, 0.12);
 
   /* Text */
   --text-primary: #E8EAF2;
@@ -451,6 +479,53 @@ input:focus, textarea:focus, select:focus {
 button:focus-visible {
   outline: 2px solid var(--accent-cyan);
   outline-offset: 2px;
+}
+
+/* ───── Kanban HubSpot-style utilities (theme-aware) ───── */
+.kanban-column {
+  background: var(--kanban-col-bg);
+  border-color: var(--kanban-col-border) !important;
+}
+.kanban-column-header,
+.kanban-column-footer {
+  border-color: var(--kanban-col-border) !important;
+}
+.kanban-card {
+  background: var(--kanban-card-bg);
+  border-color: var(--kanban-card-border) !important;
+}
+.kanban-card:hover {
+  border-color: var(--kanban-card-border-hover) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.kanban-card-footer {
+  border-top: 1px solid var(--kanban-footer-border);
+}
+.kanban-text { color: var(--kanban-text); }
+.kanban-label { color: var(--kanban-label); }
+.kanban-link { color: var(--kanban-link); }
+.kanban-empty { color: var(--kanban-label); opacity: 0.5; }
+.kanban-count {
+  background: var(--kanban-count-bg);
+  color: var(--kanban-count-text);
+}
+.kanban-avatar {
+  background: var(--kanban-avatar-bg);
+  color: var(--kanban-label);
+}
+.kanban-dropdown {
+  background: var(--kanban-card-bg);
+  border-color: var(--kanban-col-border) !important;
+}
+.kanban-dropdown-item {
+  color: var(--kanban-text);
+}
+.kanban-dropdown-item:hover {
+  background: var(--kanban-col-bg);
+}
+.kanban-dropdown-item.active {
+  color: var(--kanban-link);
+  font-weight: 600;
 }
 
 /* Sharp angular corners for a futuristic feel */

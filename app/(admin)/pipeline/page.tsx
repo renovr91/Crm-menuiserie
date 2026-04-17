@@ -440,10 +440,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
 
   return (
     <div
-      className="bg-white rounded-md border cursor-pointer transition-all duration-150 relative group"
-      style={{ borderColor: '#CBD6E2' }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#7C98B6'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#CBD6E2'; e.currentTarget.style.boxShadow = 'none' }}
+      className="kanban-card rounded-md border cursor-pointer transition-all duration-150 relative group"
       onClick={() => router.push(`/clients/${client.id}`)}
     >
       {/* Alert dot indicator */}
@@ -457,40 +454,36 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
       <div className="px-3 pt-3 pb-2">
         {/* Title — blue link style HubSpot */}
         <p
-          className="text-sm font-semibold truncate pr-5 mb-1.5 hover:underline"
-          style={{ color: '#0091AE' }}
+          className="text-sm font-semibold truncate pr-5 mb-1.5 hover:underline kanban-link"
         >
           {client.notes || client.nom}
         </p>
 
         {/* Info lines HubSpot style : "Label: value" */}
-        <div className="space-y-0.5 text-[12px]" style={{ color: '#33475B' }}>
+        <div className="space-y-0.5 text-[12px] kanban-text">
           {client.montant_devis != null && client.montant_devis > 0 && (
-            <div><span style={{ color: '#516F90' }}>Montant : </span>{formatEUR(client.montant_devis)}</div>
+            <div><span className="kanban-label">Montant : </span>{formatEUR(client.montant_devis)}</div>
           )}
-          <div><span style={{ color: '#516F90' }}>Date de création : </span>{createdDate}</div>
+          <div><span className="kanban-label">Date de création : </span>{createdDate}</div>
           {client.commerciaux && (
-            <div><span style={{ color: '#516F90' }}>Commercial : </span>{client.commerciaux.nom}</div>
+            <div><span className="kanban-label">Commercial : </span>{client.commerciaux.nom}</div>
           )}
         </div>
       </div>
 
       {/* Bottom section: contact with avatar + alerts */}
-      <div
-        className="border-t px-3 py-2 flex items-center justify-between"
-        style={{ borderColor: '#EAF0F6' }}
-      >
+      <div className="kanban-card-footer px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
-            style={{
-              background: client.commerciaux?.couleur ? `${client.commerciaux.couleur}20` : '#EAF0F6',
-              color: client.commerciaux?.couleur || '#516F90',
-            }}
+            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 kanban-avatar"
+            style={client.commerciaux?.couleur ? {
+              background: `${client.commerciaux.couleur}25`,
+              color: client.commerciaux.couleur,
+            } : undefined}
           >
             {initials || '–'}
           </span>
-          <span className="text-[12px] truncate" style={{ color: '#33475B' }}>{client.nom}</span>
+          <span className="text-[12px] truncate kanban-text">{client.nom}</span>
         </div>
 
         {/* Alert pill */}
@@ -531,7 +524,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
-              <div className="absolute right-0 bottom-full mb-1 z-20 bg-white rounded-md shadow-lg border py-1.5 w-44" style={{ borderColor: '#CBD6E2' }}>
+              <div className="kanban-dropdown absolute right-0 bottom-full mb-1 z-20 rounded-md shadow-lg border py-1.5 w-44">
                 {STAGES.map((s) => (
                   <button
                     key={s.code}
@@ -540,11 +533,7 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
                       setMenuOpen(false)
                       if (s.code !== client.pipeline_stage) onStageChange(client.id, s.code)
                     }}
-                    className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-gray-50"
-                    style={{
-                      color: s.code === client.pipeline_stage ? '#0091AE' : '#33475B',
-                      fontWeight: s.code === client.pipeline_stage ? 600 : 400,
-                    }}
+                    className={`kanban-dropdown-item w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${s.code === client.pipeline_stage ? 'active' : ''}`}
                   >
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                     {s.label}
@@ -858,24 +847,12 @@ export default function PipelinePage() {
               const stageClients = byStage[stage.code] || []
               const stageTotal = stageClients.reduce((sum, c) => sum + (c.montant_devis || 0), 0)
               return (
-                <div
-                  key={stage.code}
-                  className="w-80 flex flex-col shrink-0 rounded-md border"
-                  style={{ background: '#F5F8FA', borderColor: '#CBD6E2' }}
-                >
-                  {/* Column header — HubSpot style */}
-                  <div className="px-3 py-2.5 border-b" style={{ borderColor: '#CBD6E2' }}>
+                <div key={stage.code} className="kanban-column w-80 flex flex-col shrink-0 rounded-md border">
+                  {/* Column header */}
+                  <div className="kanban-column-header px-3 py-2.5 border-b">
                     <div className="flex items-center gap-2">
-                      <span
-                        className="text-[13px] font-semibold"
-                        style={{ color: '#33475B' }}
-                      >
-                        {stage.label}
-                      </span>
-                      <span
-                        className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
-                        style={{ background: '#DCE4EC', color: '#516F90' }}
-                      >
+                      <span className="text-[13px] font-semibold kanban-text">{stage.label}</span>
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded kanban-count">
                         {stageClients.length}
                       </span>
                     </div>
@@ -884,7 +861,7 @@ export default function PipelinePage() {
                   {/* Cards container */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {stageClients.length === 0 ? (
-                      <p className="text-center text-[11px] py-8" style={{ color: '#CBD6E2' }}>Aucun client</p>
+                      <p className="text-center text-[11px] py-8 kanban-empty">Aucun client</p>
                     ) : (
                       stageClients.map((client) => (
                         <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} />
@@ -892,13 +869,10 @@ export default function PipelinePage() {
                     )}
                   </div>
 
-                  {/* Column footer — total amount HubSpot style */}
+                  {/* Column footer — total amount */}
                   {stageTotal > 0 && (
-                    <div
-                      className="px-3 py-2 border-t text-[12px]"
-                      style={{ borderColor: '#CBD6E2', color: '#33475B' }}
-                    >
-                      <span style={{ color: '#516F90' }}>Montant total : </span>
+                    <div className="kanban-column-footer px-3 py-2 border-t text-[12px] kanban-text">
+                      <span className="kanban-label">Montant total : </span>
                       <span className="font-semibold">{formatEUR(stageTotal)}</span>
                     </div>
                   )}
