@@ -427,97 +427,111 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
   const hasAlerts = client.alerts.includes('a_contacter') || client.alerts.includes('a_relancer') || client.alerts.includes('relance_urgente')
   const isUrgent = client.alerts.includes('relance_urgente')
 
+  // HubSpot-style initials avatar
+  const initials = client.nom
+    .split(' ')
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  const createdDate = new Date(client.created_at).toLocaleDateString('fr-FR')
+
   return (
     <div
-      className="bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all duration-200 relative group"
+      className="bg-white rounded-md border cursor-pointer transition-all duration-150 relative group"
+      style={{ borderColor: '#CBD6E2' }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#7C98B6'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#CBD6E2'; e.currentTarget.style.boxShadow = 'none' }}
       onClick={() => router.push(`/clients/${client.id}`)}
     >
       {/* Alert dot indicator */}
       {hasAlerts && (
-        <span className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-amber-400'}`} />
+        <span
+          className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full"
+          style={{ background: isUrgent ? '#C83B3B' : '#F5A623' }}
+        />
       )}
 
-      {/* Client name */}
-      <p className="text-sm font-semibold text-gray-900 truncate pr-4">{client.nom}</p>
+      <div className="px-3 pt-3 pb-2">
+        {/* Title — blue link style HubSpot */}
+        <p
+          className="text-sm font-semibold truncate pr-5 mb-1.5 hover:underline"
+          style={{ color: '#0091AE' }}
+        >
+          {client.notes || client.nom}
+        </p>
 
-      {/* Besoin */}
-      {client.notes && (
-        <p className="text-xs text-gray-500 truncate mt-1 line-clamp-1">{client.notes}</p>
-      )}
+        {/* Info lines HubSpot style : "Label: value" */}
+        <div className="space-y-0.5 text-[12px]" style={{ color: '#33475B' }}>
+          {client.montant_devis != null && client.montant_devis > 0 && (
+            <div><span style={{ color: '#516F90' }}>Montant : </span>{formatEUR(client.montant_devis)}</div>
+          )}
+          <div><span style={{ color: '#516F90' }}>Date de création : </span>{createdDate}</div>
+          {client.commerciaux && (
+            <div><span style={{ color: '#516F90' }}>Commercial : </span>{client.commerciaux.nom}</div>
+          )}
+        </div>
+      </div>
 
-      {/* Montant */}
-      {client.montant_devis != null && client.montant_devis > 0 && (
-        <p className="text-sm font-semibold text-emerald-600 mt-1.5">{formatEUR(client.montant_devis)}</p>
-      )}
-
-      {/* Tags row */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-        {/* Source pill */}
-        {client.source && (
-          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${SOURCE_COLORS[client.source] || 'bg-gray-50 text-gray-500 border border-gray-200/60'}`}>
-            {sourceLabel(client.source)}
+      {/* Bottom section: contact with avatar + alerts */}
+      <div
+        className="border-t px-3 py-2 flex items-center justify-between"
+        style={{ borderColor: '#EAF0F6' }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
+            style={{
+              background: client.commerciaux?.couleur ? `${client.commerciaux.couleur}20` : '#EAF0F6',
+              color: client.commerciaux?.couleur || '#516F90',
+            }}
+          >
+            {initials || '–'}
           </span>
-        )}
+          <span className="text-[12px] truncate" style={{ color: '#33475B' }}>{client.nom}</span>
+        </div>
 
-        {/* Alert pills - subtle, small text */}
-        {client.alerts.includes('a_contacter') && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-red-600 font-medium">
-            <span className="w-1 h-1 rounded-full bg-red-500" />
-            A contacter
-          </span>
-        )}
-        {client.alerts.includes('a_relancer') && !client.alerts.includes('relance_urgente') && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
-            <span className="w-1 h-1 rounded-full bg-amber-500" />
-            Relance
-          </span>
-        )}
+        {/* Alert pill */}
         {client.alerts.includes('relance_urgente') && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-red-600 font-medium">
-            <span className="w-1 h-1 rounded-full bg-red-500" />
-            Urgent 7j+
-          </span>
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FDECEC', color: '#C83B3B' }}>Urgent</span>
+        )}
+        {!client.alerts.includes('relance_urgente') && client.alerts.includes('a_relancer') && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FEF7E6', color: '#B2762A' }}>Relance</span>
+        )}
+        {client.alerts.includes('a_contacter') && !client.alerts.includes('a_relancer') && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FDECEC', color: '#C83B3B' }}>À contacter</span>
         )}
       </div>
 
-      {/* Commercial */}
-      {client.commerciaux && (
-        <div className="flex items-center gap-1.5 mt-2">
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: client.commerciaux.couleur || '#9CA3AF' }}
-          />
-          <span className="text-[11px] text-gray-400 truncate">{client.commerciaux.nom}</span>
-        </div>
-      )}
-
-      {/* Stage navigation - shown on hover */}
-      <div className="flex items-center justify-end gap-0.5 mt-2 pt-2 border-t border-gray-50 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Hover actions — chevrons cachés pour look HubSpot */}
+      <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
         <button
           disabled={!canGoBack}
           onClick={(e) => {
             e.stopPropagation()
             if (canGoBack) onStageChange(client.id, STAGES[currentIndex - 1].code)
           }}
-          className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
           title={canGoBack ? `Vers ${STAGES[currentIndex - 1].label}` : ''}
+          style={{ color: '#516F90' }}
         >
-          <IconChevronLeft className="w-3 h-3 text-gray-400" />
+          <IconChevronLeft className="w-3 h-3" />
         </button>
-
-        {/* Stage dropdown */}
         <div className="relative">
           <button
             onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-            className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+            className="p-1 rounded hover:bg-gray-100 transition-colors"
             title="Changer l'etape"
+            style={{ color: '#516F90' }}
           >
-            <IconChevronDown className="w-3 h-3 text-gray-400" />
+            <IconChevronDown className="w-3 h-3" />
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
-              <div className="absolute right-0 bottom-full mb-1 z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 w-40">
+              <div className="absolute right-0 bottom-full mb-1 z-20 bg-white rounded-md shadow-lg border py-1.5 w-44" style={{ borderColor: '#CBD6E2' }}>
                 {STAGES.map((s) => (
                   <button
                     key={s.code}
@@ -526,9 +540,11 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
                       setMenuOpen(false)
                       if (s.code !== client.pipeline_stage) onStageChange(client.id, s.code)
                     }}
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 transition-colors ${
-                      s.code === client.pipeline_stage ? 'font-semibold text-gray-900' : 'text-gray-600'
-                    }`}
+                    className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-gray-50"
+                    style={{
+                      color: s.code === client.pipeline_stage ? '#0091AE' : '#33475B',
+                      fontWeight: s.code === client.pipeline_stage ? 600 : 400,
+                    }}
                   >
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                     {s.label}
@@ -538,17 +554,17 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
             </>
           )}
         </div>
-
         <button
           disabled={!canGoForward}
           onClick={(e) => {
             e.stopPropagation()
             if (canGoForward) onStageChange(client.id, STAGES[currentIndex + 1].code)
           }}
-          className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
           title={canGoForward ? `Vers ${STAGES[currentIndex + 1].label}` : ''}
+          style={{ color: '#516F90' }}
         >
-          <IconChevronRight className="w-3 h-3 text-gray-400" />
+          <IconChevronRight className="w-3 h-3" />
         </button>
       </div>
     </div>
@@ -840,39 +856,52 @@ export default function PipelinePage() {
           <div className="flex gap-3 p-6 pt-4 min-w-max h-full">
             {STAGES.map((stage) => {
               const stageClients = byStage[stage.code] || []
+              const stageTotal = stageClients.reduce((sum, c) => sum + (c.montant_devis || 0), 0)
               return (
-                <div key={stage.code} className="w-72 flex flex-col shrink-0">
-                  {/* Column header */}
-                  <div className="bg-white rounded-t-xl border border-gray-100 border-b-0 px-3.5 py-3 relative">
-                    {/* Top color accent */}
-                    <div
-                      className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
-                      style={{ backgroundColor: stage.color }}
-                    />
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: stage.color }}
-                        />
-                        <span className="text-sm font-medium text-gray-900">{stage.label}</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full min-w-[1.5rem] text-center">
+                <div
+                  key={stage.code}
+                  className="w-80 flex flex-col shrink-0 rounded-md border"
+                  style={{ background: '#F5F8FA', borderColor: '#CBD6E2' }}
+                >
+                  {/* Column header — HubSpot style */}
+                  <div className="px-3 py-2.5 border-b" style={{ borderColor: '#CBD6E2' }}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[13px] font-semibold"
+                        style={{ color: '#33475B' }}
+                      >
+                        {stage.label}
+                      </span>
+                      <span
+                        className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                        style={{ background: '#DCE4EC', color: '#516F90' }}
+                      >
                         {stageClients.length}
                       </span>
                     </div>
                   </div>
 
                   {/* Cards container */}
-                  <div className="flex-1 overflow-y-auto bg-white border border-gray-100 border-t-0 rounded-b-xl p-2 space-y-2">
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {stageClients.length === 0 ? (
-                      <p className="text-center text-xs text-gray-300 py-10">Aucun client</p>
+                      <p className="text-center text-[11px] py-8" style={{ color: '#CBD6E2' }}>Aucun client</p>
                     ) : (
                       stageClients.map((client) => (
                         <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} />
                       ))
                     )}
                   </div>
+
+                  {/* Column footer — total amount HubSpot style */}
+                  {stageTotal > 0 && (
+                    <div
+                      className="px-3 py-2 border-t text-[12px]"
+                      style={{ borderColor: '#CBD6E2', color: '#33475B' }}
+                    >
+                      <span style={{ color: '#516F90' }}>Montant total : </span>
+                      <span className="font-semibold">{formatEUR(stageTotal)}</span>
+                    </div>
+                  )}
                 </div>
               )
             })}
