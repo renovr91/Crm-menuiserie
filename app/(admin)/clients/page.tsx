@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 async function getClients() {
   const supabase = createAdminClient()
   const { data } = await supabase.from('clients').select('*, devis(id, status, montant_ttc)').order('created_at', { ascending: false })
