@@ -564,25 +564,8 @@ export default function MessagerieLBCPage() {
                                 const isImage = att.type?.startsWith('image')
                                 const isPdf = att.type === 'application/pdf'
 
-                                const handleAttClick = async (e: React.MouseEvent) => {
-                                  e.preventDefault()
-                                  try {
-                                    const res = await fetch(att.url)
-                                    const ct = res.headers.get('content-type') || ''
-                                    if (ct.includes('application/json')) {
-                                      const json = await res.json()
-                                      if (json.redirect) {
-                                        window.open(json.redirect, '_blank')
-                                        return
-                                      }
-                                    }
-                                    // Fichier binaire direct
-                                    const blob = await res.blob()
-                                    const blobUrl = URL.createObjectURL(blob)
-                                    window.open(blobUrl, '_blank')
-                                  } catch {
-                                    window.open(att.url, '_blank')
-                                  }
+                                const handleAttClick = () => {
+                                  window.open(att.url, '_blank')
                                 }
 
                                 return isImage ? (
