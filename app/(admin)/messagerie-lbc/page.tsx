@@ -155,6 +155,18 @@ export default function MessagerieLBCPage() {
 
       const rawMsgs = data._embedded?.messages || data.messages || []
 
+      // DEBUG PJ: log les messages qui pourraient contenir des pièces jointes
+      rawMsgs.forEach((m: any, idx: number) => {
+        const keys = Object.keys(m)
+        const hasContent = m.attachments?.length > 0 || m.medias || m.media || m.images || m.files || m.fileUrl || m.imageUrl
+        const isFileMsg = m.text?.includes('fichier') || m.type?.includes('File') || m.type?.includes('Image') || m.type?.includes('Media') || m.type?.includes('Attachment')
+        if (hasContent || isFileMsg || !m.text) {
+          console.log(`[LBC PJ DEBUG] msg ${idx} (type=${m.type}):`, JSON.stringify(m))
+        }
+        // Log tous les types de messages pour repérer ceux avec PJ
+        if (idx === 0) console.log(`[LBC PJ DEBUG] All msg types:`, rawMsgs.map((x: any, i: number) => `${i}:${x.type}|text=${(x.text||'').slice(0,30)}|att=${(x.attachments||[]).length}`).join(' | '))
+      })
+
       const msgs: Message[] = rawMsgs.map((m: any) => {
         // LBC utilise "outgoing: true" pour nos messages, pas de senderId
         const isMe = m.outgoing === true
