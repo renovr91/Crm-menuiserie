@@ -6,6 +6,7 @@ import {
   sendMessage,
   markAsRead,
   getUnreadCount,
+  getAdInfo,
 } from '@/lib/lbc-messaging'
 
 /**
@@ -47,6 +48,13 @@ export async function GET(req: NextRequest) {
       case 'unread': {
         const data = await getUnreadCount()
         return NextResponse.json(data)
+      }
+
+      case 'adinfo': {
+        const adId = searchParams.get('adId')
+        if (!adId) return NextResponse.json({ error: 'adId required' }, { status: 400 })
+        const data = await getAdInfo(adId)
+        return NextResponse.json(data || { error: 'not found' })
       }
 
       default:

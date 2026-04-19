@@ -140,3 +140,12 @@ export async function getUnreadCount(): Promise<any> {
 
   return res.json()
 }
+
+/**
+ * Get ad info by ID
+ */
+export async function getAdInfo(adId: string): Promise<any> {
+  const res = await relayFetch(`/api/ad/${adId}`)
+  if (!res.ok) return null
+  return res.json()
+}
