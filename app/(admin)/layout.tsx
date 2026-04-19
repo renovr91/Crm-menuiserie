@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/pipeline', label: 'Pipeline', icon: '📊' },
   { href: '/clients', label: 'Clients', icon: '👥' },
   { href: '/devis', label: 'Devis', icon: '📄' },
+  { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
   { href: '/livraisons', label: 'Livraisons', icon: '📦' },
   { href: '/planning', label: 'Planning', icon: '📅' },
   { href: '/sav', label: 'SAV', icon: '🔧' },
