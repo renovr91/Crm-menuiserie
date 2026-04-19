@@ -151,12 +151,20 @@ export async function getAdInfo(adId: string): Promise<any> {
 }
 
 /**
- * Get attachment binary via relay proxy
+ * Get attachment via relay proxy — returns binary data or redirect URL
  */
-export async function getAttachment(path: string): Promise<{ data: ArrayBuffer; contentType: string } | null> {
-  const res = await relayFetch(`/api/attachments/${path}`)
+export async function getAttachment(path: string, conv?: string): Promise<{ data: ArrayBuffer; contentType: string } | { redirect: string } | null> {
+  const convParam = conv ? `?conv=${encodeURIComponent(conv)}` : ''
+  const res = await relayFetch(`/api/attachments/${path}${convParam}`)
   if (!res.ok) return null
+
+  const ct = res.headers.get('content-type') || ''
+  if (ct.includes('application/json')) {
+    const json = await res.json()
+    if (json.redirect) return { redirect: json.redirect }
+    return null
+  }
+
   const data = await res.arrayBuffer()
-  const contentType = res.headers.get('content-type') || 'application/octet-stream'
-  return { data, contentType }
+  return { data, contentType: ct || 'application/octet-stream' }
 }

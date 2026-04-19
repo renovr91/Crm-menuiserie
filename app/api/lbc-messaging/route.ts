@@ -59,10 +59,15 @@ export async function GET(req: NextRequest) {
 
       case 'attachment': {
         const path = searchParams.get('path')
+        const conv = searchParams.get('conv') || ''
         if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
         const { getAttachment } = await import('@/lib/lbc-messaging')
-        const result = await getAttachment(path)
+        const result = await getAttachment(path, conv)
         if (!result) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        // Si c'est une URL signée, rediriger
+        if ('redirect' in result) {
+          return NextResponse.json({ redirect: (result as any).redirect })
+        }
         return new NextResponse(result.data, {
           status: 200,
           headers: {
