@@ -60,10 +60,13 @@ async function relayFetch(path: string, options: RequestInit = {}): Promise<Resp
 }
 
 /**
- * List all conversations
+ * List all conversations (cursor-based pagination)
  */
-export async function listConversations(page = 1, itemsPerPage = 30): Promise<any> {
-  const res = await relayFetch(`/api/conversations?page=${page}&itemsPerPage=${itemsPerPage}`)
+export async function listConversations(pageHash?: string): Promise<any> {
+  const params = pageHash
+    ? `pageHash=${encodeURIComponent(pageHash)}&next=false&size=50`
+    : 'itemsPerPage=50'
+  const res = await relayFetch(`/api/conversations?${params}`)
 
   if (!res.ok) {
     const text = await res.text()

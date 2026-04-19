@@ -50,20 +50,23 @@ export default function MessagerieLBCPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
-  const [convPage, setConvPage] = useState(1)
+  const [nextPageHash, setNextPageHash] = useState<string | null>(null)
   const [hasMoreConvs, setHasMoreConvs] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // --- Load conversations (with pagination) ---
-  const loadConversations = useCallback(async (page = 1, append = false) => {
+  // --- Load conversations (cursor-based pagination) ---
+  const loadConversations = useCallback(async (pageHash?: string, append = false) => {
     try {
       setError(null)
-      if (page === 1) setLoading(true)
+      if (!append) setLoading(true)
       else setLoadingMore(true)
 
-      const res = await fetch(`/api/lbc-messaging?action=conversations&page=${page}`)
+      const params = pageHash
+        ? `action=conversations&pageHash=${encodeURIComponent(pageHash)}`
+        : 'action=conversations'
+      const res = await fetch(`/api/lbc-messaging?${params}`)
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || 'Erreur API')
@@ -82,8 +85,17 @@ export default function MessagerieLBCPage() {
         unseenCount: c.unseenCounter || 0,
       }))
 
-      // S'il y a moins de 30 résultats, pas de page suivante
-      setHasMoreConvs(rawConvs.length >= 30)
+      // Extraire le curseur "previous" pour la page suivante (conversations plus anciennes)
+      const prevLinks = data._links?.previous || []
+      if (prevLinks.length > 0) {
+        const prevHref = prevLinks[0].href || ''
+        const hashMatch = prevHref.match(/pageHash=([^&]+)/)
+        setNextPageHash(hashMatch ? hashMatch[1] : null)
+        setHasMoreConvs(!!hashMatch)
+      } else {
+        setNextPageHash(null)
+        setHasMoreConvs(false)
+      }
 
       if (append) {
         setConversations(prev => {
@@ -105,10 +117,10 @@ export default function MessagerieLBCPage() {
 
   // --- Load more conversations ---
   const loadMoreConversations = useCallback(() => {
-    const nextPage = convPage + 1
-    setConvPage(nextPage)
-    loadConversations(nextPage, true)
-  }, [convPage, loadConversations])
+    if (nextPageHash) {
+      loadConversations(nextPageHash, true)
+    }
+  }, [nextPageHash, loadConversations])
 
   // --- Enrich with ad info ---
   const enrichConversations = async (convs: Conversation[]) => {

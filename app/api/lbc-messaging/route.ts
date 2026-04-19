@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
 
     switch (action) {
       case 'conversations': {
-        const page = parseInt(searchParams.get('page') || '1')
-        const data = await listConversations(page)
+        const pageHash = searchParams.get('pageHash') || undefined
+        const data = await listConversations(pageHash)
         return NextResponse.json(data)
       }
 
