@@ -153,33 +153,22 @@ export default function MessagerieLBCPage() {
       if (!res.ok) throw new Error('Erreur chargement messages')
       const data = await res.json()
 
-      // DEBUG: log raw response to understand LBC API format
-      console.log('[LBC DEBUG] Raw messages response:', JSON.stringify(data).slice(0, 2000))
-
       const rawMsgs = data._embedded?.messages || data.messages || []
 
-      if (rawMsgs.length > 0) {
-        console.log('[LBC DEBUG] First raw message:', JSON.stringify(rawMsgs[0]))
-      }
-
       const msgs: Message[] = rawMsgs.map((m: any) => {
-        // Try many possible field names for sender ID
-        const senderId = m.senderId || m.from || m.sender?.id || m.userId || m.user_id || m.author?.id || m.authorId || ''
-        const isMe = senderId === MY_USER_ID
-
-        // Try many possible field names for attachments
-        const rawAttachments = m.attachments || m.medias || m.media || m.images || m.files || []
+        // LBC utilise "outgoing: true" pour nos messages, pas de senderId
+        const isMe = m.outgoing === true
 
         return {
           id: m.messageId || m.id,
-          text: m.text || m.body || m.content || m.message || '',
-          senderId,
-          createdAt: m.createdAt || m.date || m.created_at || m.sentAt || m.sent_at || '',
+          text: m.text || m.body || '',
+          senderId: isMe ? MY_USER_ID : 'partner',
+          createdAt: m.createdAt || m.date || '',
           isMe,
           senderName: isMe ? 'Moi (Renov-R)' : contactName,
-          attachments: rawAttachments.map((a: any) => ({
-            url: a.url || a.uri || a.src || a.href || a.imageUrl || a.image_url || '',
-            type: a.type || a.contentType || a.content_type || a.mimeType || a.mime_type || 'image',
+          attachments: (m.attachments || []).map((a: any) => ({
+            url: a.url || a.uri || a.src || '',
+            type: a.type || a.contentType || 'image',
           })).filter((a: Attachment) => a.url),
         }
       })
