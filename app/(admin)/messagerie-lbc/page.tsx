@@ -11,10 +11,14 @@ interface Conversation {
   adId: string
   unread: boolean
   unseenCount: number
-  // Enriched from ad info
   city?: string
   zipCode?: string
   adPrice?: string
+}
+
+interface Attachment {
+  url: string
+  type: string
 }
 
 interface Message {
@@ -23,12 +27,13 @@ interface Message {
   senderId: string
   createdAt: string
   isMe: boolean
+  senderName: string
+  attachments: Attachment[]
 }
 
 const MY_USER_ID = '45b4d579-2ede-4a25-b889-280ffd926393'
 
 function extractAdTitle(subject: string): string {
-  // "Nouveau message pour "Porte de garage enroulable" sur leboncoin"
   const match = subject?.match(/"([^"]+)"/)
   return match ? match[1] : subject || ''
 }
@@ -71,8 +76,6 @@ export default function MessagerieLBCPage() {
       }))
 
       setConversations(convs)
-
-      // Enrichir avec les infos d'annonces (ville, prix) en batch
       enrichConversations(convs)
     } catch (e: any) {
       setError(e.message)
@@ -81,12 +84,9 @@ export default function MessagerieLBCPage() {
     }
   }, [])
 
-  // --- Enrich conversations with ad info (city, price) ---
+  // --- Enrich with ad info ---
   const enrichConversations = async (convs: Conversation[]) => {
-    // Récupérer les adIds uniques
     const adIds = [...new Set(convs.map(c => c.adId).filter(Boolean))]
-
-    // Fetch ad info en parallèle (max 10 à la fois)
     const batchSize = 10
     for (let i = 0; i < adIds.length; i += batchSize) {
       const batch = adIds.slice(i, i + batchSize)
@@ -107,7 +107,6 @@ export default function MessagerieLBCPage() {
           if (result.status !== 'fulfilled' || !result.value) continue
           const { adId, data } = result.value
           if (!data || data.error) continue
-
           for (const conv of updated) {
             if (conv.adId === adId) {
               conv.city = data.location?.city || data.city || ''
@@ -121,8 +120,8 @@ export default function MessagerieLBCPage() {
     }
   }
 
-  // --- Load messages for a conversation ---
-  const loadMessages = useCallback(async (convId: string) => {
+  // --- Load messages ---
+  const loadMessages = useCallback(async (convId: string, contactName: string) => {
     try {
       setLoadingMessages(true)
       const res = await fetch(`/api/lbc-messaging?action=messages&conv=${convId}`)
@@ -130,16 +129,36 @@ export default function MessagerieLBCPage() {
       const data = await res.json()
 
       const rawMsgs = data._embedded?.messages || data.messages || []
-      const msgs: Message[] = rawMsgs.map((m: any) => ({
-        id: m.messageId || m.id,
-        text: m.text || m.body || m.content || '',
-        senderId: m.senderId || m.from || m.sender?.id || '',
-        createdAt: m.createdAt || m.date || m.created_at || '',
-        isMe: (m.senderId || m.from || m.sender?.id) === MY_USER_ID,
-      }))
+      const msgs: Message[] = rawMsgs.map((m: any) => {
+        const senderId = m.senderId || m.from || m.sender?.id || ''
+        const isMe = senderId === MY_USER_ID
+        return {
+          id: m.messageId || m.id,
+          text: m.text || m.body || m.content || '',
+          senderId,
+          createdAt: m.createdAt || m.date || m.created_at || '',
+          isMe,
+          senderName: isMe ? 'Moi (Renov-R)' : contactName,
+          attachments: (m.attachments || []).map((a: any) => ({
+            url: a.url || a.uri || '',
+            type: a.type || a.contentType || 'image',
+          })),
+        }
+      })
 
-      // Messages are usually newest first from API, reverse for display
       setMessages(msgs.reverse())
+
+      // Marquer le dernier message comme lu
+      if (msgs.length > 0) {
+        const lastMsg = msgs[msgs.length - 1]
+        if (!lastMsg.isMe) {
+          fetch('/api/lbc-messaging', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'read', conv: convId, messageId: lastMsg.id }),
+          }).catch(() => {})
+        }
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -163,12 +182,10 @@ export default function MessagerieLBCPage() {
     loadUnread()
   }, [loadConversations, loadUnread])
 
-  // Auto-scroll to bottom
   useEffect(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }, [messages])
 
-  // Focus input when conversation selected
   useEffect(() => {
     if (selectedConv) inputRef.current?.focus()
   }, [selectedConv])
@@ -177,7 +194,14 @@ export default function MessagerieLBCPage() {
   const selectConv = (conv: Conversation) => {
     setSelectedConv(conv)
     setReplyText('')
-    loadMessages(conv.id)
+    loadMessages(conv.id, conv.contactName)
+
+    // Marquer localement comme lu
+    if (conv.unread) {
+      setConversations(prev => prev.map(c =>
+        c.id === conv.id ? { ...c, unread: false, unseenCount: 0 } : c
+      ))
+    }
   }
 
   // --- Send message ---
@@ -198,6 +222,8 @@ export default function MessagerieLBCPage() {
         senderId: MY_USER_ID,
         createdAt: new Date().toISOString(),
         isMe: true,
+        senderName: 'Moi (Renov-R)',
+        attachments: [],
       }])
       setReplyText('')
       inputRef.current?.focus()
@@ -208,7 +234,6 @@ export default function MessagerieLBCPage() {
     }
   }
 
-  // --- Keyboard shortcut ---
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -216,7 +241,6 @@ export default function MessagerieLBCPage() {
     }
   }
 
-  // --- Filter conversations ---
   const filteredConvs = conversations.filter(c => {
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
@@ -227,7 +251,6 @@ export default function MessagerieLBCPage() {
       c.zipCode?.includes(q))
   })
 
-  // --- Format date ---
   const formatDate = (dateStr: string) => {
     if (!dateStr) return ''
     const d = new Date(dateStr)
@@ -248,16 +271,12 @@ export default function MessagerieLBCPage() {
     })
   }
 
-  // =====================
-  // RENDER
-  // =====================
   return (
     <div className="h-full flex" style={{ background: 'var(--bg-primary)' }}>
 
-      {/* LEFT PANEL — Conversation list */}
+      {/* LEFT PANEL */}
       <div className="w-96 shrink-0 flex flex-col border-r" style={{ borderColor: 'var(--border-default)' }}>
 
-        {/* Header */}
         <div className="p-4 border-b" style={{ borderColor: 'var(--border-default)' }}>
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -281,7 +300,6 @@ export default function MessagerieLBCPage() {
             </button>
           </div>
 
-          {/* Search */}
           <input
             type="text"
             placeholder="Rechercher nom, ville, CP..."
@@ -296,24 +314,17 @@ export default function MessagerieLBCPage() {
           />
         </div>
 
-        {/* Conversation list */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-center" style={{ color: 'var(--text-tertiary)' }}>
-              Chargement...
-            </div>
+            <div className="p-8 text-center" style={{ color: 'var(--text-tertiary)' }}>Chargement...</div>
           ) : error ? (
             <div className="p-4 text-center">
               <p className="text-red-400 text-sm mb-2">{error}</p>
               <button onClick={() => { setLoading(true); loadConversations() }}
-                className="text-xs text-cyan-400 hover:underline">
-                Réessayer
-              </button>
+                className="text-xs text-cyan-400 hover:underline">Réessayer</button>
             </div>
           ) : filteredConvs.length === 0 ? (
-            <div className="p-8 text-center" style={{ color: 'var(--text-tertiary)' }}>
-              Aucune conversation
-            </div>
+            <div className="p-8 text-center" style={{ color: 'var(--text-tertiary)' }}>Aucune conversation</div>
           ) : (
             filteredConvs.map(conv => (
               <button
@@ -326,17 +337,15 @@ export default function MessagerieLBCPage() {
                 }}
               >
                 <div className="flex items-start gap-3">
-                  {/* Avatar */}
                   <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-sm font-medium"
                     style={{
-                      background: conv.unread ? 'rgba(34, 211, 238, 0.15)' : 'var(--bg-tertiary)',
-                      color: conv.unread ? '#22D3EE' : 'var(--text-tertiary)',
+                      background: conv.unread ? 'rgba(14, 165, 233, 0.15)' : 'var(--bg-tertiary)',
+                      color: conv.unread ? '#0EA5E9' : 'var(--text-tertiary)',
                     }}>
                     {conv.contactName?.[0]?.toUpperCase() || '?'}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    {/* Row 1: Name + Date */}
                     <div className="flex items-center justify-between">
                       <span className="text-sm truncate" style={{
                         color: conv.unread ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -349,30 +358,28 @@ export default function MessagerieLBCPage() {
                       </span>
                     </div>
 
-                    {/* Row 2: Ad title + City/CP */}
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       {conv.adTitle && (
-                        <span className="text-xs truncate" style={{ color: '#22D3EE' }}>
+                        <span className="text-xs truncate" style={{ color: '#0284C7' }}>
                           {conv.adTitle}
                         </span>
                       )}
                       {(conv.city || conv.zipCode) && (
-                        <span className="text-xs shrink-0 px-1.5 py-0 rounded" style={{
-                          background: 'rgba(168, 85, 247, 0.15)',
-                          color: '#C084FC',
+                        <span className="text-xs shrink-0 px-1.5 rounded" style={{
+                          background: 'rgba(168, 85, 247, 0.12)',
+                          color: '#9333EA',
                           fontSize: '10px',
                         }}>
                           {conv.zipCode || ''} {conv.city || ''}
                         </span>
                       )}
                       {conv.adPrice && (
-                        <span className="text-xs shrink-0" style={{ color: '#4ADE80' }}>
+                        <span className="text-xs shrink-0 font-medium" style={{ color: '#16A34A' }}>
                           {conv.adPrice}
                         </span>
                       )}
                     </div>
 
-                    {/* Row 3: Last message preview */}
                     <div className="text-xs truncate mt-0.5" style={{
                       color: conv.unread ? 'var(--text-primary)' : 'var(--text-tertiary)',
                     }}>
@@ -380,10 +387,9 @@ export default function MessagerieLBCPage() {
                     </div>
                   </div>
 
-                  {/* Unread badge */}
                   {conv.unread && (
                     <div className="shrink-0 mt-2 min-w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-                      style={{ background: '#22D3EE', color: '#0F172A' }}>
+                      style={{ background: '#0EA5E9', color: '#fff' }}>
                       {conv.unseenCount}
                     </div>
                   )}
@@ -407,26 +413,20 @@ export default function MessagerieLBCPage() {
           <>
             {/* Chat header */}
             <div className="px-6 py-3 border-b flex items-center gap-4" style={{ borderColor: 'var(--border-default)' }}>
-              <button
-                onClick={() => setSelectedConv(null)}
-                className="lg:hidden text-sm"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                ←
-              </button>
+              <button onClick={() => setSelectedConv(null)} className="lg:hidden text-sm" style={{ color: 'var(--text-secondary)' }}>←</button>
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium"
-                style={{ background: 'rgba(34, 211, 238, 0.15)', color: '#22D3EE' }}>
+                style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0EA5E9' }}>
                 {selectedConv.contactName?.[0]?.toUpperCase() || '?'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                     {selectedConv.contactName}
                   </span>
                   {(selectedConv.city || selectedConv.zipCode) && (
                     <span className="text-xs px-1.5 rounded" style={{
-                      background: 'rgba(168, 85, 247, 0.15)',
-                      color: '#C084FC',
+                      background: 'rgba(168, 85, 247, 0.12)',
+                      color: '#9333EA',
                       fontSize: '10px',
                     }}>
                       {selectedConv.zipCode} {selectedConv.city}
@@ -435,12 +435,12 @@ export default function MessagerieLBCPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedConv.adTitle && (
-                    <span className="text-xs truncate" style={{ color: '#22D3EE' }}>
+                    <span className="text-xs truncate" style={{ color: '#0284C7' }}>
                       {selectedConv.adTitle}
                     </span>
                   )}
                   {selectedConv.adPrice && (
-                    <span className="text-xs" style={{ color: '#4ADE80' }}>
+                    <span className="text-xs font-medium" style={{ color: '#16A34A' }}>
                       {selectedConv.adPrice}
                     </span>
                   )}
@@ -462,41 +462,80 @@ export default function MessagerieLBCPage() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               {loadingMessages ? (
-                <div className="text-center py-8" style={{ color: 'var(--text-tertiary)' }}>
-                  Chargement des messages...
-                </div>
+                <div className="text-center py-8" style={{ color: 'var(--text-tertiary)' }}>Chargement des messages...</div>
               ) : messages.length === 0 ? (
-                <div className="text-center py-8" style={{ color: 'var(--text-tertiary)' }}>
-                  Aucun message
-                </div>
+                <div className="text-center py-8" style={{ color: 'var(--text-tertiary)' }}>Aucun message</div>
               ) : (
-                messages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className="max-w-md px-4 py-2.5 rounded-2xl text-sm"
-                      style={{
-                        background: msg.isMe
-                          ? 'linear-gradient(135deg, #0891B2, #22D3EE)'
-                          : 'var(--bg-tertiary)',
-                        color: msg.isMe ? '#fff' : 'var(--text-primary)',
-                        borderBottomRightRadius: msg.isMe ? '4px' : undefined,
-                        borderBottomLeftRadius: !msg.isMe ? '4px' : undefined,
-                      }}
-                    >
-                      <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-                      <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
-                        {formatFullDate(msg.createdAt)}
+                messages.map((msg, i) => {
+                  // Afficher le nom si c'est le premier message ou si l'expéditeur change
+                  const showName = i === 0 || messages[i - 1].isMe !== msg.isMe
+                  return (
+                    <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                      {/* Sender name */}
+                      {showName && (
+                        <div className="text-[11px] font-medium mb-1 px-1" style={{
+                          color: msg.isMe ? '#0EA5E9' : '#E879F9',
+                        }}>
+                          {msg.senderName}
+                        </div>
+                      )}
+
+                      {/* Message bubble */}
+                      <div
+                        className="max-w-lg px-4 py-2.5 rounded-2xl text-sm"
+                        style={{
+                          background: msg.isMe
+                            ? '#0EA5E9'
+                            : 'var(--bg-tertiary)',
+                          color: msg.isMe ? '#fff' : 'var(--text-primary)',
+                          borderBottomRightRadius: msg.isMe ? '4px' : undefined,
+                          borderBottomLeftRadius: !msg.isMe ? '4px' : undefined,
+                          border: msg.isMe ? 'none' : '1px solid var(--border-default)',
+                        }}
+                      >
+                        <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+
+                        {/* Pièces jointes */}
+                        {msg.attachments.length > 0 && (
+                          <div className="mt-2 space-y-2">
+                            {msg.attachments.map((att, idx) => (
+                              att.type?.startsWith('image') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)/i) ? (
+                                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={att.url}
+                                    alt="Pièce jointe"
+                                    className="max-w-xs rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                                    style={{ maxHeight: '200px' }}
+                                  />
+                                </a>
+                              ) : (
+                                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+                                  style={{
+                                    background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                                    color: msg.isMe ? '#fff' : '#0EA5E9',
+                                  }}>
+                                  📎 Pièce jointe
+                                </a>
+                              )
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
+                          {formatFullDate(msg.createdAt)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Reply input */}
+            {/* Reply */}
             <div className="px-6 py-3 border-t" style={{ borderColor: 'var(--border-default)' }}>
               <div className="flex items-end gap-3">
                 <textarea
@@ -524,7 +563,7 @@ export default function MessagerieLBCPage() {
                   disabled={!replyText.trim() || sending}
                   className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={{
-                    background: replyText.trim() ? 'linear-gradient(135deg, #0891B2, #22D3EE)' : 'var(--bg-tertiary)',
+                    background: replyText.trim() ? '#0EA5E9' : 'var(--bg-tertiary)',
                     color: replyText.trim() ? '#fff' : 'var(--text-tertiary)',
                     opacity: sending ? 0.5 : 1,
                   }}
