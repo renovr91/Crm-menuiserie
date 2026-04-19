@@ -49,14 +49,20 @@ export default function MessagerieLBCPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
+  const [convPage, setConvPage] = useState(1)
+  const [hasMoreConvs, setHasMoreConvs] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // --- Load conversations ---
-  const loadConversations = useCallback(async () => {
+  // --- Load conversations (with pagination) ---
+  const loadConversations = useCallback(async (page = 1, append = false) => {
     try {
       setError(null)
-      const res = await fetch('/api/lbc-messaging?action=conversations')
+      if (page === 1) setLoading(true)
+      else setLoadingMore(true)
+
+      const res = await fetch(`/api/lbc-messaging?action=conversations&page=${page}`)
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || 'Erreur API')
@@ -75,14 +81,33 @@ export default function MessagerieLBCPage() {
         unseenCount: c.unseenCounter || 0,
       }))
 
-      setConversations(convs)
+      // S'il y a moins de 30 résultats, pas de page suivante
+      setHasMoreConvs(rawConvs.length >= 30)
+
+      if (append) {
+        setConversations(prev => {
+          const existingIds = new Set(prev.map(c => c.id))
+          const newConvs = convs.filter(c => !existingIds.has(c.id))
+          return [...prev, ...newConvs]
+        })
+      } else {
+        setConversations(convs)
+      }
       enrichConversations(convs)
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [])
+
+  // --- Load more conversations ---
+  const loadMoreConversations = useCallback(() => {
+    const nextPage = convPage + 1
+    setConvPage(nextPage)
+    loadConversations(nextPage, true)
+  }, [convPage, loadConversations])
 
   // --- Enrich with ad info ---
   const enrichConversations = async (convs: Conversation[]) => {
@@ -326,76 +351,90 @@ export default function MessagerieLBCPage() {
           ) : filteredConvs.length === 0 ? (
             <div className="p-8 text-center" style={{ color: 'var(--text-tertiary)' }}>Aucune conversation</div>
           ) : (
-            filteredConvs.map(conv => (
-              <button
-                key={conv.id}
-                onClick={() => selectConv(conv)}
-                className="w-full text-left px-4 py-3 border-b transition-colors"
-                style={{
-                  borderColor: 'var(--border-default)',
-                  background: selectedConv?.id === conv.id ? 'var(--bg-tertiary)' : 'transparent',
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-sm font-medium"
-                    style={{
-                      background: conv.unread ? 'rgba(14, 165, 233, 0.15)' : 'var(--bg-tertiary)',
-                      color: conv.unread ? '#0EA5E9' : 'var(--text-tertiary)',
-                    }}>
-                    {conv.contactName?.[0]?.toUpperCase() || '?'}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm truncate" style={{
-                        color: conv.unread ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        fontWeight: conv.unread ? 600 : 400,
+            <>
+              {filteredConvs.map(conv => (
+                <button
+                  key={conv.id}
+                  onClick={() => selectConv(conv)}
+                  className="w-full text-left px-4 py-3 border-b transition-colors"
+                  style={{
+                    borderColor: 'var(--border-default)',
+                    background: selectedConv?.id === conv.id ? 'var(--bg-tertiary)' : 'transparent',
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-sm font-medium"
+                      style={{
+                        background: conv.unread ? 'rgba(14, 165, 233, 0.15)' : 'var(--bg-tertiary)',
+                        color: conv.unread ? '#0EA5E9' : 'var(--text-tertiary)',
                       }}>
-                        {conv.contactName}
-                      </span>
-                      <span className="text-xs shrink-0 ml-2" style={{ color: 'var(--text-tertiary)' }}>
-                        {formatDate(conv.lastMessageDate)}
-                      </span>
+                      {conv.contactName?.[0]?.toUpperCase() || '?'}
                     </div>
 
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {conv.adTitle && (
-                        <span className="text-xs truncate" style={{ color: '#0284C7' }}>
-                          {conv.adTitle}
-                        </span>
-                      )}
-                      {(conv.city || conv.zipCode) && (
-                        <span className="text-xs shrink-0 px-1.5 rounded" style={{
-                          background: 'rgba(168, 85, 247, 0.12)',
-                          color: '#9333EA',
-                          fontSize: '10px',
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm truncate" style={{
+                          color: conv.unread ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontWeight: conv.unread ? 600 : 400,
                         }}>
-                          {conv.zipCode || ''} {conv.city || ''}
+                          {conv.contactName}
                         </span>
-                      )}
-                      {conv.adPrice && (
-                        <span className="text-xs shrink-0 font-medium" style={{ color: '#16A34A' }}>
-                          {conv.adPrice}
+                        <span className="text-xs shrink-0 ml-2" style={{ color: 'var(--text-tertiary)' }}>
+                          {formatDate(conv.lastMessageDate)}
                         </span>
-                      )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {conv.adTitle && (
+                          <span className="text-xs truncate" style={{ color: '#0284C7' }}>
+                            {conv.adTitle}
+                          </span>
+                        )}
+                        {(conv.city || conv.zipCode) && (
+                          <span className="text-xs shrink-0 px-1.5 rounded" style={{
+                            background: 'rgba(168, 85, 247, 0.12)',
+                            color: '#9333EA',
+                            fontSize: '10px',
+                          }}>
+                            {conv.zipCode || ''} {conv.city || ''}
+                          </span>
+                        )}
+                        {conv.adPrice && (
+                          <span className="text-xs shrink-0 font-medium" style={{ color: '#16A34A' }}>
+                            {conv.adPrice}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs truncate mt-0.5" style={{
+                        color: conv.unread ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      }}>
+                        {conv.lastMessage || '...'}
+                      </div>
                     </div>
 
-                    <div className="text-xs truncate mt-0.5" style={{
-                      color: conv.unread ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                    }}>
-                      {conv.lastMessage || '...'}
-                    </div>
+                    {conv.unread && (
+                      <div className="shrink-0 mt-2 min-w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                        style={{ background: '#0EA5E9', color: '#fff' }}>
+                        {conv.unseenCount}
+                      </div>
+                    )}
                   </div>
+                </button>
+              ))}
 
-                  {conv.unread && (
-                    <div className="shrink-0 mt-2 min-w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-                      style={{ background: '#0EA5E9', color: '#fff' }}>
-                      {conv.unseenCount}
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))
+              {/* Bouton charger plus */}
+              {hasMoreConvs && !searchQuery && (
+                <button
+                  onClick={loadMoreConversations}
+                  disabled={loadingMore}
+                  className="w-full py-3 text-sm font-medium transition-colors hover:opacity-80"
+                  style={{ color: '#0284C7' }}
+                >
+                  {loadingMore ? 'Chargement...' : 'Charger plus de conversations'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
