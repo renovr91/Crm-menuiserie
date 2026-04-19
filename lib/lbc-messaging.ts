@@ -149,3 +149,14 @@ export async function getAdInfo(adId: string): Promise<any> {
   if (!res.ok) return null
   return res.json()
 }
+
+/**
+ * Get attachment binary via relay proxy
+ */
+export async function getAttachment(path: string): Promise<{ data: ArrayBuffer; contentType: string } | null> {
+  const res = await relayFetch(`/api/attachments/${path}`)
+  if (!res.ok) return null
+  const data = await res.arrayBuffer()
+  const contentType = res.headers.get('content-type') || 'application/octet-stream'
+  return { data, contentType }
+}

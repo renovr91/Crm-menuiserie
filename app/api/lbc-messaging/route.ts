@@ -57,6 +57,21 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(data || { error: 'not found' })
       }
 
+      case 'attachment': {
+        const path = searchParams.get('path')
+        if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
+        const { getAttachment } = await import('@/lib/lbc-messaging')
+        const result = await getAttachment(path)
+        if (!result) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return new NextResponse(result.data, {
+          status: 200,
+          headers: {
+            'Content-Type': result.contentType,
+            'Cache-Control': 'public, max-age=3600',
+          },
+        })
+      }
+
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }

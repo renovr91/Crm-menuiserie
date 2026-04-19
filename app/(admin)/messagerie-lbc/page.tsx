@@ -19,6 +19,7 @@ interface Conversation {
 interface Attachment {
   url: string
   type: string
+  fileName?: string
 }
 
 interface Message {
@@ -155,18 +156,6 @@ export default function MessagerieLBCPage() {
 
       const rawMsgs = data._embedded?.messages || data.messages || []
 
-      // DEBUG PJ: log les messages qui pourraient contenir des pièces jointes
-      rawMsgs.forEach((m: any, idx: number) => {
-        const keys = Object.keys(m)
-        const hasContent = m.attachments?.length > 0 || m.medias || m.media || m.images || m.files || m.fileUrl || m.imageUrl
-        const isFileMsg = m.text?.includes('fichier') || m.type?.includes('File') || m.type?.includes('Image') || m.type?.includes('Media') || m.type?.includes('Attachment')
-        if (hasContent || isFileMsg || !m.text) {
-          console.log(`[LBC PJ DEBUG] msg ${idx} (type=${m.type}):`, JSON.stringify(m))
-        }
-        // Log tous les types de messages pour repérer ceux avec PJ
-        if (idx === 0) console.log(`[LBC PJ DEBUG] All msg types:`, rawMsgs.map((x: any, i: number) => `${i}:${x.type}|text=${(x.text||'').slice(0,30)}|att=${(x.attachments||[]).length}`).join(' | '))
-      })
-
       const msgs: Message[] = rawMsgs.map((m: any) => {
         // LBC utilise "outgoing: true" pour nos messages, pas de senderId
         const isMe = m.outgoing === true
@@ -178,10 +167,16 @@ export default function MessagerieLBCPage() {
           createdAt: m.createdAt || m.date || '',
           isMe,
           senderName: isMe ? 'Moi (Renov-R)' : contactName,
-          attachments: (m.attachments || []).map((a: any) => ({
-            url: a.url || a.uri || a.src || '',
-            type: a.type || a.contentType || 'image',
-          })).filter((a: Attachment) => a.url),
+          attachments: (m.attachments || []).map((a: any) => {
+            // LBC utilise "path" (relatif) et "contentType"
+            const attPath = a.path || ''
+            const attUrl = a.url || (attPath ? `/api/lbc-messaging?action=attachment&path=${encodeURIComponent(attPath)}` : '')
+            return {
+              url: attUrl,
+              type: a.contentType || a.type || 'application/octet-stream',
+              fileName: attPath ? attPath.split('/').pop() || 'fichier' : 'fichier',
+            }
+          }).filter((a: Attachment) => a.url),
         }
       })
 
@@ -565,8 +560,10 @@ export default function MessagerieLBCPage() {
                           {/* Pièces jointes */}
                           {msg.attachments.length > 0 && (
                             <div className="mt-2 space-y-2">
-                              {msg.attachments.map((att, idx) => (
-                                att.type?.startsWith('image') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)/i) ? (
+                              {msg.attachments.map((att, idx) => {
+                                const isImage = att.type?.startsWith('image')
+                                const isPdf = att.type === 'application/pdf'
+                                return isImage ? (
                                   <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
                                     <img
                                       src={att.url}
@@ -577,15 +574,16 @@ export default function MessagerieLBCPage() {
                                   </a>
                                 ) : (
                                   <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
                                     style={{
-                                      background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                                      color: msg.isMe ? '#fff' : '#0EA5E9',
+                                      background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'rgba(14, 165, 233, 0.1)',
+                                      color: msg.isMe ? '#fff' : '#0284C7',
+                                      border: msg.isMe ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(14, 165, 233, 0.3)',
                                     }}>
-                                    📎 Pièce jointe
+                                    {isPdf ? '📄' : '📎'} {isPdf ? 'Document PDF' : `Fichier (${att.type?.split('/')[1] || 'télécharger'})`}
                                   </a>
                                 )
-                              ))}
+                              })}
                             </div>
                           )}
 
