@@ -564,29 +564,25 @@ export default function MessagerieLBCPage() {
                                 const isImage = att.type?.startsWith('image')
                                 const isPdf = att.type === 'application/pdf'
 
-                                const handleAttClick = () => {
-                                  window.open(att.url, '_blank')
-                                }
-
                                 return isImage ? (
-                                  <a key={idx} href={att.url} onClick={handleAttClick} className="cursor-pointer">
+                                  <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
                                     <img
                                       src={att.url}
                                       alt="Pièce jointe"
-                                      className="max-w-xs rounded-lg hover:opacity-80 transition-opacity"
+                                      className="max-w-xs rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                                       style={{ maxHeight: '200px' }}
                                     />
                                   </a>
                                 ) : (
-                                  <button key={idx} onClick={handleAttClick}
-                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
+                                  <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium no-underline"
                                     style={{
                                       background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'rgba(14, 165, 233, 0.1)',
                                       color: msg.isMe ? '#fff' : '#0284C7',
                                       border: msg.isMe ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(14, 165, 233, 0.3)',
                                     }}>
                                     {isPdf ? '📄' : '📎'} {isPdf ? 'Document PDF' : `Fichier (${att.type?.split('/')[1] || 'télécharger'})`}
-                                  </button>
+                                  </a>
                                 )
                               })}
                             </div>
