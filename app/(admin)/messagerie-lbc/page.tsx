@@ -168,15 +168,15 @@ export default function MessagerieLBCPage() {
           isMe,
           senderName: isMe ? 'Moi (Renov-R)' : contactName,
           attachments: (m.attachments || []).map((a: any) => {
-            // LBC utilise "path" (relatif) et "contentType"
             const attPath = a.path || ''
-            const attUrl = a.url || (attPath ? `/api/lbc-messaging?action=attachment&path=${encodeURIComponent(attPath)}&conv=${encodeURIComponent(convId)}` : '')
+            // Les PJ LBC sont protégées par JWT signé — on redirige vers LBC
+            const attUrl = `https://www.leboncoin.fr/messages/id/${convId}`
             return {
               url: attUrl,
               type: a.contentType || a.type || 'application/octet-stream',
               fileName: attPath ? attPath.split('/').pop() || 'fichier' : 'fichier',
             }
-          }).filter((a: Attachment) => a.url),
+          }).filter((_a: Attachment, _i: number, arr: Attachment[]) => arr.length > 0),
         }
       })
 
@@ -564,24 +564,17 @@ export default function MessagerieLBCPage() {
                                 const isImage = att.type?.startsWith('image')
                                 const isPdf = att.type === 'application/pdf'
 
-                                return isImage ? (
-                                  <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
-                                    <img
-                                      src={att.url}
-                                      alt="Pièce jointe"
-                                      className="max-w-xs rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                                      style={{ maxHeight: '200px' }}
-                                    />
-                                  </a>
-                                ) : (
+                                return (
                                   <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
                                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium no-underline"
+                                    title="Voir la pièce jointe sur LBC"
                                     style={{
                                       background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'rgba(14, 165, 233, 0.1)',
                                       color: msg.isMe ? '#fff' : '#0284C7',
                                       border: msg.isMe ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(14, 165, 233, 0.3)',
                                     }}>
-                                    {isPdf ? '📄' : '📎'} {isPdf ? 'Document PDF' : `Fichier (${att.type?.split('/')[1] || 'télécharger'})`}
+                                    {isPdf ? '📄' : isImage ? '🖼️' : '📎'}
+                                    {isPdf ? 'PDF — voir sur LBC' : isImage ? 'Image — voir sur LBC' : `${att.type?.split('/')[1] || 'Fichier'} — voir sur LBC`}
                                   </a>
                                 )
                               })}
