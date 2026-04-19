@@ -153,21 +153,34 @@ export default function MessagerieLBCPage() {
       if (!res.ok) throw new Error('Erreur chargement messages')
       const data = await res.json()
 
+      // DEBUG: log raw response to understand LBC API format
+      console.log('[LBC DEBUG] Raw messages response:', JSON.stringify(data).slice(0, 2000))
+
       const rawMsgs = data._embedded?.messages || data.messages || []
+
+      if (rawMsgs.length > 0) {
+        console.log('[LBC DEBUG] First raw message:', JSON.stringify(rawMsgs[0]))
+      }
+
       const msgs: Message[] = rawMsgs.map((m: any) => {
-        const senderId = m.senderId || m.from || m.sender?.id || ''
+        // Try many possible field names for sender ID
+        const senderId = m.senderId || m.from || m.sender?.id || m.userId || m.user_id || m.author?.id || m.authorId || ''
         const isMe = senderId === MY_USER_ID
+
+        // Try many possible field names for attachments
+        const rawAttachments = m.attachments || m.medias || m.media || m.images || m.files || []
+
         return {
           id: m.messageId || m.id,
-          text: m.text || m.body || m.content || '',
+          text: m.text || m.body || m.content || m.message || '',
           senderId,
-          createdAt: m.createdAt || m.date || m.created_at || '',
+          createdAt: m.createdAt || m.date || m.created_at || m.sentAt || m.sent_at || '',
           isMe,
           senderName: isMe ? 'Moi (Renov-R)' : contactName,
-          attachments: (m.attachments || []).map((a: any) => ({
-            url: a.url || a.uri || '',
-            type: a.type || a.contentType || 'image',
-          })),
+          attachments: rawAttachments.map((a: any) => ({
+            url: a.url || a.uri || a.src || a.href || a.imageUrl || a.image_url || '',
+            type: a.type || a.contentType || a.content_type || a.mimeType || a.mime_type || 'image',
+          })).filter((a: Attachment) => a.url),
         }
       })
 
@@ -428,10 +441,14 @@ export default function MessagerieLBCPage() {
                 <button
                   onClick={loadMoreConversations}
                   disabled={loadingMore}
-                  className="w-full py-3 text-sm font-medium transition-colors hover:opacity-80"
-                  style={{ color: '#0284C7' }}
+                  className="w-full py-4 text-sm font-semibold transition-all hover:opacity-90"
+                  style={{
+                    color: '#fff',
+                    background: 'linear-gradient(135deg, #0284C7, #0EA5E9)',
+                    borderTop: '1px solid var(--border-default)',
+                  }}
                 >
-                  {loadingMore ? 'Chargement...' : 'Charger plus de conversations'}
+                  {loadingMore ? '⏳ Chargement...' : '⬇ Voir plus de conversations'}
                 </button>
               )}
             </>
@@ -511,60 +528,69 @@ export default function MessagerieLBCPage() {
                   // Afficher le nom si c'est le premier message ou si l'expéditeur change
                   const showName = i === 0 || messages[i - 1].isMe !== msg.isMe
                   return (
-                    <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                      {/* Sender name */}
-                      {showName && (
-                        <div className="text-[11px] font-medium mb-1 px-1" style={{
-                          color: msg.isMe ? '#0EA5E9' : '#E879F9',
-                        }}>
-                          {msg.senderName}
-                        </div>
-                      )}
-
-                      {/* Message bubble */}
-                      <div
-                        className="max-w-lg px-4 py-2.5 rounded-2xl text-sm"
-                        style={{
-                          background: msg.isMe
-                            ? '#0EA5E9'
-                            : 'var(--bg-tertiary)',
-                          color: msg.isMe ? '#fff' : 'var(--text-primary)',
-                          borderBottomRightRadius: msg.isMe ? '4px' : undefined,
-                          borderBottomLeftRadius: !msg.isMe ? '4px' : undefined,
-                          border: msg.isMe ? 'none' : '1px solid var(--border-default)',
-                        }}
-                      >
-                        <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-
-                        {/* Pièces jointes */}
-                        {msg.attachments.length > 0 && (
-                          <div className="mt-2 space-y-2">
-                            {msg.attachments.map((att, idx) => (
-                              att.type?.startsWith('image') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)/i) ? (
-                                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
-                                  <img
-                                    src={att.url}
-                                    alt="Pièce jointe"
-                                    className="max-w-xs rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                                    style={{ maxHeight: '200px' }}
-                                  />
-                                </a>
-                              ) : (
-                                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
-                                  style={{
-                                    background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                                    color: msg.isMe ? '#fff' : '#0EA5E9',
-                                  }}>
-                                  📎 Pièce jointe
-                                </a>
-                              )
-                            ))}
+                    <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`} style={{ maxWidth: '75%' }}>
+                        {/* Sender name */}
+                        {showName && (
+                          <div className="text-[11px] font-semibold mb-1 px-2 flex items-center gap-1.5" style={{
+                            color: msg.isMe ? '#0284C7' : '#D946EF',
+                          }}>
+                            <span style={{
+                              width: '6px',
+                              height: '6px',
+                              borderRadius: '50%',
+                              background: msg.isMe ? '#0284C7' : '#D946EF',
+                              display: 'inline-block',
+                            }} />
+                            {msg.senderName}
                           </div>
                         )}
 
-                        <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
-                          {formatFullDate(msg.createdAt)}
+                        {/* Message bubble */}
+                        <div
+                          className="px-4 py-2.5 rounded-2xl text-sm"
+                          style={{
+                            background: msg.isMe
+                              ? 'linear-gradient(135deg, #0284C7, #0EA5E9)'
+                              : 'var(--bg-tertiary)',
+                            color: msg.isMe ? '#fff' : 'var(--text-primary)',
+                            borderBottomRightRadius: msg.isMe ? '4px' : undefined,
+                            borderBottomLeftRadius: !msg.isMe ? '4px' : undefined,
+                            border: msg.isMe ? 'none' : '2px solid var(--border-default)',
+                          }}
+                        >
+                          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+
+                          {/* Pièces jointes */}
+                          {msg.attachments.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              {msg.attachments.map((att, idx) => (
+                                att.type?.startsWith('image') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)/i) ? (
+                                  <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={att.url}
+                                      alt="Pièce jointe"
+                                      className="max-w-xs rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                                      style={{ maxHeight: '200px' }}
+                                    />
+                                  </a>
+                                ) : (
+                                  <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+                                    style={{
+                                      background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                                      color: msg.isMe ? '#fff' : '#0EA5E9',
+                                    }}>
+                                    📎 Pièce jointe
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
+                            {formatFullDate(msg.createdAt)}
+                          </div>
                         </div>
                       </div>
                     </div>
