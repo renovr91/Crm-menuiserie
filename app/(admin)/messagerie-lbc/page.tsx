@@ -226,14 +226,25 @@ export default function MessagerieLBCPage() {
         body: JSON.stringify({ action: 'update-status', conversationId: convId, statut: newStatut }),
       })
       // Mettre à jour localement
-      setLeads(prev => prev.map(l =>
-        l.conversation_id === convId ? { ...l, statut: newStatut } : l
-      ))
+      if (newStatut === 'pas_interesse' && activeStatut !== 'pas_interesse') {
+        // Retirer de la liste (archivage)
+        setLeads(prev => prev.filter(l => l.conversation_id !== convId))
+      } else {
+        setLeads(prev => prev.map(l =>
+          l.conversation_id === convId ? { ...l, statut: newStatut } : l
+        ))
+      }
       if (selectedLead?.conversation_id === convId) {
         setSelectedLead(prev => prev ? { ...prev, statut: newStatut } : null)
       }
-      // Recharger les compteurs
-      loadLeads(activeStatut, searchQuery)
+      // Mettre à jour les compteurs
+      setCounts(prev => {
+        const oldStatut = leads.find(l => l.conversation_id === convId)?.statut
+        const newCounts = { ...prev }
+        if (oldStatut && oldStatut in newCounts) newCounts[oldStatut]--
+        if (newStatut in newCounts) newCounts[newStatut]++
+        return newCounts
+      })
     } catch { /* ignore */ }
   }
 
