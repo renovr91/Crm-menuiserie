@@ -62,17 +62,22 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
   const convIds = rawConvs.map((c: any) => c.conversationId || c.id)
   const { data: existingLeads } = await supabase
     .from('lbc_leads')
-    .select('conversation_id, statut, dernier_message_date')
+    .select('conversation_id, statut, dernier_message_date, city, zip_code')
     .in('conversation_id', convIds)
 
   const existingMap = new Map(
     (existingLeads || []).map((l: any) => [l.conversation_id, l])
   )
 
-  // Collecter les adIds uniques pour enrichir (seulement les nouveaux leads)
-  const newAdIds = [...new Set(
+  // Collecter les adIds pour enrichir : nouveaux leads + existants sans ville
+  const adIdsToEnrich = [...new Set(
     rawConvs
-      .filter((c: any) => !existingMap.has(c.conversationId || c.id))
+      .filter((c: any) => {
+        const convId = c.conversationId || c.id
+        const existing = existingMap.get(convId)
+        // Enrichir si nouveau OU si existant sans ville
+        return !existing || !existing.city
+      })
       .map((c: any) => String(c.itemId))
       .filter(Boolean)
   )] as string[]
@@ -80,8 +85,8 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
 
   // Enrichir en parallèle (max 5 simultanés)
   const chunks: string[][] = []
-  for (let i = 0; i < newAdIds.length; i += 5) {
-    chunks.push(newAdIds.slice(i, i + 5))
+  for (let i = 0; i < adIdsToEnrich.length; i += 5) {
+    chunks.push(adIdsToEnrich.slice(i, i + 5))
   }
   for (const chunk of chunks) {
     const results = await Promise.allSettled(
