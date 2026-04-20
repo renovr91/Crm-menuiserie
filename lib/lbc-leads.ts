@@ -112,10 +112,10 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
     const adTitleMatch = subject.match(/"([^"]+)"/)
     const adTitle = adTitleMatch ? adTitleMatch[1] : subject
 
-    // Enrichir avec adInfo
+    // Enrichir avec adInfo (plusieurs formats possibles selon l'API)
     const adInfo = adInfoMap.get(adId)
-    const city = adInfo?.location?.city || adInfo?.city || null
-    const zipCode = adInfo?.location?.zipcode || adInfo?.zipcode || adInfo?.location?.zip || null
+    const city = adInfo?.location?.city_label || adInfo?.location?.city || adInfo?.city_label || adInfo?.city || null
+    const zipCode = adInfo?.location?.zipcode || adInfo?.location?.zip_code || adInfo?.location?.zip || adInfo?.zipcode || adInfo?.zip_code || null
     const departement = zipCode ? zipCode.substring(0, 2) : null
     const adPrice = adInfo?.price ? `${adInfo.price}€` : adInfo?.price_cents ? `${Math.round(adInfo.price_cents / 100)}€` : null
 
