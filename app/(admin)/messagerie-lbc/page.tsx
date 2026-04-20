@@ -493,18 +493,6 @@ function ConversationPanel({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Status selector */}
-            <select
-              value={lead.statut}
-              onChange={e => onStatusChange(lead.conversation_id, e.target.value as LeadStatut)}
-              className="text-xs px-2 py-1.5 rounded-lg outline-none cursor-pointer"
-              style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}`, fontWeight: 600 }}
-            >
-              {ALL_STATUTS.map(s => (
-                <option key={s} value={s}>{STATUT_CONFIG[s].emoji} {STATUT_CONFIG[s].label}</option>
-              ))}
-            </select>
-
             <a href={`https://www.leboncoin.fr/messages/${lead.conversation_id}`}
               target="_blank" rel="noopener noreferrer"
               className="px-2 py-1.5 text-[11px] rounded-lg bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 transition-colors">
@@ -515,6 +503,34 @@ function ConversationPanel({
               <IconClose className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        {/* Status buttons row */}
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          {ALL_STATUTS.map(s => {
+            const sc = STATUT_CONFIG[s]
+            const isActive = lead.statut === s
+            return (
+              <button
+                key={s}
+                onClick={() => {
+                  if (s !== lead.statut) {
+                    onStatusChange(lead.conversation_id, s)
+                    if (s === 'pas_interesse') onClose()
+                  }
+                }}
+                className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                style={{
+                  background: isActive ? sc.bg : 'transparent',
+                  color: isActive ? sc.color : '#9CA3AF',
+                  border: `1.5px solid ${isActive ? sc.color : '#E5E7EB'}`,
+                  fontWeight: isActive ? 700 : 500,
+                }}
+              >
+                {sc.emoji} {sc.label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Notes */}
