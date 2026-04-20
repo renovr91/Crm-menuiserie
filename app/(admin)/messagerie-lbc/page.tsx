@@ -533,11 +533,15 @@ export default function MessagerieLBCPage() {
                         )}
                       </div>
 
-                      {/* Ad title */}
+                      {/* Ad title + link */}
                       {lead.ad_title && (
-                        <div className="text-[11px] truncate mt-0.5" style={{ color: '#0284C7' }}>
+                        <a href={lead.ad_id ? `https://www.leboncoin.fr/ad/${lead.ad_id}` : '#'}
+                          target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-[11px] truncate mt-0.5 block hover:underline"
+                          style={{ color: '#0284C7' }}>
                           {lead.ad_title}
-                        </div>
+                        </a>
                       )}
 
                       {/* Last message preview */}
@@ -599,7 +603,11 @@ export default function MessagerieLBCPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       {selectedLead.ad_title && (
-                        <span className="text-[11px]" style={{ color: '#0284C7' }}>{selectedLead.ad_title}</span>
+                        <a href={selectedLead.ad_id ? `https://www.leboncoin.fr/ad/${selectedLead.ad_id}` : '#'}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[11px] hover:underline" style={{ color: '#0284C7' }}>
+                          📌 {selectedLead.ad_title}
+                        </a>
                       )}
                       {selectedLead.ad_price && (
                         <span className="text-[11px] font-medium" style={{ color: '#16A34A' }}>{selectedLead.ad_price}</span>
