@@ -70,7 +70,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
   )
 
   // Collecter les adIds uniques pour enrichir
-  const adIds = [...new Set(rawConvs.map((c: any) => c.itemId).filter(Boolean))]
+  const adIds = [...new Set(rawConvs.map((c: any) => String(c.itemId)).filter(Boolean))] as string[]
   const adInfoMap = new Map<string, any>()
 
   // Enrichir par batch
