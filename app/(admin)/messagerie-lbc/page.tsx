@@ -535,7 +535,7 @@ export default function MessagerieLBCPage() {
 
                       {/* Ad title + link */}
                       {lead.ad_title && (
-                        <a href={lead.ad_id ? `https://www.leboncoin.fr/ad/${lead.ad_id}` : '#'}
+                        <a href={lead.ad_id ? `https://www.leboncoin.fr/bricolage/${lead.ad_id}.htm` : '#'}
                           target="_blank" rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
                           className="text-[11px] truncate mt-0.5 block hover:underline"
@@ -603,7 +603,7 @@ export default function MessagerieLBCPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       {selectedLead.ad_title && (
-                        <a href={selectedLead.ad_id ? `https://www.leboncoin.fr/ad/${selectedLead.ad_id}` : '#'}
+                        <a href={selectedLead.ad_id ? `https://www.leboncoin.fr/bricolage/${selectedLead.ad_id}.htm` : '#'}
                           target="_blank" rel="noopener noreferrer"
                           className="text-[11px] hover:underline" style={{ color: '#0284C7' }}>
                           📌 {selectedLead.ad_title}
