@@ -769,18 +769,19 @@ export default function MessagerieLBCPage() {
                   onChange={e => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Écrire un message..."
-                  rows={1}
+                  rows={3}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none"
                   style={{
                     background: 'var(--bg-tertiary)',
                     color: 'var(--text-primary)',
                     border: '1px solid var(--border-default)',
-                    maxHeight: '120px',
+                    maxHeight: '300px',
+                    minHeight: '80px',
                   }}
                   onInput={e => {
                     const target = e.target as HTMLTextAreaElement
                     target.style.height = 'auto'
-                    target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+                    target.style.height = Math.min(target.scrollHeight, 300) + 'px'
                   }}
                 />
                 <button
