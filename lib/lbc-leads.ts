@@ -69,17 +69,32 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
     (existingLeads || []).map((l: any) => [l.conversation_id, l])
   )
 
-  // Collecter les adIds uniques pour enrichir
-  const adIds = [...new Set(rawConvs.map((c: any) => String(c.itemId)).filter(Boolean))] as string[]
+  // Collecter les adIds uniques pour enrichir (seulement les nouveaux leads)
+  const newAdIds = [...new Set(
+    rawConvs
+      .filter((c: any) => !existingMap.has(c.conversationId || c.id))
+      .map((c: any) => String(c.itemId))
+      .filter(Boolean)
+  )] as string[]
   const adInfoMap = new Map<string, any>()
 
-  // Enrichir par batch
-  for (const adId of adIds) {
-    try {
-      const info = await getAdInfo(adId)
-      if (info) adInfoMap.set(adId, info)
-    } catch { /* ignore */ }
+  // Enrichir en parallèle (max 5 simultanés)
+  const chunks: string[][] = []
+  for (let i = 0; i < newAdIds.length; i += 5) {
+    chunks.push(newAdIds.slice(i, i + 5))
   }
+  for (const chunk of chunks) {
+    const results = await Promise.allSettled(
+      chunk.map(async (adId) => {
+        const info = await getAdInfo(adId)
+        if (info) adInfoMap.set(adId, info)
+      })
+    )
+  }
+
+  // Préparer les inserts et updates en batch
+  const toInsert: any[] = []
+  const toUpdate: Array<{ convId: string; updates: any }> = []
 
   for (const conv of rawConvs) {
     const convId = conv.conversationId || conv.id
@@ -105,8 +120,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
     const existing = existingMap.get(convId)
 
     if (!existing) {
-      // Nouveau lead
-      const { error } = await supabase.from('lbc_leads').insert({
+      toInsert.push({
         conversation_id: convId,
         contact_name: contactName,
         ad_id: adId,
@@ -121,9 +135,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
         dernier_message_date: lastMsgDate,
         dernier_message_is_me: isMe,
       })
-      if (!error) created++
     } else {
-      // Mettre à jour le dernier message (et ville si pas encore renseignée)
       const updates: any = {
         dernier_message: lastMsg,
         dernier_message_date: lastMsgDate,
@@ -135,14 +147,32 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
       if (departement && !existing.departement) updates.departement = departement
       if (adPrice) updates.ad_price = adPrice
       if (phone && !existing.telephone) updates.telephone = phone
-
-      const { error } = await supabase
-        .from('lbc_leads')
-        .update(updates)
-        .eq('conversation_id', convId)
-      if (!error) updated++
+      toUpdate.push({ convId, updates })
     }
     synced++
+  }
+
+  // Batch insert nouveaux leads
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('lbc_leads').insert(toInsert)
+    if (!error) created = toInsert.length
+  }
+
+  // Updates en parallèle (max 10 simultanés)
+  const updateChunks: Array<{ convId: string; updates: any }>[] = []
+  for (let i = 0; i < toUpdate.length; i += 10) {
+    updateChunks.push(toUpdate.slice(i, i + 10))
+  }
+  for (const chunk of updateChunks) {
+    await Promise.allSettled(
+      chunk.map(async ({ convId, updates }) => {
+        const { error } = await supabase
+          .from('lbc_leads')
+          .update(updates)
+          .eq('conversation_id', convId)
+        if (!error) updated++
+      })
+    )
   }
 
   return { synced, created, updated }
