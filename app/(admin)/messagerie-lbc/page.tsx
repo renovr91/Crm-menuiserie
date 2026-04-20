@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 // TYPES
 // =============================================
 
-type LeadStatut = 'nouveau' | 'repondu' | 'devis_envoye' | 'en_attente' | 'relance' | 'gagne' | 'perdu'
+type LeadStatut = 'nouveau' | 'repondu' | 'devis_envoye' | 'en_attente' | 'relance' | 'gagne' | 'perdu' | 'pas_interesse'
 
 interface Lead {
   id: string
@@ -65,9 +65,10 @@ const STATUT_CONFIG: Record<LeadStatut, { label: string; color: string; bg: stri
   relance:      { label: 'Relance',       color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   emoji: '🔔' },
   gagne:        { label: 'Gagné',         color: '#10B981', bg: 'rgba(16,185,129,0.12)',  emoji: '✅' },
   perdu:        { label: 'Perdu',         color: '#6B7280', bg: 'rgba(107,114,128,0.12)', emoji: '❌' },
+  pas_interesse:{ label: 'Pas intéressant',color: '#9CA3AF', bg: 'rgba(156,163,175,0.10)', emoji: '🚫' },
 }
 
-const ALL_STATUTS: LeadStatut[] = ['nouveau', 'repondu', 'devis_envoye', 'en_attente', 'relance', 'gagne', 'perdu']
+const ALL_STATUTS: LeadStatut[] = ['nouveau', 'repondu', 'devis_envoye', 'en_attente', 'relance', 'gagne', 'perdu', 'pas_interesse']
 
 // =============================================
 // MAIN COMPONENT
@@ -77,7 +78,7 @@ export default function MessagerieLBCPage() {
   // --- State ---
   const [leads, setLeads] = useState<Lead[]>([])
   const [counts, setCounts] = useState<Record<LeadStatut, number>>({
-    nouveau: 0, repondu: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0
+    nouveau: 0, repondu: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0, pas_interesse: 0
   })
   const [activeStatut, setActiveStatut] = useState<LeadStatut | null>(null)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
@@ -109,7 +110,9 @@ export default function MessagerieLBCPage() {
       const res = await fetch(`/api/lbc-leads?${params}`)
       if (!res.ok) throw new Error('Erreur chargement leads')
       const data = await res.json()
-      setLeads(data.leads || [])
+      // Masquer "pas intéressant" par défaut (sauf si on filtre explicitement dessus)
+      const allLeads = data.leads || []
+      setLeads(statut === 'pas_interesse' ? allLeads : allLeads.filter((l: Lead) => l.statut !== 'pas_interesse'))
       setCounts(data.counts || {})
     } catch (e: any) {
       setError(e.message)
@@ -618,6 +621,14 @@ export default function MessagerieLBCPage() {
                     style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
                     Voir sur LBC
                   </a>
+                  {selectedLead.statut !== 'pas_interesse' && (
+                    <button
+                      onClick={() => { updateStatus(selectedLead.conversation_id, 'pas_interesse'); setSelectedLead(null) }}
+                      className="px-2.5 py-1.5 text-[11px] rounded-lg"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                      🚫 Pas intéressant
+                    </button>
+                  )}
                 </div>
               </div>
 

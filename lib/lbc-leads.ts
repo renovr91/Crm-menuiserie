@@ -9,7 +9,7 @@ import { createAdminClient } from './supabase'
 import { listConversations, getAdInfo } from './lbc-messaging'
 
 // Types
-export type LeadStatut = 'nouveau' | 'repondu' | 'devis_envoye' | 'en_attente' | 'relance' | 'gagne' | 'perdu'
+export type LeadStatut = 'nouveau' | 'repondu' | 'devis_envoye' | 'en_attente' | 'relance' | 'gagne' | 'perdu' | 'pas_interesse'
 
 export interface LBCLead {
   id: string
@@ -218,7 +218,7 @@ export async function getLeads(filters?: {
     .select('statut')
 
   const counts: Record<LeadStatut, number> = {
-    nouveau: 0, repondu: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0
+    nouveau: 0, repondu: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0, pas_interesse: 0
   }
   for (const l of (allLeads || [])) {
     if (l.statut in counts) counts[l.statut as LeadStatut]++
