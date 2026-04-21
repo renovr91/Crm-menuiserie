@@ -5,6 +5,7 @@ import {
   updateLeadStatus,
   updateLeadNotes,
   updateLeadPhone,
+  resetUnreadCount,
   getTemplates,
   type LeadStatut,
 } from '@/lib/lbc-leads'
@@ -101,6 +102,15 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'conversationId required' }, { status: 400 })
         }
         await updateLeadPhone(conversationId, telephone || '')
+        return NextResponse.json({ ok: true })
+      }
+
+      case 'reset-unread': {
+        const { conversationId } = body
+        if (!conversationId) {
+          return NextResponse.json({ error: 'conversationId required' }, { status: 400 })
+        }
+        await resetUnreadCount(conversationId)
         return NextResponse.json({ ok: true })
       }
 

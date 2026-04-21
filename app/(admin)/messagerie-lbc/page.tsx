@@ -383,7 +383,7 @@ export default function MessagerieLBCPage() {
       msgCacheRef.current[convId] = sorted
       setPanelMessages(sorted)
 
-      // Mark as read + reset badge
+      // Mark as read + reset badge (local + Supabase)
       if (sorted.length > 0) {
         const lastMsg = sorted[sorted.length - 1]
         if (!lastMsg.isMe) {
@@ -393,10 +393,15 @@ export default function MessagerieLBCPage() {
             body: JSON.stringify({ action: 'read', conv: convId, messageId: lastMsg.id }),
           }).catch(() => {})
         }
-        // Reset unread badge locally
+        // Reset unread badge locally + persist in DB
         setLeads(prev => prev.map(l =>
           l.conversation_id === convId ? { ...l, unread_count: 0 } : l
         ))
+        fetch('/api/lbc-leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset-unread', conversationId: convId }),
+        }).catch(() => {})
       }
     } catch { /* ignore */ }
     finally { setLoadingMessages(false) }
@@ -462,6 +467,21 @@ export default function MessagerieLBCPage() {
 
   useEffect(() => {
     loadLeads(searchQuery)
+  }, [searchQuery, loadLeads])
+
+  // --- Auto-sync toutes les 2 minutes ---
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await fetch('/api/lbc-leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync' }),
+        })
+        await loadLeads(searchQuery)
+      } catch { /* ignore */ }
+    }, 2 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [searchQuery, loadLeads])
 
   // --- Update status (optimistic) ---

@@ -53,9 +53,23 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
   const supabase = createAdminClient()
   let synced = 0, created = 0, updated = 0
 
-  // Charger toutes les conversations LBC (première page)
-  const data = await listConversations()
-  const rawConvs = data._embedded?.conversations || data.conversations || []
+  // Charger TOUTES les conversations LBC (pagination complète)
+  let rawConvs: any[] = []
+  let pageHash: string | undefined = undefined
+  const MAX_PAGES = 10 // Sécurité : max 500 conversations
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await listConversations(pageHash)
+    const convs = data._embedded?.conversations || data.conversations || []
+    if (convs.length === 0) break
+    rawConvs = rawConvs.concat(convs)
+    // Pagination cursor
+    const links = data._links || {}
+    const nextLink = links.next?.href || ''
+    const nextHash = nextLink.match(/pageHash=([^&]+)/)?.[1]
+    if (!nextHash || convs.length < 50) break
+    pageHash = decodeURIComponent(nextHash)
+  }
 
   if (rawConvs.length === 0) return { synced, created, updated }
 
@@ -284,6 +298,18 @@ export async function updateLeadNotes(conversationId: string, notes: string): Pr
   const { error } = await supabase
     .from('lbc_leads')
     .update({ notes })
+    .eq('conversation_id', conversationId)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Remettre à zéro le compteur de messages non lus
+ */
+export async function resetUnreadCount(conversationId: string): Promise<void> {
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('lbc_leads')
+    .update({ unread_count: 0 })
     .eq('conversation_id', conversationId)
   if (error) throw new Error(error.message)
 }
