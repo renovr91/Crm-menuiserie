@@ -314,7 +314,7 @@ function LeadForm({
         disabled={saving}
         className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
       >
-        {saving ? 'Enregistrement...' : 'Ajouter le lead'}
+        {saving ? 'Enregistrement...' : 'Ajouter'}
       </button>
     </form>
   )
@@ -947,7 +947,7 @@ export default function PipelinePage() {
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3.5 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
           >
             <IconPlus className="w-4 h-4" />
-            Nouveau lead
+            Nouveau client
           </button>
         </div>
       </div>
@@ -1007,7 +1007,7 @@ export default function PipelinePage() {
       )}
 
       {/* Modals */}
-      <Modal open={showNewLead} onClose={() => setShowNewLead(false)} title="Nouveau lead">
+      <Modal open={showNewLead} onClose={() => setShowNewLead(false)} title="Nouveau client">
         <LeadForm commerciaux={commerciaux} onSave={handleLeadSaved} />
       </Modal>
 
