@@ -3,6 +3,10 @@
     {
       "path": "/api/qonto/sync",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/taches/rappels",
+      "schedule": "* * * * *"
     }
   ]
 }
