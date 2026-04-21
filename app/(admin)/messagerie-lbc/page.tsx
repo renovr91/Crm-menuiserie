@@ -35,7 +35,7 @@ interface Message {
   createdAt: string
   isMe: boolean
   senderName: string
-  readAt?: string
+  partnerRead?: boolean
   attachments: { url: string; type: string; fileName?: string }[]
 }
 
@@ -372,7 +372,7 @@ export default function MessagerieLBCPage() {
           createdAt: m.createdAt || m.date || '',
           isMe,
           senderName: isMe ? 'Moi (Renov-R)' : contactName,
-          readAt: m.readAt || m.read_at || undefined,
+          partnerRead: m.partnerRead === true,
           attachments: (m.attachments || []).map((a: any) => ({
             url: `https://www.leboncoin.fr/messages/id/${convId}`,
             type: a.contentType || a.type || 'application/octet-stream',
@@ -809,8 +809,8 @@ export default function MessagerieLBCPage() {
                           <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px]" style={{ opacity: 0.6 }}>
                             <span>{formatFullDate(msg.createdAt)}</span>
                             {msg.isMe && (
-                              <span style={{ color: msg.readAt ? (msg.isMe ? '#93E9FF' : '#0EA5E9') : undefined }}>
-                                {msg.readAt ? '✓✓' : '✓'}
+                              <span style={{ color: msg.partnerRead ? '#EF4444' : undefined, fontWeight: msg.partnerRead ? 700 : undefined }}>
+                                {msg.partnerRead ? '✓✓ Lu' : '✓'}
                               </span>
                             )}
                           </div>
