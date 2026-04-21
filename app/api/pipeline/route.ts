@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 
+export async function DELETE(request: NextRequest) {
+  const supabase = createAdminClient()
+  const id = request.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  // Supprimer les données liées d'abord
+  await supabase.from('activites').delete().eq('client_id', id)
+  await supabase.from('messages').delete().eq('client_id', id)
+  await supabase.from('signatures').delete().eq('client_id', id)
+  await supabase.from('client_photos').delete().eq('client_id', id)
+  await supabase.from('sav_tickets').delete().eq('client_id', id)
+  await supabase.from('payments').delete().eq('devis_id', id) // cleanup
+  await supabase.from('devis').delete().eq('client_id', id)
+  await supabase.from('commandes').delete().eq('client_id', id)
+  await supabase.from('poses').delete().eq('client_id', id)
+
+  const { error } = await supabase.from('clients').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const commercialId = request.nextUrl.searchParams.get('commercial_id')

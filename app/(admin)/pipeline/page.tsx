@@ -416,7 +416,90 @@ function CollerMessageModal({
 // Pipeline card
 // ---------------------------------------------------------------------------
 
-function PipelineCard({ client, onStageChange }: { client: PipelineClient; onStageChange: (id: string, newStage: string) => void }) {
+function EditClientForm({ client, commerciaux, onSave }: {
+  client: PipelineClient
+  commerciaux: Commercial[]
+  onSave: () => void
+}) {
+  const [nom, setNom] = useState(client.nom)
+  const [telephone, setTelephone] = useState(client.telephone || '')
+  const [email, setEmail] = useState(client.email || '')
+  const [source, setSource] = useState(client.source || '')
+  const [notes, setNotes] = useState(client.notes || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow bg-white'
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!nom.trim()) { setError('Le nom est requis'); return }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: nom.trim(),
+          telephone: telephone.trim() || null,
+          email: email.trim() || null,
+          source: source || null,
+          notes: notes.trim() || null,
+        }),
+      })
+      if (!res.ok) throw new Error('Erreur mise à jour')
+      onSave()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom *</label>
+        <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} required className={inputClass} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Téléphone</label>
+          <input type="tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
+        <select value={source} onChange={(e) => setSource(e.target.value)} className={inputClass}>
+          <option value="">—</option>
+          {SOURCE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Description / Besoin</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className={inputClass} />
+      </div>
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+      <button type="submit" disabled={saving}
+        className="w-full py-2.5 rounded-lg text-white font-medium text-sm transition-colors"
+        style={{ background: saving ? '#93C5FD' : '#3B82F6' }}>
+        {saving ? 'Enregistrement...' : 'Enregistrer'}
+      </button>
+    </form>
+  )
+}
+
+function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
+  client: PipelineClient
+  onStageChange: (id: string, newStage: string) => void
+  onEdit: (client: PipelineClient) => void
+  onDelete: (id: string) => void
+}) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -452,19 +535,24 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
       )}
 
       <div className="px-3 pt-3 pb-2">
-        {/* Title — blue link style HubSpot */}
-        <p
-          className="text-sm font-semibold truncate pr-5 mb-1.5 hover:underline kanban-link"
-        >
-          {client.notes || client.nom}
+        {/* Ligne 1 — NOM du client */}
+        <p className="text-sm font-semibold truncate pr-5 mb-0.5 hover:underline kanban-link">
+          {client.nom}
         </p>
 
-        {/* Info lines HubSpot style : "Label: value" */}
+        {/* Ligne 2 — Description du besoin */}
+        {client.notes && (
+          <p className="text-[12px] truncate mb-1.5 kanban-text" style={{ opacity: 0.7 }}>
+            {client.notes}
+          </p>
+        )}
+
+        {/* Info lines */}
         <div className="space-y-0.5 text-[12px] kanban-text">
           {client.montant_devis != null && client.montant_devis > 0 && (
             <div><span className="kanban-label">Montant : </span>{formatEUR(client.montant_devis)}</div>
           )}
-          <div><span className="kanban-label">Date de création : </span>{createdDate}</div>
+          <div><span className="kanban-label">Créé le : </span>{createdDate}</div>
           {client.commerciaux && (
             <div><span className="kanban-label">Commercial : </span>{client.commerciaux.nom}</div>
           )}
@@ -498,8 +586,29 @@ function PipelineCard({ client, onStageChange }: { client: PipelineClient; onSta
         )}
       </div>
 
-      {/* Hover actions — chevrons cachés pour look HubSpot */}
+      {/* Hover actions */}
       <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(client) }}
+          className="p-1 rounded hover:bg-blue-50 transition-colors"
+          title="Modifier"
+          style={{ color: '#3B82F6' }}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); if (confirm(`Supprimer ${client.nom} ?`)) onDelete(client.id) }}
+          className="p-1 rounded hover:bg-red-50 transition-colors"
+          title="Supprimer"
+          style={{ color: '#EF4444' }}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+        <div className="w-px h-3 bg-gray-200 mx-0.5" />
         <button
           disabled={!canGoBack}
           onClick={(e) => {
@@ -738,6 +847,7 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [showNewLead, setShowNewLead] = useState(false)
   const [showColler, setShowColler] = useState(false)
+  const [editingClient, setEditingClient] = useState<PipelineClient | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -779,7 +889,20 @@ export default function PipelinePage() {
   function handleLeadSaved() {
     setShowNewLead(false)
     setShowColler(false)
+    setEditingClient(null)
     fetchData()
+  }
+
+  async function handleDelete(clientId: string) {
+    setClients(prev => prev.filter(c => c.id !== clientId))
+    try {
+      await fetch(`/api/pipeline?id=${clientId}`, { method: 'DELETE' })
+    } catch { /* ignore */ }
+    fetchData()
+  }
+
+  function handleEdit(client: PipelineClient) {
+    setEditingClient(client)
   }
 
   // Group clients by stage
@@ -864,7 +987,7 @@ export default function PipelinePage() {
                       <p className="text-center text-[11px] py-8 kanban-empty">Aucun client</p>
                     ) : (
                       stageClients.map((client) => (
-                        <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} />
+                        <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} onEdit={handleEdit} onDelete={handleDelete} />
                       ))
                     )}
                   </div>
@@ -894,6 +1017,17 @@ export default function PipelinePage() {
         commerciaux={commerciaux}
         onSave={handleLeadSaved}
       />
+
+      {/* Modal édition client */}
+      <Modal open={!!editingClient} onClose={() => setEditingClient(null)} title="Modifier le client">
+        {editingClient && (
+          <EditClientForm
+            client={editingClient}
+            commerciaux={commerciaux}
+            onSave={handleLeadSaved}
+          />
+        )}
+      </Modal>
     </div>
   )
 }
