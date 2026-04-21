@@ -28,6 +28,7 @@ export interface LBCLead {
   dernier_message: string | null
   dernier_message_date: string | null
   dernier_message_is_me: boolean
+  unread_count: number
   classification: any
   created_at: string
   updated_at: string
@@ -122,6 +123,9 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
     // Détecter un numéro de téléphone dans le dernier message
     const phone = extractPhone(lastMsg)
 
+    // Compteur messages non lus (unseenCounter de l'API LBC)
+    const unreadCount = conv.unseenCounter ?? conv.unseen_counter ?? conv.unreadCount ?? 0
+
     const existing = existingMap.get(convId)
 
     if (!existing) {
@@ -139,6 +143,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
         dernier_message: lastMsg,
         dernier_message_date: lastMsgDate,
         dernier_message_is_me: isMe,
+        unread_count: unreadCount,
       })
     } else {
       const updates: any = {
@@ -146,6 +151,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
         dernier_message_date: lastMsgDate,
         dernier_message_is_me: isMe,
         contact_name: contactName,
+        unread_count: unreadCount,
       }
       if (city && !existing.city) updates.city = city
       if (zipCode && !existing.zip_code) updates.zip_code = zipCode

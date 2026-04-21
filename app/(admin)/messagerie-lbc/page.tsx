@@ -24,6 +24,7 @@ interface Lead {
   dernier_message: string | null
   dernier_message_date: string | null
   dernier_message_is_me: boolean
+  unread_count: number
   created_at: string
   updated_at: string
 }
@@ -182,10 +183,18 @@ function LeadCard({
     >
       <div className="px-3 pt-3 pb-2">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-sm font-semibold truncate pr-4" style={{ color: '#1A3A5C' }}>
-            {lead.contact_name}
-          </p>
-          <span className="text-[10px] shrink-0 font-medium" style={{ color: timeColor(lead.dernier_message_date) }}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="text-sm font-semibold truncate" style={{ color: '#1A3A5C' }}>
+              {lead.contact_name}
+            </p>
+            {lead.unread_count > 0 && (
+              <span className="shrink-0 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-white px-1"
+                style={{ backgroundColor: '#EF4444' }}>
+                {lead.unread_count}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] shrink-0 font-medium ml-2" style={{ color: timeColor(lead.dernier_message_date) }}>
             {timeSince(lead.dernier_message_date)}
           </span>
         </div>
@@ -374,7 +383,7 @@ export default function MessagerieLBCPage() {
       msgCacheRef.current[convId] = sorted
       setPanelMessages(sorted)
 
-      // Mark as read
+      // Mark as read + reset badge
       if (sorted.length > 0) {
         const lastMsg = sorted[sorted.length - 1]
         if (!lastMsg.isMe) {
@@ -384,6 +393,10 @@ export default function MessagerieLBCPage() {
             body: JSON.stringify({ action: 'read', conv: convId, messageId: lastMsg.id }),
           }).catch(() => {})
         }
+        // Reset unread badge locally
+        setLeads(prev => prev.map(l =>
+          l.conversation_id === convId ? { ...l, unread_count: 0 } : l
+        ))
       }
     } catch { /* ignore */ }
     finally { setLoadingMessages(false) }
