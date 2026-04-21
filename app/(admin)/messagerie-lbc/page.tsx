@@ -55,8 +55,6 @@ interface ClassificationResult {
 // CONSTANTS
 // =============================================
 
-const MY_USER_ID = '45b4d579-2ede-4a25-b889-280ffd926393'
-
 const STAGES: { code: LeadStatut; label: string; color: string }[] = [
   { code: 'nouveau',      label: 'Nouveau',       color: '#3B82F6' },
   { code: 'repondu',      label: 'Répondu',       color: '#0EA5E9' },
@@ -117,6 +115,35 @@ function IconChevronDown({ className = 'w-3.5 h-3.5' }: { className?: string }) 
 }
 
 // =============================================
+// HELPERS
+// =============================================
+
+function timeSince(dateStr: string | null) {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  if (diff < 60000) return "À l'instant"
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} min`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`
+  return `${Math.floor(diff / 86400000)}j`
+}
+
+function timeColor(dateStr: string | null) {
+  if (!dateStr) return '#6B7280'
+  const diff = Date.now() - new Date(dateStr).getTime()
+  if (diff < 3600000) return '#10B981'
+  if (diff < 86400000) return '#F59E0B'
+  return '#EF4444'
+}
+
+function formatFullDate(dateStr: string) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+}
+
+// =============================================
 // LEAD CARD (Kanban)
 // =============================================
 
@@ -144,23 +171,6 @@ function LeadCard({
     .join('')
     .toUpperCase()
 
-  const timeSince = (dateStr: string | null) => {
-    if (!dateStr) return ''
-    const diff = Date.now() - new Date(dateStr).getTime()
-    if (diff < 60000) return "À l'instant"
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`
-    return `${Math.floor(diff / 86400000)}j`
-  }
-
-  const timeColor = (dateStr: string | null) => {
-    if (!dateStr) return '#6B7280'
-    const diff = Date.now() - new Date(dateStr).getTime()
-    if (diff < 3600000) return '#10B981'
-    if (diff < 86400000) return '#F59E0B'
-    return '#EF4444'
-  }
-
   return (
     <div
       className="rounded-md border cursor-pointer transition-all duration-150 relative group bg-white hover:shadow-md"
@@ -171,9 +181,8 @@ function LeadCard({
       onClick={onClick}
     >
       <div className="px-3 pt-3 pb-2">
-        {/* Name + time */}
         <div className="flex items-center justify-between mb-1">
-          <p className="text-sm font-semibold truncate pr-4 hover:underline" style={{ color: '#1A3A5C' }}>
+          <p className="text-sm font-semibold truncate pr-4" style={{ color: '#1A3A5C' }}>
             {lead.contact_name}
           </p>
           <span className="text-[10px] shrink-0 font-medium" style={{ color: timeColor(lead.dernier_message_date) }}>
@@ -181,17 +190,14 @@ function LeadCard({
           </span>
         </div>
 
-        {/* Info lines */}
         <div className="space-y-0.5 text-[12px] text-gray-500">
           {lead.ad_title && (
             <div className="truncate">
               <a
                 href={lead.ad_id ? `https://www.leboncoin.fr/bricolage/${lead.ad_id}.htm` : '#'}
-                target="_blank"
-                rel="noopener noreferrer"
+                target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
-                className="hover:underline"
-                style={{ color: '#0284C7' }}
+                className="hover:underline" style={{ color: '#0284C7' }}
               >
                 {lead.ad_title}
               </a>
@@ -206,13 +212,10 @@ function LeadCard({
         </div>
       </div>
 
-      {/* Footer: last message preview */}
       <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
-            style={{ background: STATUT_CONFIG[lead.statut].bg, color: STATUT_CONFIG[lead.statut].color }}
-          >
+          <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
+            style={{ background: STATUT_CONFIG[lead.statut].bg, color: STATUT_CONFIG[lead.statut].color }}>
             {initials || '?'}
           </span>
           <span className="text-[11px] truncate text-gray-500" style={{
@@ -226,24 +229,16 @@ function LeadCard({
         )}
       </div>
 
-      {/* Hover actions — chevrons */}
+      {/* Hover chevrons */}
       <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-        <button
-          disabled={!canGoBack}
+        <button disabled={!canGoBack}
           onClick={e => { e.stopPropagation(); if (canGoBack) onStageChange(lead.conversation_id, STAGES[currentIndex - 1].code) }}
-          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-          title={canGoBack ? `Vers ${STAGES[currentIndex - 1].label}` : ''}
-          style={{ color: '#516F90' }}
-        >
+          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed" style={{ color: '#516F90' }}>
           <IconChevronLeft className="w-3 h-3" />
         </button>
         <div className="relative">
-          <button
-            onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
-            title="Changer le statut"
-            style={{ color: '#516F90' }}
-          >
+          <button onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
+            className="p-1 rounded hover:bg-gray-100" style={{ color: '#516F90' }}>
             <IconChevronDown className="w-3 h-3" />
           </button>
           {menuOpen && (
@@ -251,15 +246,9 @@ function LeadCard({
               <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setMenuOpen(false) }} />
               <div className="absolute right-0 bottom-full mb-1 z-20 bg-white rounded-md shadow-lg border border-gray-200 py-1.5 w-44">
                 {ALL_STATUTS.map(s => (
-                  <button
-                    key={s}
-                    onClick={e => {
-                      e.stopPropagation()
-                      setMenuOpen(false)
-                      if (s !== lead.statut) onStageChange(lead.conversation_id, s)
-                    }}
-                    className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-gray-50 ${s === lead.statut ? 'font-semibold bg-gray-50' : ''}`}
-                  >
+                  <button key={s}
+                    onClick={e => { e.stopPropagation(); setMenuOpen(false); if (s !== lead.statut) onStageChange(lead.conversation_id, s) }}
+                    className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-gray-50 ${s === lead.statut ? 'font-semibold bg-gray-50' : ''}`}>
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: STATUT_CONFIG[s].color }} />
                     {STATUT_CONFIG[s].emoji} {STATUT_CONFIG[s].label}
                   </button>
@@ -268,13 +257,9 @@ function LeadCard({
             </>
           )}
         </div>
-        <button
-          disabled={!canGoForward}
+        <button disabled={!canGoForward}
           onClick={e => { e.stopPropagation(); if (canGoForward) onStageChange(lead.conversation_id, STAGES[currentIndex + 1].code) }}
-          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-          title={canGoForward ? `Vers ${STAGES[currentIndex + 1].label}` : ''}
-          style={{ color: '#516F90' }}
-        >
+          className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed" style={{ color: '#516F90' }}>
           <IconChevronRight className="w-3 h-3" />
         </button>
       </div>
@@ -283,393 +268,7 @@ function LeadCard({
 }
 
 // =============================================
-// CONVERSATION PANEL (Slide-over)
-// =============================================
-
-function ConversationPanel({
-  lead,
-  onClose,
-  onStatusChange,
-}: {
-  lead: Lead
-  onClose: () => void
-  onStatusChange: (convId: string, newStatut: LeadStatut) => void
-}) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [classification, setClassification] = useState<ClassificationResult | null>(null)
-  const [loadingMessages, setLoadingMessages] = useState(false)
-  const [classifying, setClassifying] = useState(false)
-  const [replyText, setReplyText] = useState('')
-  const [sending, setSending] = useState(false)
-  const [editingNotes, setEditingNotes] = useState(false)
-  const [notesText, setNotesText] = useState(lead.notes || '')
-
-  const chatEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  // Load messages
-  const loadMessages = useCallback(async () => {
-    setLoadingMessages(true)
-    try {
-      const res = await fetch(`/api/lbc-messaging?action=messages&conv=${lead.conversation_id}`)
-      if (!res.ok) throw new Error('Erreur')
-      const data = await res.json()
-      const rawMsgs = data._embedded?.messages || data.messages || []
-      const msgs: Message[] = rawMsgs.map((m: any) => {
-        const isMe = m.outgoing === true
-        return {
-          id: m.messageId || m.id,
-          text: m.text || m.body || '',
-          createdAt: m.createdAt || m.date || '',
-          isMe,
-          senderName: isMe ? 'Moi (Renov-R)' : lead.contact_name,
-          attachments: (m.attachments || []).map((a: any) => ({
-            url: `https://www.leboncoin.fr/messages/id/${lead.conversation_id}`,
-            type: a.contentType || a.type || 'application/octet-stream',
-            fileName: a.path ? a.path.split('/').pop() || 'fichier' : 'fichier',
-          })),
-        }
-      })
-      setMessages(msgs.reverse())
-
-      // Mark as read
-      if (msgs.length > 0) {
-        const lastMsg = msgs[msgs.length - 1]
-        if (!lastMsg.isMe) {
-          fetch('/api/lbc-messaging', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'read', conv: lead.conversation_id, messageId: lastMsg.id }),
-          }).catch(() => {})
-        }
-      }
-    } catch { /* ignore */ }
-    finally { setLoadingMessages(false) }
-  }, [lead.conversation_id, lead.contact_name])
-
-  // Load templates
-  const loadTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/lbc-leads?action=templates')
-      if (res.ok) {
-        const data = await res.json()
-        setTemplates(data.templates || [])
-      }
-    } catch { /* ignore */ }
-  }, [])
-
-  // Classify
-  const classifyLastMessage = useCallback(async (msgs: Message[]) => {
-    const lastClientMsg = [...msgs].reverse().find(m => !m.isMe)
-    if (!lastClientMsg) return
-    setClassifying(true)
-    try {
-      const params = new URLSearchParams({
-        action: 'classify',
-        titre: lead.ad_title || '',
-        message: lastClientMsg.text,
-      })
-      const res = await fetch(`/api/lbc-leads?${params}`)
-      if (res.ok) {
-        const data = await res.json()
-        setClassification(data)
-      }
-    } catch { /* ignore */ }
-    finally { setClassifying(false) }
-  }, [lead.ad_title])
-
-  useEffect(() => {
-    loadMessages()
-    loadTemplates()
-  }, [loadMessages, loadTemplates])
-
-  useEffect(() => {
-    if (messages.length > 0) classifyLastMessage(messages)
-  }, [messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-  }, [messages])
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  // Reset notes when lead changes
-  useEffect(() => {
-    setNotesText(lead.notes || '')
-    setEditingNotes(false)
-  }, [lead.conversation_id, lead.notes])
-
-  const formatFullDate = (dateStr: string) => {
-    if (!dateStr) return ''
-    return new Date(dateStr).toLocaleString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
-  }
-
-  const handleSend = async () => {
-    if (!replyText.trim() || sending) return
-    setSending(true)
-    try {
-      const res = await fetch('/api/lbc-messaging', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', conv: lead.conversation_id, text: replyText.trim() }),
-      })
-      if (!res.ok) throw new Error('Erreur envoi')
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(),
-        text: replyText.trim(),
-        createdAt: new Date().toISOString(),
-        isMe: true,
-        senderName: 'Moi (Renov-R)',
-        attachments: [],
-      }])
-      setReplyText('')
-      inputRef.current?.focus()
-      if (lead.statut === 'nouveau') {
-        onStatusChange(lead.conversation_id, 'repondu')
-      }
-    } catch (e: any) {
-      alert('Erreur: ' + e.message)
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-  }
-
-  const saveNotes = async () => {
-    try {
-      await fetch('/api/lbc-leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update-notes', conversationId: lead.conversation_id, notes: notesText }),
-      })
-      setEditingNotes(false)
-    } catch { /* ignore */ }
-  }
-
-  const cfg = STATUT_CONFIG[lead.statut]
-
-  return (
-    <div className="fixed inset-y-0 right-0 w-[520px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col">
-      {/* Header */}
-      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/80">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0"
-              style={{ background: cfg.bg, color: cfg.color }}>
-              {lead.contact_name?.[0]?.toUpperCase() || '?'}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900 truncate">{lead.contact_name}</span>
-                {lead.telephone && (
-                  <span className="text-[10px] px-1.5 rounded shrink-0"
-                    style={{ background: 'rgba(16,185,129,0.12)', color: '#10B981' }}>
-                    {lead.telephone}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                {lead.ad_title && (
-                  <a href={lead.ad_id ? `https://www.leboncoin.fr/bricolage/${lead.ad_id}.htm` : '#'}
-                    target="_blank" rel="noopener noreferrer"
-                    className="text-[11px] hover:underline truncate" style={{ color: '#0284C7' }}>
-                    {lead.ad_title}
-                  </a>
-                )}
-                {lead.ad_price && (
-                  <span className="text-[11px] font-medium shrink-0" style={{ color: '#16A34A' }}>{lead.ad_price}</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <a href={`https://www.leboncoin.fr/messages/${lead.conversation_id}`}
-              target="_blank" rel="noopener noreferrer"
-              className="px-2 py-1.5 text-[11px] rounded-lg bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 transition-colors">
-              LBC
-            </a>
-
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors">
-              <IconClose className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Status buttons row */}
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
-          {ALL_STATUTS.map(s => {
-            const sc = STATUT_CONFIG[s]
-            const isActive = lead.statut === s
-            return (
-              <button
-                key={s}
-                onClick={() => {
-                  if (s !== lead.statut) {
-                    onStatusChange(lead.conversation_id, s)
-                    if (s === 'pas_interesse') onClose()
-                  }
-                }}
-                className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
-                style={{
-                  background: isActive ? sc.bg : 'transparent',
-                  color: isActive ? sc.color : '#9CA3AF',
-                  border: `1.5px solid ${isActive ? sc.color : '#E5E7EB'}`,
-                  fontWeight: isActive ? 700 : 500,
-                }}
-              >
-                {sc.emoji} {sc.label}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Notes */}
-        <div className="mt-2">
-          {editingNotes ? (
-            <div className="flex gap-2">
-              <input type="text" value={notesText} onChange={e => setNotesText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && saveNotes()}
-                placeholder="Notes (ex: client veut 3 fenêtres...)"
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg outline-none bg-white border border-gray-200"
-                autoFocus />
-              <button onClick={saveNotes} className="px-2 py-1 text-[10px] rounded-lg bg-emerald-500 text-white">OK</button>
-              <button onClick={() => { setEditingNotes(false); setNotesText(lead.notes || '') }}
-                className="px-2 py-1 text-[10px] rounded-lg bg-gray-100 text-gray-500">✕</button>
-            </div>
-          ) : (
-            <button onClick={() => { setEditingNotes(true); setNotesText(lead.notes || '') }}
-              className="text-[11px] w-full text-left px-2 py-1 rounded-lg transition-colors hover:bg-gray-100"
-              style={{ color: lead.notes ? '#374151' : '#9CA3AF' }}>
-              {lead.notes ? `📝 ${lead.notes}` : '+ Ajouter une note...'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3" style={{ background: '#FAFBFC' }}>
-        {loadingMessages ? (
-          <div className="text-center py-8 text-gray-400 text-sm">Chargement des messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm">Aucun message</div>
-        ) : (
-          messages.map((msg, i) => {
-            const showName = i === 0 || messages[i - 1].isMe !== msg.isMe
-            return (
-              <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`} style={{ maxWidth: '80%' }}>
-                  {showName && (
-                    <div className="text-[11px] font-semibold mb-1 px-2 flex items-center gap-1.5"
-                      style={{ color: msg.isMe ? '#0284C7' : '#D946EF' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: msg.isMe ? '#0284C7' : '#D946EF', display: 'inline-block' }} />
-                      {msg.senderName}
-                    </div>
-                  )}
-                  <div className="px-4 py-2.5 rounded-2xl text-sm" style={{
-                    background: msg.isMe ? 'linear-gradient(135deg, #0284C7, #0EA5E9)' : '#fff',
-                    color: msg.isMe ? '#fff' : '#1F2937',
-                    borderBottomRightRadius: msg.isMe ? 4 : undefined,
-                    borderBottomLeftRadius: !msg.isMe ? 4 : undefined,
-                    border: msg.isMe ? 'none' : '1px solid #E5E7EB',
-                  }}>
-                    <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-                    {msg.attachments.length > 0 && (
-                      <div className="mt-2">
-                        {msg.attachments.map((att, idx) => (
-                          <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium no-underline"
-                            style={{
-                              background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'rgba(14,165,233,0.1)',
-                              color: msg.isMe ? '#fff' : '#0284C7',
-                              border: msg.isMe ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(14,165,233,0.3)',
-                            }}>
-                            {att.type === 'application/pdf' ? '📄 PDF' : att.type?.startsWith('image') ? '🖼️ Image' : '📎 Fichier'} — voir sur LBC
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                    <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
-                      {formatFullDate(msg.createdAt)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        )}
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Quick replies */}
-      {(classification || templates.length > 0) && !loadingMessages && messages.length > 0 && (
-        <div className="px-4 py-2 border-t border-gray-100 overflow-x-auto">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] shrink-0 font-medium text-gray-400">
-              {classifying ? '⏳ Analyse...' : '💡 Réponses :'}
-            </span>
-            {classification && !classifying && (
-              <button onClick={() => setReplyText(classification.response)}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-medium shrink-0 transition-all hover:opacity-80"
-                style={{ background: 'linear-gradient(135deg, #0284C7, #0EA5E9)', color: '#fff' }}>
-                ✨ Cas {classification.cas}
-              </button>
-            )}
-            {templates.map(t => (
-              <button key={t.id} onClick={() => setReplyText(t.contenu)}
-                className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium shrink-0 transition-all hover:opacity-80 bg-gray-100 text-gray-600 border border-gray-200">
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Reply box */}
-      <div className="px-4 py-3 border-t border-gray-200 bg-white">
-        <div className="flex items-end gap-3">
-          <textarea
-            ref={inputRef}
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Écrire un message..."
-            rows={2}
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            style={{ maxHeight: 200, minHeight: 60 }}
-            onInput={e => {
-              const target = e.target as HTMLTextAreaElement
-              target.style.height = 'auto'
-              target.style.height = Math.min(target.scrollHeight, 200) + 'px'
-            }}
-          />
-          <button onClick={handleSend} disabled={!replyText.trim() || sending}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
-            style={{
-              background: replyText.trim() ? '#0EA5E9' : '#F3F4F6',
-              color: replyText.trim() ? '#fff' : '#9CA3AF',
-              opacity: sending ? 0.5 : 1,
-            }}>
-            {sending ? '...' : 'Envoyer'}
-          </button>
-        </div>
-        <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</div>
-      </div>
-    </div>
-  )
-}
-
-// =============================================
-// MAIN PAGE
+// MAIN PAGE (messages cache + panel intégré)
 // =============================================
 
 export default function MessagerieLBCPage() {
@@ -677,13 +276,35 @@ export default function MessagerieLBCPage() {
   const [counts, setCounts] = useState<Record<LeadStatut, number>>({
     nouveau: 0, repondu: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0, pas_interesse: 0
   })
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  // Load all leads (no filter — we group by stage client-side)
+  // Messages cache : { convId → Message[] }
+  const msgCacheRef = useRef<Record<string, Message[]>>({})
+  const [panelMessages, setPanelMessages] = useState<Message[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
+
+  // Templates + classification (chargés une seule fois)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [classification, setClassification] = useState<ClassificationResult | null>(null)
+  const [classifying, setClassifying] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesText, setNotesText] = useState('')
+
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const selectedLead = useMemo(() =>
+    leads.find(l => l.conversation_id === selectedConvId) || null,
+    [leads, selectedConvId]
+  )
+
+  // --- Load leads from Supabase (fast, no LBC API) ---
   const loadLeads = useCallback(async (search?: string) => {
     try {
       setError(null)
@@ -701,6 +322,7 @@ export default function MessagerieLBCPage() {
     }
   }, [])
 
+  // --- Sync (manual only — heavy) ---
   const handleSync = useCallback(async () => {
     setSyncing(true)
     try {
@@ -717,34 +339,132 @@ export default function MessagerieLBCPage() {
     }
   }, [searchQuery, loadLeads])
 
+  // --- Load messages (with cache) ---
+  const loadMessages = useCallback(async (convId: string, contactName: string) => {
+    // Check cache first
+    if (msgCacheRef.current[convId]) {
+      setPanelMessages(msgCacheRef.current[convId])
+      return
+    }
+
+    setLoadingMessages(true)
+    setPanelMessages([])
+    try {
+      const res = await fetch(`/api/lbc-messaging?action=messages&conv=${convId}`)
+      if (!res.ok) throw new Error('Erreur')
+      const data = await res.json()
+      const rawMsgs = data._embedded?.messages || data.messages || []
+      const msgs: Message[] = rawMsgs.map((m: any) => {
+        const isMe = m.outgoing === true
+        return {
+          id: m.messageId || m.id,
+          text: m.text || m.body || '',
+          createdAt: m.createdAt || m.date || '',
+          isMe,
+          senderName: isMe ? 'Moi (Renov-R)' : contactName,
+          attachments: (m.attachments || []).map((a: any) => ({
+            url: `https://www.leboncoin.fr/messages/id/${convId}`,
+            type: a.contentType || a.type || 'application/octet-stream',
+            fileName: a.path ? a.path.split('/').pop() || 'fichier' : 'fichier',
+          })),
+        }
+      })
+
+      const sorted = msgs.reverse()
+      msgCacheRef.current[convId] = sorted
+      setPanelMessages(sorted)
+
+      // Mark as read
+      if (sorted.length > 0) {
+        const lastMsg = sorted[sorted.length - 1]
+        if (!lastMsg.isMe) {
+          fetch('/api/lbc-messaging', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'read', conv: convId, messageId: lastMsg.id }),
+          }).catch(() => {})
+        }
+      }
+    } catch { /* ignore */ }
+    finally { setLoadingMessages(false) }
+  }, [])
+
+  // --- Load templates (once) ---
+  useEffect(() => {
+    fetch('/api/lbc-leads?action=templates')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.templates) setTemplates(data.templates) })
+      .catch(() => {})
+  }, [])
+
+  // --- Classify ---
+  const classifyLastMessage = useCallback(async (adTitle: string, msgs: Message[]) => {
+    const lastClientMsg = [...msgs].reverse().find(m => !m.isMe)
+    if (!lastClientMsg) return
+    setClassifying(true)
+    try {
+      const params = new URLSearchParams({ action: 'classify', titre: adTitle || '', message: lastClientMsg.text })
+      const res = await fetch(`/api/lbc-leads?${params}`)
+      if (res.ok) setClassification(await res.json())
+    } catch { /* ignore */ }
+    finally { setClassifying(false) }
+  }, [])
+
+  // --- Select a lead (open panel) ---
+  const selectLead = useCallback((convId: string) => {
+    setSelectedConvId(convId)
+    setReplyText('')
+    setClassification(null)
+    setEditingNotes(false)
+    const lead = leads.find(l => l.conversation_id === convId)
+    if (lead) {
+      setNotesText(lead.notes || '')
+      loadMessages(convId, lead.contact_name)
+    }
+  }, [leads, loadMessages])
+
+  // --- Classify when messages load ---
+  useEffect(() => {
+    if (selectedLead && panelMessages.length > 0) {
+      classifyLastMessage(selectedLead.ad_title || '', panelMessages)
+    }
+  }, [selectedConvId, panelMessages.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- Scroll to bottom ---
+  useEffect(() => {
+    if (panelMessages.length > 0) {
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
+  }, [panelMessages])
+
+  // --- Focus input ---
+  useEffect(() => {
+    if (selectedConvId) setTimeout(() => inputRef.current?.focus(), 100)
+  }, [selectedConvId])
+
+  // --- Init ---
   useEffect(() => {
     loadLeads()
-    handleSync()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadLeads])
 
   useEffect(() => {
     loadLeads(searchQuery)
   }, [searchQuery, loadLeads])
 
-  // Update status (optimistic)
+  // --- Update status (optimistic) ---
   const updateStatus = async (convId: string, newStatut: LeadStatut) => {
-    // Optimistic local update
     const oldLead = leads.find(l => l.conversation_id === convId)
     if (!oldLead) return
-    const oldStatut = oldLead.statut
 
     setLeads(prev => prev.map(l =>
       l.conversation_id === convId ? { ...l, statut: newStatut } : l
     ))
     setCounts(prev => {
       const c = { ...prev }
-      if (oldStatut in c) c[oldStatut]--
+      if (oldLead.statut in c) c[oldLead.statut]--
       if (newStatut in c) c[newStatut]++
       return c
     })
-    if (selectedLead?.conversation_id === convId) {
-      setSelectedLead(prev => prev ? { ...prev, statut: newStatut } : null)
-    }
 
     try {
       await fetch('/api/lbc-leads', {
@@ -752,10 +472,72 @@ export default function MessagerieLBCPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update-status', conversationId: convId, statut: newStatut }),
       })
-    } catch { /* revert on error could be added */ }
+    } catch { /* ignore */ }
   }
 
-  // Group leads by stage (exclude pas_interesse from kanban)
+  // --- Send message ---
+  const handleSend = async () => {
+    if (!replyText.trim() || !selectedLead || sending) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/lbc-messaging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send', conv: selectedLead.conversation_id, text: replyText.trim() }),
+      })
+      if (!res.ok) throw new Error('Erreur envoi')
+      const newMsg: Message = {
+        id: crypto.randomUUID(),
+        text: replyText.trim(),
+        createdAt: new Date().toISOString(),
+        isMe: true,
+        senderName: 'Moi (Renov-R)',
+        attachments: [],
+      }
+      const updated = [...panelMessages, newMsg]
+      setPanelMessages(updated)
+      msgCacheRef.current[selectedLead.conversation_id] = updated
+      setReplyText('')
+      inputRef.current?.focus()
+      if (selectedLead.statut === 'nouveau') {
+        updateStatus(selectedLead.conversation_id, 'repondu')
+      }
+    } catch (e: any) {
+      alert('Erreur: ' + e.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  // --- Save notes ---
+  const saveNotes = async () => {
+    if (!selectedLead) return
+    try {
+      await fetch('/api/lbc-leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-notes', conversationId: selectedLead.conversation_id, notes: notesText }),
+      })
+      setLeads(prev => prev.map(l =>
+        l.conversation_id === selectedLead.conversation_id ? { ...l, notes: notesText } : l
+      ))
+      setEditingNotes(false)
+    } catch { /* ignore */ }
+  }
+
+  // --- Close panel ---
+  const closePanel = () => {
+    setSelectedConvId(null)
+    setReplyText('')
+    setClassification(null)
+    setEditingNotes(false)
+  }
+
+  // --- Group leads by stage ---
   const byStage = useMemo(() => {
     const map: Record<string, Lead[]> = {}
     for (const s of STAGES) map[s.code] = []
@@ -768,6 +550,10 @@ export default function MessagerieLBCPage() {
 
   const totalLeads = Object.values(counts).reduce((a, b) => a + b, 0)
   const pasIntCount = counts.pas_interesse || 0
+
+  // =============================================
+  // RENDER
+  // =============================================
 
   return (
     <div className="h-full flex flex-col -m-8 bg-gray-50/50">
@@ -783,29 +569,14 @@ export default function MessagerieLBCPage() {
           )}
         </div>
         <div className="flex items-center gap-2.5">
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="Rechercher..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 transition-shadow w-56"
-          />
-
-          {/* Sync */}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3.5 py-2 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-medium"
-          >
+          <input type="text" placeholder="Rechercher..."
+            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 w-56" />
+          <button onClick={handleSync} disabled={syncing}
+            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3.5 py-2 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-medium">
             {syncing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                Sync...
-              </>
-            ) : (
-              '🔄 Sync LBC'
-            )}
+              <><div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />Sync...</>
+            ) : '🔄 Sync LBC'}
           </button>
         </div>
       </div>
@@ -832,7 +603,6 @@ export default function MessagerieLBCPage() {
               const stageLeads = byStage[stage.code] || []
               return (
                 <div key={stage.code} className="w-72 flex flex-col shrink-0 rounded-md border border-gray-200 bg-gray-50/80">
-                  {/* Column header */}
                   <div className="px-3 py-2.5 border-b border-gray-200 bg-white rounded-t-md">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
@@ -842,20 +612,14 @@ export default function MessagerieLBCPage() {
                       </span>
                     </div>
                   </div>
-
-                  {/* Cards */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {stageLeads.length === 0 ? (
                       <p className="text-center text-[11px] py-8 text-gray-400">Aucun lead</p>
                     ) : (
                       stageLeads.map(lead => (
-                        <LeadCard
-                          key={lead.conversation_id}
-                          lead={lead}
-                          onStageChange={updateStatus}
-                          onClick={() => setSelectedLead(lead)}
-                          isSelected={selectedLead?.conversation_id === lead.conversation_id}
-                        />
+                        <LeadCard key={lead.conversation_id} lead={lead} onStageChange={updateStatus}
+                          onClick={() => selectLead(lead.conversation_id)}
+                          isSelected={selectedConvId === lead.conversation_id} />
                       ))
                     )}
                   </div>
@@ -866,16 +630,200 @@ export default function MessagerieLBCPage() {
         </div>
       )}
 
-      {/* Conversation slide-over */}
+      {/* ========== CONVERSATION PANEL (slide-over, stays mounted) ========== */}
       {selectedLead && (
         <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setSelectedLead(null)} />
-          <ConversationPanel
-            lead={selectedLead}
-            onClose={() => setSelectedLead(null)}
-            onStatusChange={updateStatus}
-          />
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={closePanel} />
+          <div className="fixed inset-y-0 right-0 w-[520px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col">
+            {/* Header */}
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/80 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0"
+                    style={{ background: STATUT_CONFIG[selectedLead.statut].bg, color: STATUT_CONFIG[selectedLead.statut].color }}>
+                    {selectedLead.contact_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900 truncate">{selectedLead.contact_name}</span>
+                      {selectedLead.telephone && (
+                        <span className="text-[10px] px-1.5 rounded shrink-0"
+                          style={{ background: 'rgba(16,185,129,0.12)', color: '#10B981' }}>
+                          {selectedLead.telephone}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {selectedLead.ad_title && (
+                        <a href={selectedLead.ad_id ? `https://www.leboncoin.fr/bricolage/${selectedLead.ad_id}.htm` : '#'}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[11px] hover:underline truncate" style={{ color: '#0284C7' }}>
+                          {selectedLead.ad_title}
+                        </a>
+                      )}
+                      {selectedLead.ad_price && (
+                        <span className="text-[11px] font-medium shrink-0" style={{ color: '#16A34A' }}>{selectedLead.ad_price}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a href={`https://www.leboncoin.fr/messages/${selectedLead.conversation_id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="px-2 py-1.5 text-[11px] rounded-lg bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200">
+                    LBC
+                  </a>
+                  <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                    <IconClose className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Status buttons */}
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {ALL_STATUTS.map(s => {
+                  const sc = STATUT_CONFIG[s]
+                  const isActive = selectedLead.statut === s
+                  return (
+                    <button key={s}
+                      onClick={() => {
+                        if (s !== selectedLead.statut) {
+                          updateStatus(selectedLead.conversation_id, s)
+                          if (s === 'pas_interesse') closePanel()
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                      style={{
+                        background: isActive ? sc.bg : 'transparent',
+                        color: isActive ? sc.color : '#9CA3AF',
+                        border: `1.5px solid ${isActive ? sc.color : '#E5E7EB'}`,
+                        fontWeight: isActive ? 700 : 500,
+                      }}>
+                      {sc.emoji} {sc.label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Notes */}
+              <div className="mt-2">
+                {editingNotes ? (
+                  <div className="flex gap-2">
+                    <input type="text" value={notesText} onChange={e => setNotesText(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && saveNotes()}
+                      placeholder="Notes (ex: client veut 3 fenêtres...)"
+                      className="flex-1 px-3 py-1.5 text-xs rounded-lg outline-none bg-white border border-gray-200" autoFocus />
+                    <button onClick={saveNotes} className="px-2 py-1 text-[10px] rounded-lg bg-emerald-500 text-white">OK</button>
+                    <button onClick={() => { setEditingNotes(false); setNotesText(selectedLead.notes || '') }}
+                      className="px-2 py-1 text-[10px] rounded-lg bg-gray-100 text-gray-500">✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setEditingNotes(true); setNotesText(selectedLead.notes || '') }}
+                    className="text-[11px] w-full text-left px-2 py-1 rounded-lg hover:bg-gray-100"
+                    style={{ color: selectedLead.notes ? '#374151' : '#9CA3AF' }}>
+                    {selectedLead.notes ? `📝 ${selectedLead.notes}` : '+ Ajouter une note...'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3" style={{ background: '#FAFBFC' }}>
+              {loadingMessages ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="ml-2 text-gray-400 text-sm">Chargement...</span>
+                </div>
+              ) : panelMessages.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Aucun message</div>
+              ) : (
+                panelMessages.map((msg, i) => {
+                  const showName = i === 0 || panelMessages[i - 1].isMe !== msg.isMe
+                  return (
+                    <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`} style={{ maxWidth: '80%' }}>
+                        {showName && (
+                          <div className="text-[11px] font-semibold mb-1 px-2 flex items-center gap-1.5"
+                            style={{ color: msg.isMe ? '#0284C7' : '#D946EF' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: msg.isMe ? '#0284C7' : '#D946EF', display: 'inline-block' }} />
+                            {msg.senderName}
+                          </div>
+                        )}
+                        <div className="px-4 py-2.5 rounded-2xl text-sm" style={{
+                          background: msg.isMe ? 'linear-gradient(135deg, #0284C7, #0EA5E9)' : '#fff',
+                          color: msg.isMe ? '#fff' : '#1F2937',
+                          borderBottomRightRadius: msg.isMe ? 4 : undefined,
+                          borderBottomLeftRadius: !msg.isMe ? 4 : undefined,
+                          border: msg.isMe ? 'none' : '1px solid #E5E7EB',
+                        }}>
+                          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+                          {msg.attachments.length > 0 && (
+                            <div className="mt-2">
+                              {msg.attachments.map((att, idx) => (
+                                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium no-underline"
+                                  style={{
+                                    background: msg.isMe ? 'rgba(255,255,255,0.2)' : 'rgba(14,165,233,0.1)',
+                                    color: msg.isMe ? '#fff' : '#0284C7',
+                                  }}>
+                                  {att.type === 'application/pdf' ? '📄 PDF' : att.type?.startsWith('image') ? '🖼️ Image' : '📎 Fichier'} — voir sur LBC
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-right mt-1 text-[10px]" style={{ opacity: 0.6 }}>
+                            {formatFullDate(msg.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Quick replies */}
+            {(classification || templates.length > 0) && !loadingMessages && panelMessages.length > 0 && (
+              <div className="px-4 py-2 border-t border-gray-100 overflow-x-auto shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] shrink-0 font-medium text-gray-400">
+                    {classifying ? '⏳ Analyse...' : '💡 Réponses :'}
+                  </span>
+                  {classification && !classifying && (
+                    <button onClick={() => setReplyText(classification.response)}
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-medium shrink-0 hover:opacity-80"
+                      style={{ background: 'linear-gradient(135deg, #0284C7, #0EA5E9)', color: '#fff' }}>
+                      ✨ Cas {classification.cas}
+                    </button>
+                  )}
+                  {templates.map(t => (
+                    <button key={t.id} onClick={() => setReplyText(t.contenu)}
+                      className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium shrink-0 hover:opacity-80 bg-gray-100 text-gray-600 border border-gray-200">
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reply box */}
+            <div className="px-4 py-3 border-t border-gray-200 bg-white shrink-0">
+              <div className="flex items-end gap-3">
+                <textarea ref={inputRef} value={replyText} onChange={e => setReplyText(e.target.value)}
+                  onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={2}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  style={{ maxHeight: 200, minHeight: 60 }}
+                  onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px' }} />
+                <button onClick={handleSend} disabled={!replyText.trim() || sending}
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{ background: replyText.trim() ? '#0EA5E9' : '#F3F4F6', color: replyText.trim() ? '#fff' : '#9CA3AF', opacity: sending ? 0.5 : 1 }}>
+                  {sending ? '...' : 'Envoyer'}
+                </button>
+              </div>
+              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</div>
+            </div>
+          </div>
         </>
       )}
     </div>
