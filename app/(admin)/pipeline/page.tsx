@@ -9,13 +9,13 @@ import { useRouter } from 'next/navigation'
 
 const STAGES = [
   { code: 'nouveau', label: 'Nouveau', color: '#3B82F6' },
-  { code: 'contacte', label: 'Contact\u00e9', color: '#EAB308' },
+  { code: 'contacte', label: 'Contacté', color: '#EAB308' },
   { code: 'visite', label: 'Visite', color: '#6366F1' },
-  { code: 'devis_envoye', label: 'Devis envoy\u00e9', color: '#F97316' },
-  { code: 'signe', label: 'Sign\u00e9', color: '#22C55E' },
-  { code: 'commande', label: 'Command\u00e9', color: '#A855F7' },
-  { code: 'livre', label: 'Livr\u00e9', color: '#8B5CF6' },
-  { code: 'pose', label: 'Pos\u00e9', color: '#14B8A6' },
+  { code: 'devis_envoye', label: 'Devis envoyé', color: '#F97316' },
+  { code: 'signe', label: 'Signé', color: '#22C55E' },
+  { code: 'commande', label: 'Commandé', color: '#A855F7' },
+  { code: 'livre', label: 'Livré', color: '#8B5CF6' },
+  { code: 'pose', label: 'Posé', color: '#14B8A6' },
 ] as const
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -28,9 +28,9 @@ const SOURCE_COLORS: Record<string, string> = {
 
 const SOURCE_OPTIONS = [
   { value: 'leboncoin', label: 'LeBonCoin' },
-  { value: 'telephone', label: 'T\u00e9l\u00e9phone' },
+  { value: 'telephone', label: 'Téléphone' },
   { value: 'email', label: 'Email' },
-  { value: 'bouche a oreille', label: 'Bouche \u00e0 oreille' },
+  { value: 'bouche a oreille', label: 'Bouche à oreille' },
   { value: 'site_web', label: 'Site web' },
   { value: 'autre', label: 'Autre' },
 ]
@@ -45,31 +45,29 @@ interface Commercial {
   couleur: string
 }
 
-interface DevisItem {
-  id: string
-  reference: string | null
-  status: string
-  montant_ttc: number | null
-  sent_at: string | null
-  signed_at: string | null
-  payment_status: string | null
-}
-
-interface PipelineClient {
+interface Client {
   id: string
   nom: string
   telephone: string | null
   email: string | null
   source: string | null
-  notes: string | null
+  adresse: string | null
+  ville: string | null
+  code_postal: string | null
+}
+
+interface Affaire {
+  id: string
+  client_id: string
+  titre: string
+  description: string | null
   pipeline_stage: string
+  montant_estime: number | null
   commercial_id: string | null
   created_at: string
-  alerts: string[]
-  montant_devis: number | null
-  devis_count: number
+  updated_at: string
+  clients: Client | null
   commerciaux: { nom: string; couleur: string } | null
-  devis: DevisItem[]
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +78,6 @@ function formatEUR(val: number): string {
   return Number(val).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 }
 
-function sourceLabel(source: string | null): string {
-  if (!source) return ''
-  const opt = SOURCE_OPTIONS.find((s) => s.value === source)
-  return opt ? opt.label : source
-}
-
 // ---------------------------------------------------------------------------
 // SVG Icons (inline, no emoji)
 // ---------------------------------------------------------------------------
@@ -94,14 +86,6 @@ function IconPlus({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-    </svg>
-  )
-}
-
-function IconClipboard({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
     </svg>
   )
 }
@@ -173,10 +157,10 @@ function IconUsers({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
-function IconBell({ className = 'w-4 h-4' }: { className?: string }) {
+function IconSearch({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
   )
 }
@@ -185,12 +169,12 @@ function IconBell({ className = 'w-4 h-4' }: { className?: string }) {
 // Modal wrapper
 // ---------------------------------------------------------------------------
 
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div className={`relative bg-white rounded-2xl shadow-2xl mx-4 max-h-[90vh] overflow-y-auto ${wide ? 'w-full max-w-2xl' : 'w-full max-w-lg'}`}>
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
@@ -204,59 +188,103 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 // ---------------------------------------------------------------------------
-// Nouveau lead form (shared between both modals)
+// Nouvelle Affaire form
 // ---------------------------------------------------------------------------
 
-function LeadForm({
+function NouvelleAffaireForm({
   commerciaux,
   onSave,
-  initial,
 }: {
   commerciaux: Commercial[]
   onSave: () => void
-  initial?: { nom?: string; telephone?: string; email?: string; source?: string; notes?: string }
 }) {
-  const [nom, setNom] = useState(initial?.nom || '')
-  const [telephone, setTelephone] = useState(initial?.telephone || '')
-  const [email, setEmail] = useState(initial?.email || '')
-  const [source, setSource] = useState(initial?.source || '')
-  const [besoin, setBesoin] = useState(initial?.notes || '')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [allClients, setAllClients] = useState<Client[]>([])
+  const [loadingClients, setLoadingClients] = useState(true)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [showNewClientForm, setShowNewClientForm] = useState(false)
+
+  // Affaire fields
+  const [titre, setTitre] = useState('')
+  const [description, setDescription] = useState('')
+  const [montant, setMontant] = useState('')
   const [commercialId, setCommercialId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    if (initial) {
-      setNom(initial.nom || '')
-      setTelephone(initial.telephone || '')
-      setEmail(initial.email || '')
-      setSource(initial.source || '')
-      setBesoin(initial.notes || '')
-    }
-  }, [initial])
+  // New client fields
+  const [newNom, setNewNom] = useState('')
+  const [newTel, setNewTel] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newSource, setNewSource] = useState('')
+  const [creatingClient, setCreatingClient] = useState(false)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!nom.trim()) { setError('Le nom est requis'); return }
-    setSaving(true)
-    setError('')
+  useEffect(() => {
+    fetch('/api/clients')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAllClients(data))
+      .catch(() => {})
+      .finally(() => setLoadingClients(false))
+  }, [])
+
+  const filteredClients = useMemo(() => {
+    if (!searchQuery.trim()) return allClients.slice(0, 10)
+    const q = searchQuery.toLowerCase()
+    return allClients.filter(c =>
+      c.nom.toLowerCase().includes(q) ||
+      (c.telephone && c.telephone.includes(q)) ||
+      (c.email && c.email.toLowerCase().includes(q))
+    ).slice(0, 10)
+  }, [allClients, searchQuery])
+
+  async function handleCreateClient() {
+    if (!newNom.trim()) return
+    setCreatingClient(true)
     try {
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nom: nom.trim(),
-          telephone: telephone.trim() || null,
-          email: email.trim() || null,
-          source: source || null,
-          notes: besoin.trim() || null,
+          nom: newNom.trim(),
+          telephone: newTel.trim() || null,
+          email: newEmail.trim() || null,
+          source: newSource || null,
           pipeline_stage: 'nouveau',
+        }),
+      })
+      if (!res.ok) throw new Error('Erreur création client')
+      const newClient = await res.json()
+      setAllClients(prev => [newClient, ...prev])
+      setSelectedClient(newClient)
+      setShowNewClientForm(false)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setCreatingClient(false)
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedClient) { setError('Sélectionnez un client'); return }
+    if (!titre.trim()) { setError('Le titre est requis'); return }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/affaires', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: selectedClient.id,
+          titre: titre.trim(),
+          description: description.trim() || null,
+          montant_estime: montant ? parseFloat(montant) : 0,
           commercial_id: commercialId || null,
         }),
       })
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error || 'Erreur lors de la creation')
+        throw new Error(data.error || 'Erreur création affaire')
       }
       onSave()
     } catch (err) {
@@ -269,163 +297,145 @@ function LeadForm({
   const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow bg-white'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Step 1: Select client */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom *</label>
-        <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} required className={inputClass} placeholder="M. Dupont" />
+        <label className="block text-sm font-semibold text-gray-700 mb-2">1. Client</label>
+        {selectedClient ? (
+          <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            <div>
+              <p className="font-medium text-blue-900">{selectedClient.nom}</p>
+              <p className="text-xs text-blue-600">
+                {[selectedClient.telephone, selectedClient.email].filter(Boolean).join(' · ') || 'Pas de contact'}
+              </p>
+            </div>
+            <button type="button" onClick={() => setSelectedClient(null)} className="text-blue-400 hover:text-blue-600 text-sm">
+              Changer
+            </button>
+          </div>
+        ) : showNewClientForm ? (
+          <div className="space-y-3 border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <p className="text-sm font-medium text-gray-600">Nouveau client</p>
+            <input type="text" value={newNom} onChange={e => setNewNom(e.target.value)} placeholder="Nom *" className={inputClass} />
+            <div className="grid grid-cols-2 gap-3">
+              <input type="tel" value={newTel} onChange={e => setNewTel(e.target.value)} placeholder="Téléphone" className={inputClass} />
+              <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" className={inputClass} />
+            </div>
+            <select value={newSource} onChange={e => setNewSource(e.target.value)} className={inputClass}>
+              <option value="">-- Source --</option>
+              {SOURCE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleCreateClient} disabled={creatingClient || !newNom.trim()}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {creatingClient ? 'Création...' : 'Créer le client'}
+              </button>
+              <button type="button" onClick={() => setShowNewClientForm(false)}
+                className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 border border-gray-200">
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="relative">
+              <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Rechercher un client (nom, tél, email)..."
+                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            {loadingClients ? (
+              <p className="text-xs text-gray-400 py-2">Chargement...</p>
+            ) : (
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                {filteredClients.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">Aucun client trouvé</p>
+                ) : (
+                  filteredClients.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedClient(c)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{c.nom}</p>
+                        <p className="text-xs text-gray-500">{[c.telephone, c.email, c.ville].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            <button type="button" onClick={() => setShowNewClientForm(true)}
+              className="w-full flex items-center justify-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium py-2 border border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors">
+              <IconPlus className="w-3.5 h-3.5" />
+              Créer un nouveau client
+            </button>
+          </div>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">T\u00e9l\u00e9phone</label>
-          <input type="tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} className={inputClass} placeholder="06 12 34 56 78" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} placeholder="dupont@email.fr" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
-          <select value={source} onChange={(e) => setSource(e.target.value)} className={inputClass}>
-            <option value="">-- Choisir --</option>
-            {SOURCE_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Commercial</label>
-          <select value={commercialId} onChange={(e) => setCommercialId(e.target.value)} className={inputClass}>
-            <option value="">-- Aucun --</option>
-            {commerciaux.map((c) => (
-              <option key={c.id} value={c.id}>{c.nom}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+
+      {/* Step 2: Affaire details */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Besoin</label>
-        <textarea value={besoin} onChange={(e) => setBesoin(e.target.value)} rows={3} className={inputClass} placeholder="Description du besoin client..." />
+        <label className="block text-sm font-semibold text-gray-700 mb-2">2. Détails de l&apos;affaire</label>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Titre de l&apos;affaire *</label>
+            <input type="text" value={titre} onChange={e => setTitre(e.target.value)} required className={inputClass}
+              placeholder="Ex: Fenêtres PVC salon + chambre" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Description du besoin</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={inputClass}
+              placeholder="Détails du projet, dimensions, contraintes..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Montant estimé (€)</label>
+              <input type="number" value={montant} onChange={e => setMontant(e.target.value)} className={inputClass}
+                placeholder="0" min="0" step="0.01" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Commercial</label>
+              <select value={commercialId} onChange={e => setCommercialId(e.target.value)} className={inputClass}>
+                <option value="">-- Aucun --</option>
+                {commerciaux.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
+
       {error && <p className="text-red-600 text-sm">{error}</p>}
       <button
         type="submit"
-        disabled={saving}
+        disabled={saving || !selectedClient || !titre.trim()}
         className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
       >
-        {saving ? 'Enregistrement...' : 'Ajouter'}
+        {saving ? 'Création...' : 'Créer l\'affaire'}
       </button>
     </form>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Coller un message modal
+// Edit Affaire form
 // ---------------------------------------------------------------------------
 
-function CollerMessageModal({
-  open,
-  onClose,
-  commerciaux,
-  onSave,
-}: {
-  open: boolean
-  onClose: () => void
+function EditAffaireForm({ affaire, commerciaux, onSave }: {
+  affaire: Affaire
   commerciaux: Commercial[]
   onSave: () => void
 }) {
-  const [rawMessage, setRawMessage] = useState('')
-  const [extracting, setExtracting] = useState(false)
-  const [extracted, setExtracted] = useState<{ nom?: string; telephone?: string; email?: string; source?: string; notes?: string } | null>(null)
-  const [extractError, setExtractError] = useState('')
-
-  function reset() {
-    setRawMessage('')
-    setExtracted(null)
-    setExtractError('')
-  }
-
-  async function handleExtract() {
-    if (!rawMessage.trim()) return
-    setExtracting(true)
-    setExtractError('')
-    try {
-      const res = await fetch('/api/leads/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: rawMessage }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Erreur extraction')
-      }
-      const data = await res.json()
-      setExtracted(data)
-    } catch (err) {
-      setExtractError((err as Error).message)
-    } finally {
-      setExtracting(false)
-    }
-  }
-
-  function handleClose() {
-    reset()
-    onClose()
-  }
-
-  function handleSaved() {
-    reset()
-    onSave()
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} title="Coller un message">
-      {!extracted ? (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Collez le message du client ici</label>
-            <textarea
-              value={rawMessage}
-              onChange={(e) => setRawMessage(e.target.value)}
-              rows={8}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow bg-white"
-              placeholder="Copiez-collez le message LeBonCoin, email ou SMS du client..."
-            />
-          </div>
-          {extractError && <p className="text-red-600 text-sm">{extractError}</p>}
-          <button
-            onClick={handleExtract}
-            disabled={extracting || !rawMessage.trim()}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
-          >
-            {extracting ? 'Extraction...' : 'Extraire les informations'}
-          </button>
-        </div>
-      ) : (
-        <div>
-          <p className="text-sm text-gray-500 mb-4">Informations extraites. V\u00e9rifiez et compl\u00e9tez si n\u00e9cessaire :</p>
-          <LeadForm commerciaux={commerciaux} onSave={handleSaved} initial={extracted} />
-        </div>
-      )}
-    </Modal>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Pipeline card
-// ---------------------------------------------------------------------------
-
-function EditClientForm({ client, commerciaux, onSave }: {
-  client: PipelineClient
-  commerciaux: Commercial[]
-  onSave: () => void
-}) {
-  const [nom, setNom] = useState(client.nom)
-  const [telephone, setTelephone] = useState(client.telephone || '')
-  const [email, setEmail] = useState(client.email || '')
-  const [source, setSource] = useState(client.source || '')
-  const [notes, setNotes] = useState(client.notes || '')
+  const [titre, setTitre] = useState(affaire.titre)
+  const [description, setDescription] = useState(affaire.description || '')
+  const [montant, setMontant] = useState(affaire.montant_estime ? String(affaire.montant_estime) : '')
+  const [commercialId, setCommercialId] = useState(affaire.commercial_id || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -433,19 +443,18 @@ function EditClientForm({ client, commerciaux, onSave }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!nom.trim()) { setError('Le nom est requis'); return }
+    if (!titre.trim()) { setError('Le titre est requis'); return }
     setSaving(true)
     setError('')
     try {
-      const res = await fetch(`/api/clients/${client.id}`, {
+      const res = await fetch(`/api/affaires/${affaire.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nom: nom.trim(),
-          telephone: telephone.trim() || null,
-          email: email.trim() || null,
-          source: source || null,
-          notes: notes.trim() || null,
+          titre: titre.trim(),
+          description: description.trim() || null,
+          montant_estime: montant ? parseFloat(montant) : 0,
+          commercial_id: commercialId || null,
         }),
       })
       if (!res.ok) throw new Error('Erreur mise à jour')
@@ -459,137 +468,123 @@ function EditClientForm({ client, commerciaux, onSave }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+        <p className="text-xs text-gray-500">Client</p>
+        <p className="text-sm font-medium text-gray-900">{affaire.clients?.nom || 'Inconnu'}</p>
+      </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom *</label>
-        <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} required className={inputClass} />
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Titre *</label>
+        <input type="text" value={titre} onChange={e => setTitre(e.target.value)} required className={inputClass} />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={inputClass} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Téléphone</label>
-          <input type="tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} className={inputClass} />
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Montant estimé (€)</label>
+          <input type="number" value={montant} onChange={e => setMontant(e.target.value)} className={inputClass} min="0" step="0.01" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Commercial</label>
+          <select value={commercialId} onChange={e => setCommercialId(e.target.value)} className={inputClass}>
+            <option value="">-- Aucun --</option>
+            {commerciaux.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+          </select>
         </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
-        <select value={source} onChange={(e) => setSource(e.target.value)} className={inputClass}>
-          <option value="">—</option>
-          {SOURCE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Description / Besoin</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className={inputClass} />
       </div>
       {error && <p className="text-red-500 text-sm">{error}</p>}
       <button type="submit" disabled={saving}
-        className="w-full py-2.5 rounded-lg text-white font-medium text-sm transition-colors"
-        style={{ background: saving ? '#93C5FD' : '#3B82F6' }}>
+        className="w-full py-2.5 rounded-lg text-white font-medium text-sm bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50">
         {saving ? 'Enregistrement...' : 'Enregistrer'}
       </button>
     </form>
   )
 }
 
-function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
-  client: PipelineClient
+// ---------------------------------------------------------------------------
+// Pipeline card — now shows an Affaire
+// ---------------------------------------------------------------------------
+
+function PipelineCard({ affaire, onStageChange, onEdit, onDelete }: {
+  affaire: Affaire
   onStageChange: (id: string, newStage: string) => void
-  onEdit: (client: PipelineClient) => void
+  onEdit: (affaire: Affaire) => void
   onDelete: (id: string) => void
 }) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const currentIndex = STAGES.findIndex((s) => s.code === client.pipeline_stage)
+  const currentIndex = STAGES.findIndex(s => s.code === affaire.pipeline_stage)
   const canGoBack = currentIndex > 0
   const canGoForward = currentIndex < STAGES.length - 1
 
-  const hasAlerts = client.alerts.includes('a_contacter') || client.alerts.includes('a_relancer') || client.alerts.includes('relance_urgente')
-  const isUrgent = client.alerts.includes('relance_urgente')
-
-  // HubSpot-style initials avatar
-  const initials = client.nom
+  const clientName = affaire.clients?.nom || 'Client inconnu'
+  const initials = clientName
     .split(' ')
-    .map((w) => w[0])
+    .map(w => w[0])
     .filter(Boolean)
     .slice(0, 2)
     .join('')
     .toUpperCase()
 
-  const createdDate = new Date(client.created_at).toLocaleDateString('fr-FR')
+  const createdDate = new Date(affaire.created_at).toLocaleDateString('fr-FR')
 
   return (
     <div
       className="kanban-card rounded-md border cursor-pointer transition-all duration-150 relative group"
-      onClick={() => router.push(`/clients/${client.id}`)}
+      onClick={() => affaire.clients && router.push(`/clients/${affaire.clients.id}`)}
     >
-      {/* Alert dot indicator */}
-      {hasAlerts && (
-        <span
-          className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full"
-          style={{ background: isUrgent ? '#C83B3B' : '#F5A623' }}
-        />
-      )}
-
       <div className="px-3 pt-3 pb-2">
-        {/* Ligne 1 — NOM du client */}
-        <p className="text-sm font-semibold truncate pr-5 mb-0.5 hover:underline kanban-link">
-          {client.nom}
+        {/* Ligne 1 — Titre de l'affaire */}
+        <p className="text-sm font-semibold truncate pr-5 mb-0.5 kanban-link">
+          {affaire.titre}
         </p>
 
-        {/* Ligne 2 — Description du besoin */}
-        {client.notes && (
-          <p className="text-[12px] truncate mb-1.5 kanban-text" style={{ opacity: 0.7 }}>
-            {client.notes}
+        {/* Ligne 2 — Nom du client */}
+        <p className="text-[12px] truncate mb-1 kanban-text" style={{ opacity: 0.7 }}>
+          {clientName}
+        </p>
+
+        {/* Ligne 3 — Description */}
+        {affaire.description && (
+          <p className="text-[11px] truncate mb-1.5 kanban-text" style={{ opacity: 0.5 }}>
+            {affaire.description}
           </p>
         )}
 
         {/* Info lines */}
         <div className="space-y-0.5 text-[12px] kanban-text">
-          {client.montant_devis != null && client.montant_devis > 0 && (
-            <div><span className="kanban-label">Montant : </span>{formatEUR(client.montant_devis)}</div>
+          {affaire.montant_estime != null && affaire.montant_estime > 0 && (
+            <div><span className="kanban-label">Montant : </span>{formatEUR(affaire.montant_estime)}</div>
           )}
           <div><span className="kanban-label">Créé le : </span>{createdDate}</div>
-          {client.commerciaux && (
-            <div><span className="kanban-label">Commercial : </span>{client.commerciaux.nom}</div>
+          {affaire.commerciaux && (
+            <div><span className="kanban-label">Commercial : </span>{affaire.commerciaux.nom}</div>
           )}
         </div>
       </div>
 
-      {/* Bottom section: contact with avatar + alerts */}
+      {/* Bottom section */}
       <div className="kanban-card-footer px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span
             className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 kanban-avatar"
-            style={client.commerciaux?.couleur ? {
-              background: `${client.commerciaux.couleur}25`,
-              color: client.commerciaux.couleur,
+            style={affaire.commerciaux?.couleur ? {
+              background: `${affaire.commerciaux.couleur}25`,
+              color: affaire.commerciaux.couleur,
             } : undefined}
           >
             {initials || '–'}
           </span>
-          <span className="text-[12px] truncate kanban-text">{client.nom}</span>
+          <span className="text-[12px] truncate kanban-text">{clientName}</span>
         </div>
-
-        {/* Alert pill */}
-        {client.alerts.includes('relance_urgente') && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FDECEC', color: '#C83B3B' }}>Urgent</span>
-        )}
-        {!client.alerts.includes('relance_urgente') && client.alerts.includes('a_relancer') && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FEF7E6', color: '#B2762A' }}>Relance</span>
-        )}
-        {client.alerts.includes('a_contacter') && !client.alerts.includes('a_relancer') && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: '#FDECEC', color: '#C83B3B' }}>À contacter</span>
-        )}
       </div>
 
       {/* Hover actions */}
       <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
         <button
-          onClick={(e) => { e.stopPropagation(); onEdit(client) }}
+          onClick={e => { e.stopPropagation(); onEdit(affaire) }}
           className="p-1 rounded hover:bg-blue-50 transition-colors"
           title="Modifier"
           style={{ color: '#3B82F6' }}
@@ -599,7 +594,7 @@ function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
           </svg>
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); if (confirm(`Supprimer ${client.nom} ?`)) onDelete(client.id) }}
+          onClick={e => { e.stopPropagation(); if (confirm(`Supprimer l'affaire "${affaire.titre}" ?`)) onDelete(affaire.id) }}
           className="p-1 rounded hover:bg-red-50 transition-colors"
           title="Supprimer"
           style={{ color: '#EF4444' }}
@@ -611,9 +606,9 @@ function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
         <div className="w-px h-3 bg-gray-200 mx-0.5" />
         <button
           disabled={!canGoBack}
-          onClick={(e) => {
+          onClick={e => {
             e.stopPropagation()
-            if (canGoBack) onStageChange(client.id, STAGES[currentIndex - 1].code)
+            if (canGoBack) onStageChange(affaire.id, STAGES[currentIndex - 1].code)
           }}
           className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
           title={canGoBack ? `Vers ${STAGES[currentIndex - 1].label}` : ''}
@@ -623,26 +618,26 @@ function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
         </button>
         <div className="relative">
           <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
+            onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
             className="p-1 rounded hover:bg-gray-100 transition-colors"
-            title="Changer l'etape"
+            title="Changer l'étape"
             style={{ color: '#516F90' }}
           >
             <IconChevronDown className="w-3 h-3" />
           </button>
           {menuOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
+              <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setMenuOpen(false) }} />
               <div className="kanban-dropdown absolute right-0 bottom-full mb-1 z-20 rounded-md shadow-lg border py-1.5 w-44">
-                {STAGES.map((s) => (
+                {STAGES.map(s => (
                   <button
                     key={s.code}
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation()
                       setMenuOpen(false)
-                      if (s.code !== client.pipeline_stage) onStageChange(client.id, s.code)
+                      if (s.code !== affaire.pipeline_stage) onStageChange(affaire.id, s.code)
                     }}
-                    className={`kanban-dropdown-item w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${s.code === client.pipeline_stage ? 'active' : ''}`}
+                    className={`kanban-dropdown-item w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${s.code === affaire.pipeline_stage ? 'active' : ''}`}
                   >
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                     {s.label}
@@ -654,9 +649,9 @@ function PipelineCard({ client, onStageChange, onEdit, onDelete }: {
         </div>
         <button
           disabled={!canGoForward}
-          onClick={(e) => {
+          onClick={e => {
             e.stopPropagation()
-            if (canGoForward) onStageChange(client.id, STAGES[currentIndex + 1].code)
+            if (canGoForward) onStageChange(affaire.id, STAGES[currentIndex + 1].code)
           }}
           className="p-1 rounded hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
           title={canGoForward ? `Vers ${STAGES[currentIndex + 1].label}` : ''}
@@ -688,19 +683,13 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md transition-shadow duration-200 relative overflow-hidden">
-      {/* Left accent border */}
       <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl" style={{ backgroundColor: accentColor }} />
-      {/* Icon */}
       <div className="flex items-center gap-2 mb-2">
         <span style={{ color: accentColor }}>{icon}</span>
         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
       </div>
-      {/* Value */}
       <div className="text-2xl font-bold text-gray-900">{value}</div>
-      {/* Secondary */}
-      {secondary && (
-        <div className="text-sm text-gray-500 mt-0.5">{secondary}</div>
-      )}
+      {secondary && <div className="text-sm text-gray-500 mt-0.5">{secondary}</div>}
     </div>
   )
 }
@@ -709,128 +698,54 @@ function StatCard({
 // Stats bar
 // ---------------------------------------------------------------------------
 
-function StatsBar({ clients, commerciaux }: { clients: PipelineClient[]; commerciaux: Commercial[] }) {
+function StatsBar({ affaires, commerciaux }: { affaires: Affaire[]; commerciaux: Commercial[] }) {
   const stats = useMemo(() => {
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const dayOfWeek = now.getDay() || 7
-    const weekStart = new Date(now)
-    weekStart.setDate(now.getDate() - dayOfWeek + 1)
-    weekStart.setHours(0, 0, 0, 0)
+    const totalAffaires = affaires.length
+    const totalMontant = affaires.reduce((sum, a) => sum + (Number(a.montant_estime) || 0), 0)
+    const devisEnvoye = affaires.filter(a => a.pipeline_stage === 'devis_envoye')
+    const montantDevis = devisEnvoye.reduce((sum, a) => sum + (Number(a.montant_estime) || 0), 0)
+    const signes = affaires.filter(a => a.pipeline_stage === 'signe' || a.pipeline_stage === 'commande' || a.pipeline_stage === 'livre' || a.pipeline_stage === 'pose')
+    const montantSignes = signes.reduce((sum, a) => sum + (Number(a.montant_estime) || 0), 0)
+    const nouveaux = affaires.filter(a => a.pipeline_stage === 'nouveau').length
 
-    // Collect all signed devis this month / this week
-    let caMonth = 0
-    let caWeek = 0
-    const caByCommercial: Record<string, number> = {}
-
-    for (const client of clients) {
-      for (const d of client.devis || []) {
-        if (d.status !== 'signe' || !d.signed_at) continue
-        const signedDate = new Date(d.signed_at)
-        const montant = Number(d.montant_ttc) || 0
-
-        if (signedDate >= monthStart) {
-          caMonth += montant
-          // Attribute to commercial
-          if (client.commercial_id) {
-            caByCommercial[client.commercial_id] = (caByCommercial[client.commercial_id] || 0) + montant
-          }
-        }
-        if (signedDate >= weekStart) {
-          caWeek += montant
-        }
-      }
-    }
-
-    // Devis en attente
-    const devisEnAttente = clients.filter((c) => c.pipeline_stage === 'devis_envoye')
-    const montantEnAttente = devisEnAttente.reduce((sum, c) => sum + (c.montant_devis || 0), 0)
-
-    // Best seller
-    let bestSeller: { nom: string; montant: number } | null = null
-    for (const [commId, montant] of Object.entries(caByCommercial)) {
-      if (!bestSeller || montant > bestSeller.montant) {
-        const comm = commerciaux.find((c) => c.id === commId)
-        if (comm) bestSeller = { nom: comm.nom, montant }
-      }
-    }
-
-    // Leads a traiter
-    const leadsNouveaux = clients.filter((c) => c.pipeline_stage === 'nouveau').length
-
-    // Relances
-    const relances = clients.filter(
-      (c) => c.alerts.includes('a_relancer') || c.alerts.includes('relance_urgente')
-    ).length
-
-    return { caMonth, caWeek, devisEnAttente: devisEnAttente.length, montantEnAttente, bestSeller, leadsNouveaux, relances }
-  }, [clients, commerciaux])
+    return { totalAffaires, totalMontant, devisEnvoye: devisEnvoye.length, montantDevis, montantSignes, signes: signes.length, nouveaux }
+  }, [affaires])
 
   return (
     <div className="px-6 pt-5 pb-2 shrink-0 space-y-3">
-      {/* Main KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          label="CA Mois"
-          value={<span className="text-emerald-600">{formatEUR(stats.caMonth)}</span>}
+          label="Affaires actives"
+          value={<span className="text-blue-600">{stats.totalAffaires}</span>}
+          secondary={stats.totalMontant > 0 ? formatEUR(stats.totalMontant) : undefined}
+          accentColor="#3B82F6"
+          icon={<IconUsers className="w-3.5 h-3.5" />}
+        />
+        <StatCard
+          label="Signées"
+          value={<span className="text-emerald-600">{stats.signes}</span>}
+          secondary={stats.montantSignes > 0 ? formatEUR(stats.montantSignes) : undefined}
           accentColor="#10B981"
           icon={<IconTrendUp className="w-3.5 h-3.5" />}
         />
         <StatCard
-          label="CA Semaine"
-          value={<span className="text-blue-600">{formatEUR(stats.caWeek)}</span>}
-          accentColor="#3B82F6"
-          icon={<IconTrendUp className="w-3.5 h-3.5" />}
-        />
-        <StatCard
-          label="En attente"
+          label="Devis en attente"
           value={
             <span className="text-amber-600">
-              {stats.devisEnAttente}
+              {stats.devisEnvoye}
               <span className="text-base font-normal text-gray-400 ml-1">devis</span>
             </span>
           }
-          secondary={stats.montantEnAttente > 0 ? formatEUR(stats.montantEnAttente) : undefined}
+          secondary={stats.montantDevis > 0 ? formatEUR(stats.montantDevis) : undefined}
           accentColor="#F59E0B"
           icon={<IconClock className="w-3.5 h-3.5" />}
         />
         <StatCard
-          label="Top vendeur"
-          value={
-            stats.bestSeller ? (
-              <span className="text-gray-900 text-lg">{stats.bestSeller.nom}</span>
-            ) : (
-              <span className="text-gray-300">{'\u2014'}</span>
-            )
-          }
-          secondary={stats.bestSeller ? formatEUR(stats.bestSeller.montant) : undefined}
+          label="Nouveaux"
+          value={<span className="text-violet-600">{stats.nouveaux}</span>}
           accentColor="#8B5CF6"
           icon={<IconStar className="w-3.5 h-3.5" />}
         />
-      </div>
-
-      {/* Compact alert pills row */}
-      <div className="flex items-center gap-3 pl-1">
-        {stats.leadsNouveaux > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="font-medium">{stats.leadsNouveaux}</span>
-            <span className="text-gray-400">Nouveaux leads</span>
-          </div>
-        )}
-        {stats.relances > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span className="font-medium">{stats.relances}</span>
-            <span className="text-gray-400">Relances a faire</span>
-          </div>
-        )}
-        {stats.leadsNouveaux === 0 && stats.relances === 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Aucune action en attente
-          </div>
-        )}
       </div>
     </div>
   )
@@ -841,23 +756,22 @@ function StatsBar({ clients, commerciaux }: { clients: PipelineClient[]; commerc
 // ---------------------------------------------------------------------------
 
 export default function PipelinePage() {
-  const [clients, setClients] = useState<PipelineClient[]>([])
+  const [affaires, setAffaires] = useState<Affaire[]>([])
   const [commerciaux, setCommerciaux] = useState<Commercial[]>([])
   const [filterCommercial, setFilterCommercial] = useState('')
   const [loading, setLoading] = useState(true)
-  const [showNewLead, setShowNewLead] = useState(false)
-  const [showColler, setShowColler] = useState(false)
-  const [editingClient, setEditingClient] = useState<PipelineClient | null>(null)
+  const [showNewAffaire, setShowNewAffaire] = useState(false)
+  const [editingAffaire, setEditingAffaire] = useState<Affaire | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const url = filterCommercial ? `/api/pipeline?commercial_id=${filterCommercial}` : '/api/pipeline'
-      const [pipelineRes, commerciauxRes] = await Promise.all([
+      const url = filterCommercial ? `/api/affaires?commercial_id=${filterCommercial}` : '/api/affaires'
+      const [affairesRes, commerciauxRes] = await Promise.all([
         fetch(url),
         fetch('/api/commerciaux'),
       ])
-      if (pipelineRes.ok) setClients(await pipelineRes.json())
+      if (affairesRes.ok) setAffaires(await affairesRes.json())
       if (commerciauxRes.ok) setCommerciaux(await commerciauxRes.json())
     } catch (err) {
       console.error('Erreur chargement pipeline:', err)
@@ -868,13 +782,12 @@ export default function PipelinePage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  async function handleStageChange(clientId: string, newStage: string) {
-    // Optimistic update
-    setClients((prev) =>
-      prev.map((c) => (c.id === clientId ? { ...c, pipeline_stage: newStage } : c))
+  async function handleStageChange(affaireId: string, newStage: string) {
+    setAffaires(prev =>
+      prev.map(a => a.id === affaireId ? { ...a, pipeline_stage: newStage } : a)
     )
     try {
-      const res = await fetch(`/api/clients/${clientId}`, {
+      const res = await fetch(`/api/affaires/${affaireId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pipeline_stage: newStage }),
@@ -886,31 +799,26 @@ export default function PipelinePage() {
     }
   }
 
-  function handleLeadSaved() {
-    setShowNewLead(false)
-    setShowColler(false)
-    setEditingClient(null)
+  function handleSaved() {
+    setShowNewAffaire(false)
+    setEditingAffaire(null)
     fetchData()
   }
 
-  async function handleDelete(clientId: string) {
-    setClients(prev => prev.filter(c => c.id !== clientId))
+  async function handleDelete(affaireId: string) {
+    setAffaires(prev => prev.filter(a => a.id !== affaireId))
     try {
-      await fetch(`/api/pipeline?id=${clientId}`, { method: 'DELETE' })
+      await fetch(`/api/affaires?id=${affaireId}`, { method: 'DELETE' })
     } catch { /* ignore */ }
     fetchData()
   }
 
-  function handleEdit(client: PipelineClient) {
-    setEditingClient(client)
-  }
-
-  // Group clients by stage
-  const byStage: Record<string, PipelineClient[]> = {}
+  // Group affaires by stage
+  const byStage: Record<string, Affaire[]> = {}
   for (const stage of STAGES) byStage[stage.code] = []
-  for (const client of clients) {
-    if (byStage[client.pipeline_stage]) {
-      byStage[client.pipeline_stage].push(client)
+  for (const affaire of affaires) {
+    if (byStage[affaire.pipeline_stage]) {
+      byStage[affaire.pipeline_stage].push(affaire)
     }
   }
 
@@ -920,40 +828,27 @@ export default function PipelinePage() {
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Pipeline</h1>
         <div className="flex items-center gap-2.5">
-          {/* Commercial filter */}
           <select
             value={filterCommercial}
-            onChange={(e) => setFilterCommercial(e.target.value)}
+            onChange={e => setFilterCommercial(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 transition-shadow"
           >
             <option value="">Tous les commerciaux</option>
-            {commerciaux.map((c) => (
-              <option key={c.id} value={c.id}>{c.nom}</option>
-            ))}
+            {commerciaux.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
           </select>
 
-          {/* Coller un message */}
           <button
-            onClick={() => setShowColler(true)}
-            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3.5 py-2 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-medium"
-          >
-            <IconClipboard className="w-4 h-4 text-gray-400" />
-            Coller un message
-          </button>
-
-          {/* Nouveau lead */}
-          <button
-            onClick={() => setShowNewLead(true)}
+            onClick={() => setShowNewAffaire(true)}
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3.5 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
           >
             <IconPlus className="w-4 h-4" />
-            Nouveau client
+            Nouvelle affaire
           </button>
         </div>
       </div>
 
       {/* Stats bar */}
-      {!loading && <StatsBar clients={clients} commerciaux={commerciaux} />}
+      {!loading && <StatsBar affaires={affaires} commerciaux={commerciaux} />}
 
       {/* Kanban board */}
       {loading ? (
@@ -966,9 +861,9 @@ export default function PipelinePage() {
       ) : (
         <div className="flex-1 overflow-x-auto">
           <div className="flex gap-3 p-6 pt-4 min-w-max h-full">
-            {STAGES.map((stage) => {
-              const stageClients = byStage[stage.code] || []
-              const stageTotal = stageClients.reduce((sum, c) => sum + (c.montant_devis || 0), 0)
+            {STAGES.map(stage => {
+              const stageAffaires = byStage[stage.code] || []
+              const stageTotal = stageAffaires.reduce((sum, a) => sum + (Number(a.montant_estime) || 0), 0)
               return (
                 <div key={stage.code} className="kanban-column w-80 flex flex-col shrink-0 rounded-md border">
                   {/* Column header */}
@@ -976,23 +871,29 @@ export default function PipelinePage() {
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-semibold kanban-text">{stage.label}</span>
                       <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded kanban-count">
-                        {stageClients.length}
+                        {stageAffaires.length}
                       </span>
                     </div>
                   </div>
 
                   {/* Cards container */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {stageClients.length === 0 ? (
-                      <p className="text-center text-[11px] py-8 kanban-empty">Aucun client</p>
+                    {stageAffaires.length === 0 ? (
+                      <p className="text-center text-[11px] py-8 kanban-empty">Aucune affaire</p>
                     ) : (
-                      stageClients.map((client) => (
-                        <PipelineCard key={client.id} client={client} onStageChange={handleStageChange} onEdit={handleEdit} onDelete={handleDelete} />
+                      stageAffaires.map(affaire => (
+                        <PipelineCard
+                          key={affaire.id}
+                          affaire={affaire}
+                          onStageChange={handleStageChange}
+                          onEdit={setEditingAffaire}
+                          onDelete={handleDelete}
+                        />
                       ))
                     )}
                   </div>
 
-                  {/* Column footer — total amount */}
+                  {/* Column footer */}
                   {stageTotal > 0 && (
                     <div className="kanban-column-footer px-3 py-2 border-t text-[12px] kanban-text">
                       <span className="kanban-label">Montant total : </span>
@@ -1007,24 +908,16 @@ export default function PipelinePage() {
       )}
 
       {/* Modals */}
-      <Modal open={showNewLead} onClose={() => setShowNewLead(false)} title="Nouveau client">
-        <LeadForm commerciaux={commerciaux} onSave={handleLeadSaved} />
+      <Modal open={showNewAffaire} onClose={() => setShowNewAffaire(false)} title="Nouvelle affaire" wide>
+        <NouvelleAffaireForm commerciaux={commerciaux} onSave={handleSaved} />
       </Modal>
 
-      <CollerMessageModal
-        open={showColler}
-        onClose={() => setShowColler(false)}
-        commerciaux={commerciaux}
-        onSave={handleLeadSaved}
-      />
-
-      {/* Modal édition client */}
-      <Modal open={!!editingClient} onClose={() => setEditingClient(null)} title="Modifier le client">
-        {editingClient && (
-          <EditClientForm
-            client={editingClient}
+      <Modal open={!!editingAffaire} onClose={() => setEditingAffaire(null)} title="Modifier l'affaire">
+        {editingAffaire && (
+          <EditAffaireForm
+            affaire={editingAffaire}
             commerciaux={commerciaux}
-            onSave={handleLeadSaved}
+            onSave={handleSaved}
           />
         )}
       </Modal>
