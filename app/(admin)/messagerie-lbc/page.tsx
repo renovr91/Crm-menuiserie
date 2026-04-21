@@ -433,7 +433,7 @@ export default function MessagerieLBCPage() {
   // --- Scroll to bottom ---
   useEffect(() => {
     if (panelMessages.length > 0) {
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'instant' }), 50)
     }
   }, [panelMessages])
 
