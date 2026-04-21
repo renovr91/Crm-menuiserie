@@ -16,11 +16,10 @@ export async function POST(request: NextRequest) {
   const fileName = `${tacheId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
 
   const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
 
   const { error: uploadError } = await supabase.storage
     .from('taches-pj')
-    .upload(fileName, buffer, {
+    .upload(fileName, new Uint8Array(arrayBuffer), {
       contentType: file.type,
       upsert: false,
     })

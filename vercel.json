@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/taches/rappels",
-      "schedule": "* * * * *"
+      "schedule": "*/10 * * * *"
     }
   ]
 }
