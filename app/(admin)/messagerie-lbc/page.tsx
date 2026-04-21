@@ -370,7 +370,7 @@ export default function MessagerieLBCPage() {
         }
       })
 
-      const sorted = msgs.reverse()
+      const sorted = msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       msgCacheRef.current[convId] = sorted
       setPanelMessages(sorted)
 
