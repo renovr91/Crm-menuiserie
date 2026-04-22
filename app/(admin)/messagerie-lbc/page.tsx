@@ -473,28 +473,27 @@ export default function MessagerieLBCPage() {
     if (selectedConvId) setTimeout(() => inputRef.current?.focus(), 100)
   }, [selectedConvId])
 
-  // --- Init ---
+  // --- Init: sync au chargement de la page, puis affiche les leads ---
   useEffect(() => {
-    loadLeads()
-  }, [loadLeads])
-
-  useEffect(() => {
-    loadLeads(searchQuery)
-  }, [searchQuery, loadLeads])
-
-  // --- Auto-sync toutes les 2 minutes ---
-  useEffect(() => {
-    const interval = setInterval(async () => {
+    let cancelled = false
+    async function initSync() {
+      setSyncing(true)
       try {
         await fetch('/api/lbc-leads', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'sync' }),
         })
-        await loadLeads(searchQuery)
+        if (!cancelled) await loadLeads()
       } catch { /* ignore */ }
-    }, 2 * 60 * 1000)
-    return () => clearInterval(interval)
+      finally { if (!cancelled) setSyncing(false) }
+    }
+    initSync()
+    return () => { cancelled = true }
+  }, [loadLeads])
+
+  useEffect(() => {
+    loadLeads(searchQuery)
   }, [searchQuery, loadLeads])
 
   // --- Update status (optimistic) ---
