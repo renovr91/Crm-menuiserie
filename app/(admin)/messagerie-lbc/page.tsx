@@ -21,6 +21,7 @@ interface Lead {
   statut: LeadStatut
   notes: string | null
   telephone: string | null
+  relay_email: string | null
   dernier_message: string | null
   dernier_message_date: string | null
   dernier_message_is_me: boolean
@@ -307,6 +308,14 @@ export default function MessagerieLBCPage() {
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesText, setNotesText] = useState('')
 
+  // Relay email state for file attachment
+  const [relayEmailModal, setRelayEmailModal] = useState(false)
+  const [relayEmailInput, setRelayEmailInput] = useState('')
+  const [relayEmailSearching, setRelayEmailSearching] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [attachmentText, setAttachmentText] = useState('')
+  const [relayEmailStatus, setRelayEmailStatus] = useState<string | null>(null)
+
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -546,16 +555,64 @@ export default function MessagerieLBCPage() {
     }
   }
 
-  // --- Send file via relay (native LBC attachment) ---
+  // --- Send file via email relay ---
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !selectedLead || uploadingFile) return
     e.target.value = ''
+
+    // If relay email is already known, send directly
+    if (selectedLead.relay_email) {
+      await sendFileWithRelayEmail(file, selectedLead.relay_email)
+      return
+    }
+
+    // Otherwise, open modal to find/enter relay email
+    setPendingFile(file)
+    setRelayEmailInput('')
+    setAttachmentText('Veuillez trouver ci-joint le document demande.')
+    setRelayEmailStatus(null)
+    setRelayEmailModal(true)
+
+    // Auto-search for relay email in background
+    setRelayEmailSearching(true)
+    try {
+      const res = await fetch('/api/lbc-messaging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'find-relay-email',
+          conv: selectedLead.conversation_id,
+          contactName: selectedLead.contact_name,
+          adTitle: selectedLead.ad_title,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.relayEmail) {
+          setRelayEmailInput(data.relayEmail)
+          setRelayEmailStatus('Trouve automatiquement dans Gmail')
+        } else {
+          setRelayEmailStatus('Non trouve - entrez manuellement')
+        }
+      }
+    } catch {
+      setRelayEmailStatus('Erreur recherche - entrez manuellement')
+    } finally {
+      setRelayEmailSearching(false)
+    }
+  }
+
+  const sendFileWithRelayEmail = async (file: File, relayEmail: string) => {
+    if (!selectedLead) return
     setUploadingFile(true)
+    setRelayEmailModal(false)
     try {
       const formData = new FormData()
       formData.append('conv', selectedLead.conversation_id)
       formData.append('file', file)
+      formData.append('relayEmail', relayEmail)
+      formData.append('text', attachmentText || 'Veuillez trouver ci-joint le document demande.')
 
       const res = await fetch('/api/lbc-messaging', {
         method: 'PUT',
@@ -566,9 +623,14 @@ export default function MessagerieLBCPage() {
         throw new Error(err.error || 'Erreur envoi PJ')
       }
 
+      // Save relay email to lead for future use
+      setLeads(prev => prev.map(l =>
+        l.conversation_id === selectedLead.conversation_id ? { ...l, relay_email: relayEmail } : l
+      ))
+
       const newMsg: Message = {
         id: crypto.randomUUID(),
-        text: '',
+        text: attachmentText || '',
         createdAt: new Date().toISOString(),
         isMe: true,
         senderName: 'Moi (Renov-R)',
@@ -581,11 +643,21 @@ export default function MessagerieLBCPage() {
       const updated = [...panelMessages, newMsg]
       setPanelMessages(updated)
       msgCacheRef.current[selectedLead.conversation_id] = updated
+      setPendingFile(null)
+      setRelayEmailStatus('Envoye avec succes !')
     } catch (e: any) {
       alert('Erreur: ' + e.message)
     } finally {
       setUploadingFile(false)
     }
+  }
+
+  const handleSendWithRelay = () => {
+    if (!pendingFile || !relayEmailInput.includes('@messagerie.leboncoin.fr')) {
+      alert('Email relay invalide. Doit etre @messagerie.leboncoin.fr')
+      return
+    }
+    sendFileWithRelayEmail(pendingFile, relayEmailInput)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -923,7 +995,110 @@ export default function MessagerieLBCPage() {
                   {sending ? '...' : 'Envoyer'}
                 </button>
               </div>
-              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre</div>
+              <div className="mt-1 text-[10px] text-gray-400">
+                Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre
+                {selectedLead.relay_email && (
+                  <span className="ml-2" style={{ color: '#10B981' }}>
+                    | Email relay: {selectedLead.relay_email.split('@')[0].slice(0, 12)}...@messagerie.leboncoin.fr
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ========== RELAY EMAIL MODAL ========== */}
+      {relayEmailModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => { setRelayEmailModal(false); setPendingFile(null) }} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-white rounded-xl shadow-2xl border border-gray-200 w-[440px] max-w-[90vw]">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Envoyer une piece jointe via email</h3>
+              <p className="text-[11px] text-gray-500 mt-1">
+                LBC ne supporte pas les PJ via API. On envoie par email au relay LBC.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {/* File info */}
+              {pendingFile && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                  <span className="text-sm">
+                    {pendingFile.type?.startsWith('image') ? '🖼️' : pendingFile.type === 'application/pdf' ? '📄' : '📎'}
+                  </span>
+                  <span className="text-xs text-gray-700 font-medium truncate">{pendingFile.name}</span>
+                  <span className="text-[10px] text-gray-400 shrink-0">
+                    ({(pendingFile.size / 1024).toFixed(0)} Ko)
+                  </span>
+                </div>
+              )}
+
+              {/* Relay email input */}
+              <div>
+                <label className="text-[11px] font-medium text-gray-600 block mb-1">Email relay LBC</label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={relayEmailInput}
+                    onChange={e => setRelayEmailInput(e.target.value)}
+                    placeholder="xxx@messagerie.leboncoin.fr"
+                    className="flex-1 px-3 py-2 text-xs rounded-lg outline-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                {relayEmailSearching && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[10px] text-blue-500">Recherche dans Gmail...</span>
+                  </div>
+                )}
+                {relayEmailStatus && !relayEmailSearching && (
+                  <p className="text-[10px] mt-1" style={{
+                    color: relayEmailStatus.includes('Trouve') ? '#10B981' : '#F59E0B'
+                  }}>
+                    {relayEmailStatus}
+                  </p>
+                )}
+              </div>
+
+              {/* Message text */}
+              <div>
+                <label className="text-[11px] font-medium text-gray-600 block mb-1">Message accompagnant (optionnel)</label>
+                <textarea
+                  value={attachmentText}
+                  onChange={e => setAttachmentText(e.target.value)}
+                  placeholder="Texte du message..."
+                  rows={2}
+                  className="w-full px-3 py-2 text-xs rounded-lg outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Tip */}
+              <div className="px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="text-[10px] text-amber-700">
+                  <strong>Astuce :</strong> L'email relay se trouve dans les notifications Gmail de LBC
+                  (expediteur = xxx@messagerie.leboncoin.fr). Vous pouvez le copier-coller depuis Gmail.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+              <button
+                onClick={() => { setRelayEmailModal(false); setPendingFile(null) }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSendWithRelay}
+                disabled={!relayEmailInput.includes('@messagerie.leboncoin.fr') || !pendingFile}
+                className="px-4 py-1.5 text-xs rounded-lg font-medium transition-all"
+                style={{
+                  background: relayEmailInput.includes('@messagerie.leboncoin.fr') ? '#0EA5E9' : '#E5E7EB',
+                  color: relayEmailInput.includes('@messagerie.leboncoin.fr') ? '#fff' : '#9CA3AF',
+                }}
+              >
+                Envoyer par email
+              </button>
             </div>
           </div>
         </>
