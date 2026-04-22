@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/planning', label: 'Planning', icon: '📅' },
   { href: '/sav', label: 'SAV', icon: '🔧' },
   { href: '/equipe', label: 'Équipe', icon: '👔' },
+  { href: '/activite', label: 'Activité', icon: '📋' },
   { href: '/qonto', label: 'Qonto', icon: '🏦' },
 ]
 
@@ -22,12 +23,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [currentUser, setCurrentUser] = useState<{ nom: string; id: string } | null>(null)
 
   // Init theme from localStorage
   useEffect(() => {
     const saved = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'
     setTheme(saved)
     document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
+  // Fetch current user
+  useEffect(() => {
+    fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => {
+      if (d && d.nom) setCurrentUser(d)
+    }).catch(() => {})
   }, [])
 
   function toggleTheme() {
@@ -102,6 +111,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               )
             })}
           </nav>
+
+          {/* Current user */}
+          {currentUser && (
+            <span
+              className="shrink-0 ml-2 text-xs font-medium px-2 py-1 rounded"
+              style={{
+                color: theme === 'dark' ? '#67E8F9' : '#0891B2',
+                background: 'rgba(34, 211, 238, 0.1)',
+              }}
+            >
+              {currentUser.nom}
+            </span>
+          )}
 
           {/* Theme toggle */}
           <button

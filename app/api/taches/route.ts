@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
+import { getCurrentCommercial } from '@/lib/get-commercial'
+import { logActivity } from '@/lib/activity-log'
 
 export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
@@ -40,5 +42,18 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const me = await getCurrentCommercial()
+  if (me) {
+    await logActivity({
+      commercial_id: me.id,
+      user_id: me.user_id,
+      action_type: 'tache_create',
+      entity_type: 'tache',
+      entity_id: data.id,
+      details: { titre: body.titre, commercial_id: body.commercial_id },
+    })
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

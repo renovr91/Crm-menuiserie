@@ -10,6 +10,8 @@ import {
   type LeadStatut,
 } from '@/lib/lbc-leads'
 import { classifyMessage } from '@/lib/classifier'
+import { getCurrentCommercial } from '@/lib/get-commercial'
+import { logActivity } from '@/lib/activity-log'
 
 /**
  * GET /api/lbc-leads
@@ -84,6 +86,17 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'conversationId and statut required' }, { status: 400 })
         }
         await updateLeadStatus(conversationId, statut as LeadStatut, note)
+        const me = await getCurrentCommercial()
+        if (me) {
+          await logActivity({
+            commercial_id: me.id,
+            user_id: me.user_id,
+            action_type: 'lead_status_change',
+            entity_type: 'lead_lbc',
+            entity_id: conversationId,
+            details: { statut, note, contact_name: body.contact_name },
+          })
+        }
         return NextResponse.json({ ok: true })
       }
 
@@ -93,6 +106,17 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'conversationId required' }, { status: 400 })
         }
         await updateLeadNotes(conversationId, notes || '')
+        const me2 = await getCurrentCommercial()
+        if (me2) {
+          await logActivity({
+            commercial_id: me2.id,
+            user_id: me2.user_id,
+            action_type: 'lead_note_update',
+            entity_type: 'lead_lbc',
+            entity_id: conversationId,
+            details: { notes },
+          })
+        }
         return NextResponse.json({ ok: true })
       }
 

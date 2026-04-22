@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
+import { getCurrentCommercial } from '@/lib/get-commercial'
+import { logActivity } from '@/lib/activity-log'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -28,6 +30,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const me = await getCurrentCommercial()
+  if (me) {
+    const actionType = body.fait ? 'tache_done' : 'tache_update'
+    await logActivity({
+      commercial_id: me.id,
+      user_id: me.user_id,
+      action_type: actionType,
+      entity_type: 'tache',
+      entity_id: id,
+      details: { titre: data.titre, ...body },
+    })
+  }
+
   return NextResponse.json(data)
 }
 

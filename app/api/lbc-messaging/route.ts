@@ -8,6 +8,8 @@ import {
   getUnreadCount,
   getAdInfo,
 } from '@/lib/lbc-messaging'
+import { getCurrentCommercial } from '@/lib/get-commercial'
+import { logActivity } from '@/lib/activity-log'
 
 /**
  * GET /api/lbc-messaging
@@ -105,6 +107,17 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'conv and text required' }, { status: 400 })
         }
         const data = await sendMessage(conv, text)
+        const me = await getCurrentCommercial()
+        if (me) {
+          await logActivity({
+            commercial_id: me.id,
+            user_id: me.user_id,
+            action_type: 'message_sent',
+            entity_type: 'message_lbc',
+            entity_id: conv,
+            details: { text_preview: text.substring(0, 100) },
+          })
+        }
         return NextResponse.json(data)
       }
 
