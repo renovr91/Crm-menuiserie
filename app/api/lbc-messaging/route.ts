@@ -11,8 +11,20 @@ import {
 } from '@/lib/lbc-messaging'
 import { getCurrentCommercial } from '@/lib/get-commercial'
 import { logActivity } from '@/lib/activity-log'
-import { findRelayEmail, saveRelayEmailToDB, getRelayEmailFromDB } from '@/lib/find-relay-email'
-import { sendRelayEmail } from '@/lib/send-relay-email'
+// Dynamic imports to avoid crashing the route if imapflow/nodemailer fail to load
+// These are only needed for relay email actions, not for message loading
+const getRelayModules = async () => {
+  const [relayFind, relaySend] = await Promise.all([
+    import('@/lib/find-relay-email'),
+    import('@/lib/send-relay-email'),
+  ])
+  return {
+    findRelayEmail: relayFind.findRelayEmail,
+    saveRelayEmailToDB: relayFind.saveRelayEmailToDB,
+    getRelayEmailFromDB: relayFind.getRelayEmailFromDB,
+    sendRelayEmail: relaySend.sendRelayEmail,
+  }
+}
 
 /**
  * GET /api/lbc-messaging
@@ -138,6 +150,7 @@ export async function POST(req: NextRequest) {
         if (!conv || !contactName) {
           return NextResponse.json({ error: 'conv and contactName required' }, { status: 400 })
         }
+        const { findRelayEmail } = await getRelayModules()
         const relayEmail = await findRelayEmail(conv, contactName, adTitle)
         return NextResponse.json({ relayEmail })
       }
@@ -147,6 +160,7 @@ export async function POST(req: NextRequest) {
         if (!conv || !relayEmail) {
           return NextResponse.json({ error: 'conv and relayEmail required' }, { status: 400 })
         }
+        const { saveRelayEmailToDB } = await getRelayModules()
         await saveRelayEmailToDB(conv, relayEmail)
         return NextResponse.json({ ok: true })
       }
@@ -156,6 +170,7 @@ export async function POST(req: NextRequest) {
         if (!conv) {
           return NextResponse.json({ error: 'conv required' }, { status: 400 })
         }
+        const { getRelayEmailFromDB } = await getRelayModules()
         const relayEmail = await getRelayEmailFromDB(conv)
         return NextResponse.json({ relayEmail })
       }
@@ -193,7 +208,8 @@ export async function PUT(req: NextRequest) {
     let data: any
 
     if (relayEmail && relayEmail.includes('@messagerie.leboncoin.fr')) {
-      // Send via Gmail SMTP to LBC relay email
+      // Send via Gmail SMTP to LBC relay email (dynamic import)
+      const { sendRelayEmail } = await getRelayModules()
       const result = await sendRelayEmail({
         relayEmail,
         subject: subject || 'Pièce jointe',
