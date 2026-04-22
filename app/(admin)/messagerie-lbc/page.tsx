@@ -304,7 +304,6 @@ export default function MessagerieLBCPage() {
   const [replyText, setReplyText] = useState('')
   const [sending, setSending] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesText, setNotesText] = useState('')
 
@@ -547,9 +546,11 @@ export default function MessagerieLBCPage() {
     }
   }
 
-  // --- Send attachment ---
-  const handleSendAttachment = async (file: File) => {
-    if (!selectedLead || uploadingFile) return
+  // --- Send file via relay (native LBC attachment) ---
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedLead || uploadingFile) return
+    e.target.value = ''
     setUploadingFile(true)
     try {
       const formData = new FormData()
@@ -562,10 +563,9 @@ export default function MessagerieLBCPage() {
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.error || 'Erreur upload')
+        throw new Error(err.error || 'Erreur envoi PJ')
       }
 
-      // Add to chat as a local message
       const newMsg: Message = {
         id: crypto.randomUUID(),
         text: '',
@@ -581,22 +581,11 @@ export default function MessagerieLBCPage() {
       const updated = [...panelMessages, newMsg]
       setPanelMessages(updated)
       msgCacheRef.current[selectedLead.conversation_id] = updated
-      setSelectedFile(null)
     } catch (e: any) {
-      alert('Erreur upload: ' + e.message)
+      alert('Erreur: ' + e.message)
     } finally {
       setUploadingFile(false)
     }
-  }
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
-      handleSendAttachment(file)
-    }
-    // Reset input so same file can be re-selected
-    e.target.value = ''
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -904,7 +893,6 @@ export default function MessagerieLBCPage() {
 
             {/* Reply box */}
             <div className="px-4 py-3 border-t border-gray-200 bg-white shrink-0">
-              {/* Upload indicator */}
               {uploadingFile && (
                 <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-blue-50 rounded-lg text-sm text-blue-600">
                   <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -912,7 +900,6 @@ export default function MessagerieLBCPage() {
                 </div>
               )}
               <div className="flex items-end gap-2">
-                {/* File upload button */}
                 <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleFileSelect} className="hidden" />
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -936,7 +923,7 @@ export default function MessagerieLBCPage() {
                   {sending ? '...' : 'Envoyer'}
                 </button>
               </div>
-              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre un fichier</div>
+              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre</div>
             </div>
           </div>
         </>
