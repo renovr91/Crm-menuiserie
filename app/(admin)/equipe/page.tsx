@@ -9,6 +9,7 @@ interface Commercial {
   email: string | null
   couleur: string
   actif: boolean
+  telegram_chat_id: string | null
 }
 
 interface Client {
@@ -33,6 +34,7 @@ export default function EquipePage() {
     telephone: '',
     email: '',
     couleur: '#3b82f6',
+    telegram_chat_id: '',
   })
 
   const loadCommerciaux = useCallback(async () => {
@@ -67,7 +69,7 @@ export default function EquipePage() {
 
   function openCreate() {
     setEditingId(null)
-    setFormData({ nom: '', telephone: '', email: '', couleur: '#3b82f6' })
+    setFormData({ nom: '', telephone: '', email: '', couleur: '#3b82f6', telegram_chat_id: '' })
     setShowModal(true)
   }
 
@@ -78,6 +80,7 @@ export default function EquipePage() {
       telephone: c.telephone || '',
       email: c.email || '',
       couleur: c.couleur || '#3b82f6',
+      telegram_chat_id: c.telegram_chat_id || '',
     })
     setShowModal(true)
   }
@@ -95,6 +98,7 @@ export default function EquipePage() {
           telephone: formData.telephone || null,
           email: formData.email || null,
           couleur: formData.couleur,
+          telegram_chat_id: formData.telegram_chat_id || null,
         }),
       })
       if (res.ok) {
@@ -164,7 +168,12 @@ export default function EquipePage() {
                   {c.email && (
                     <p className="text-sm text-gray-500 truncate">{c.email}</p>
                   )}
-                  {!c.telephone && !c.email && (
+                  {c.telegram_chat_id && (
+                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                      <span>📱</span> Telegram lié
+                    </p>
+                  )}
+                  {!c.telephone && !c.email && !c.telegram_chat_id && (
                     <p className="text-sm text-gray-400 italic">Aucun contact</p>
                   )}
                 </div>
@@ -226,6 +235,17 @@ export default function EquipePage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                   placeholder="email@exemple.com"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telegram Chat ID</label>
+                <input
+                  type="text"
+                  value={formData.telegram_chat_id}
+                  onChange={(e) => setFormData({ ...formData, telegram_chat_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  placeholder="Ex: 123456789"
+                />
+                <p className="text-xs text-gray-400 mt-1">Pour recevoir les rappels de tâches sur Telegram</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Couleur</label>
