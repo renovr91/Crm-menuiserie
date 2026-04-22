@@ -154,6 +154,37 @@ export async function getAdInfo(adId: string): Promise<any> {
 }
 
 /**
+ * Send an attachment (image/file) in a conversation via relay
+ * Sends file as base64 in JSON body
+ */
+export async function sendAttachment(conversationId: string, file: Uint8Array, fileName: string, contentType: string): Promise<any> {
+  // Convert to base64
+  let base64 = ''
+  const bytes = new Uint8Array(file)
+  const chunk = 8192
+  for (let i = 0; i < bytes.length; i += chunk) {
+    base64 += String.fromCharCode(...bytes.slice(i, i + chunk))
+  }
+  base64 = btoa(base64)
+
+  const res = await relayFetch(`/api/conversations/${conversationId}/messages/attachment`, {
+    method: 'POST',
+    body: JSON.stringify({
+      file_base64: base64,
+      file_name: fileName,
+      content_type: contentType,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Relay error ${res.status}: ${errText}`)
+  }
+
+  return res.json()
+}
+
+/**
  * Get attachment via relay proxy — returns binary data or redirect URL
  */
 export async function getAttachment(path: string, conv?: string): Promise<{ data: ArrayBuffer; contentType: string } | { redirect: string } | null> {

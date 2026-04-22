@@ -303,11 +303,14 @@ export default function MessagerieLBCPage() {
   const [classifying, setClassifying] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesText, setNotesText] = useState('')
 
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedLead = useMemo(() =>
     leads.find(l => l.conversation_id === selectedConvId) || null,
@@ -542,6 +545,58 @@ export default function MessagerieLBCPage() {
     } finally {
       setSending(false)
     }
+  }
+
+  // --- Send attachment ---
+  const handleSendAttachment = async (file: File) => {
+    if (!selectedLead || uploadingFile) return
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('conv', selectedLead.conversation_id)
+      formData.append('file', file)
+
+      const res = await fetch('/api/lbc-messaging', {
+        method: 'PUT',
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Erreur upload')
+      }
+
+      // Add to chat as a local message
+      const newMsg: Message = {
+        id: crypto.randomUUID(),
+        text: '',
+        createdAt: new Date().toISOString(),
+        isMe: true,
+        senderName: 'Moi (Renov-R)',
+        attachments: [{
+          url: URL.createObjectURL(file),
+          type: file.type,
+          fileName: file.name,
+        }],
+      }
+      const updated = [...panelMessages, newMsg]
+      setPanelMessages(updated)
+      msgCacheRef.current[selectedLead.conversation_id] = updated
+      setSelectedFile(null)
+    } catch (e: any) {
+      alert('Erreur upload: ' + e.message)
+    } finally {
+      setUploadingFile(false)
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+      handleSendAttachment(file)
+    }
+    // Reset input so same file can be re-selected
+    e.target.value = ''
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -849,7 +904,27 @@ export default function MessagerieLBCPage() {
 
             {/* Reply box */}
             <div className="px-4 py-3 border-t border-gray-200 bg-white shrink-0">
-              <div className="flex items-end gap-3">
+              {/* Upload indicator */}
+              {uploadingFile && (
+                <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-blue-50 rounded-lg text-sm text-blue-600">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  Envoi du fichier en cours...
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                {/* File upload button */}
+                <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleFileSelect} className="hidden" />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all hover:bg-gray-100"
+                  style={{ color: '#6B7280', opacity: uploadingFile ? 0.5 : 1 }}
+                  title="Joindre un fichier"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                </button>
                 <textarea ref={inputRef} value={replyText} onChange={e => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={2}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -861,7 +936,7 @@ export default function MessagerieLBCPage() {
                   {sending ? '...' : 'Envoyer'}
                 </button>
               </div>
-              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</div>
+              <div className="mt-1 text-[10px] text-gray-400">Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre un fichier</div>
             </div>
           </div>
         </>

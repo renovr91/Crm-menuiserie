@@ -4,6 +4,7 @@ import {
   getMessages,
   getConversationDetails,
   sendMessage,
+  sendAttachment,
   markAsRead,
   getUnreadCount,
   getAdInfo,
@@ -135,6 +136,42 @@ export async function POST(req: NextRequest) {
     }
   } catch (error: any) {
     console.error('[LBC Messaging]', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+/**
+ * PUT /api/lbc-messaging — Send attachment (multipart)
+ * FormData: conv, file
+ */
+export async function PUT(req: NextRequest) {
+  try {
+    const formData = await req.formData()
+    const conv = formData.get('conv') as string | null
+    const file = formData.get('file') as File | null
+
+    if (!conv || !file) {
+      return NextResponse.json({ error: 'conv and file required' }, { status: 400 })
+    }
+
+    const arrayBuffer = await file.arrayBuffer()
+    const data = await sendAttachment(conv, new Uint8Array(arrayBuffer), file.name, file.type || 'application/octet-stream')
+
+    const me = await getCurrentCommercial()
+    if (me) {
+      await logActivity({
+        commercial_id: me.id,
+        user_id: me.user_id,
+        action_type: 'message_sent',
+        entity_type: 'message_lbc',
+        entity_id: conv,
+        details: { attachment: file.name, type: file.type, size: file.size },
+      })
+    }
+
+    return NextResponse.json(data)
+  } catch (error: any) {
+    console.error('[LBC Messaging Attachment]', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
