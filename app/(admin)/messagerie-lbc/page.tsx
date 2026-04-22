@@ -473,23 +473,9 @@ export default function MessagerieLBCPage() {
     if (selectedConvId) setTimeout(() => inputRef.current?.focus(), 100)
   }, [selectedConvId])
 
-  // --- Init: sync au chargement de la page, puis affiche les leads ---
+  // --- Init: charge les leads depuis Supabase (pas de sync auto) ---
   useEffect(() => {
-    let cancelled = false
-    async function initSync() {
-      setSyncing(true)
-      try {
-        await fetch('/api/lbc-leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'sync' }),
-        })
-        if (!cancelled) await loadLeads()
-      } catch { /* ignore */ }
-      finally { if (!cancelled) setSyncing(false) }
-    }
-    initSync()
-    return () => { cancelled = true }
+    loadLeads()
   }, [loadLeads])
 
   useEffect(() => {
