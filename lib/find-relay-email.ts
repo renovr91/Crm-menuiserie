@@ -1,22 +1,22 @@
 /**
- * Find the LBC relay email for a conversation participant.
+ * Find the LBC relay email for a conversation.
  *
- * Searches Gmail IMAP for emails from @messagerie.leboncoin.fr
- * and matches by participant name and/or ad title.
- *
- * Also provides a function to save/retrieve relay emails from Supabase.
+ * Matching EXACT : cherche le conversation_id dans le body des emails
+ * provenant de @messagerie.leboncoin.fr. Chaque notif LBC contient
+ * un lien leboncoin.fr/messages/CONVERSATION_ID, donc 0 risque d'erreur.
  */
 
 import { ImapFlow } from 'imapflow'
+import { simpleParser } from 'mailparser'
 import { createAdminClient } from './supabase'
 
 /**
- * Search Gmail for the relay email matching a participant name + ad title.
- * Returns the xxx@messagerie.leboncoin.fr address or null.
+ * Search Gmail for the relay email matching a conversation_id.
+ * Cherche dans le body de chaque email @messagerie.leboncoin.fr
+ * un lien contenant le conversation_id exact.
  */
 export async function findRelayEmailFromGmail(
-  participantName: string,
-  adTitle?: string
+  conversationId: string
 ): Promise<string | null> {
   const client = new ImapFlow({
     host: 'imap.gmail.com',
@@ -24,7 +24,7 @@ export async function findRelayEmailFromGmail(
     secure: true,
     auth: {
       user: process.env.GMAIL_USER || 'renov.r91@gmail.com',
-      pass: process.env.GMAIL_APP_PASSWORD || 'qrftxzawsvlcoanq',
+      pass: process.env.GMAIL_APP_PASSWORD || 'qrft xzaw svlc oanq',
     },
     logger: false,
   })
@@ -32,7 +32,7 @@ export async function findRelayEmailFromGmail(
   try {
     await client.connect()
 
-    // Try "All Mail" first (catches emails in Promotions/Updates tabs)
+    // Try "All Mail" first
     let mailboxName = 'INBOX'
     try {
       const mailboxes = await client.list()
@@ -44,80 +44,51 @@ export async function findRelayEmailFromGmail(
 
     const lock = await client.getMailboxLock(mailboxName)
     try {
-      // Search for recent LBC emails (last 30 days)
+      // Search emails from @messagerie.leboncoin.fr (last 90 days)
       const since = new Date()
-      since.setDate(since.getDate() - 30)
+      since.setDate(since.getDate() - 90)
 
-      const searchResults = await client.search({ since })
-      if (!searchResults || searchResults.length === 0) return null
+      const searchResults = await client.search({
+        since,
+        from: '@messagerie.leboncoin.fr',
+      })
 
-      const uidStr = searchResults.join(',')
+      if (!searchResults || searchResults.length === 0) {
+        console.log('[findRelayEmail] Aucun email @messagerie.leboncoin.fr trouvé')
+        return null
+      }
 
-      // Fetch envelopes to find LBC relay emails
-      const candidates: Array<{ address: string; subject: string; date: Date }> = []
+      console.log(`[findRelayEmail] ${searchResults.length} emails @messagerie trouvés, recherche conv ${conversationId}...`)
 
-      for await (const msg of client.fetch(uidStr, { envelope: true }, { uid: true })) {
-        const fromAddr = msg.envelope?.from?.[0]?.address || ''
-        if (!fromAddr.includes('@messagerie.leboncoin.fr')) continue
+      // Parcourir du plus récent au plus ancien
+      const uids = [...searchResults].reverse()
 
-        const subject = msg.envelope?.subject || ''
-        const fromName = msg.envelope?.from?.[0]?.name || ''
-        const date = msg.envelope?.date ? new Date(msg.envelope.date) : new Date(0)
+      for (const uid of uids) {
+        try {
+          for await (const msg of client.fetch(String(uid), {
+            envelope: true,
+            source: true,
+          }, { uid: true })) {
+            const fromAddr = msg.envelope?.from?.[0]?.address || ''
+            if (!fromAddr.includes('@messagerie.leboncoin.fr')) continue
 
-        // Check if participant name matches (in subject or from name)
-        const nameLower = participantName.toLowerCase()
-        const subjectLower = subject.toLowerCase()
-        const fromNameLower = fromName.toLowerCase()
+            // Parser le body pour chercher le conversation_id
+            const parsed = await simpleParser(msg.source)
+            const body = (parsed.text || '') + (parsed.html || '')
 
-        const nameMatches =
-          subjectLower.includes(nameLower) ||
-          fromNameLower.includes(nameLower) ||
-          // Also match first name only
-          nameLower.split(' ').some((part) => part.length > 2 && fromNameLower.includes(part))
-
-        // Check if ad title matches
-        const titleMatches = adTitle
-          ? subjectLower.includes(adTitle.toLowerCase()) ||
-            adTitle
-              .toLowerCase()
-              .split(' ')
-              .filter((w) => w.length > 3)
-              .some((word) => subjectLower.includes(word))
-          : false
-
-        if (nameMatches || titleMatches) {
-          candidates.push({ address: fromAddr, subject, date })
+            if (body.includes(conversationId)) {
+              console.log(`[findRelayEmail] MATCH EXACT: ${fromAddr} contient ${conversationId}`)
+              return fromAddr
+            }
+          }
+        } catch {
+          // Skip les emails qu'on arrive pas à parser
+          continue
         }
       }
 
-      if (candidates.length === 0) return null
-
-      // If we have both name and title, prefer candidates that match both
-      if (participantName && adTitle) {
-        const bothMatch = candidates.filter((c) => {
-          const s = c.subject.toLowerCase()
-          const nameLower = participantName.toLowerCase()
-          const titleLower = adTitle.toLowerCase()
-          return (
-            (s.includes(nameLower) ||
-              nameLower.split(' ').some((p) => p.length > 2 && s.includes(p))) &&
-            (s.includes(titleLower) ||
-              titleLower
-                .split(' ')
-                .filter((w) => w.length > 3)
-                .some((w) => s.includes(w)))
-          )
-        })
-        if (bothMatch.length > 0) {
-          // Return the most recent match
-          bothMatch.sort((a, b) => b.date.getTime() - a.date.getTime())
-          return bothMatch[0].address
-        }
-      }
-
-      // Return the most recent matching candidate
-      candidates.sort((a, b) => b.date.getTime() - a.date.getTime())
-      return candidates[0].address
+      console.log(`[findRelayEmail] Aucun email ne contient ${conversationId}`)
+      return null
     } finally {
       lock.release()
     }
@@ -157,19 +128,17 @@ export async function saveRelayEmailToDB(
 }
 
 /**
- * Full flow: get from DB cache, or search Gmail, then cache result
+ * Full flow: get from DB cache, or search Gmail by conversation_id, then cache
  */
 export async function findRelayEmail(
-  conversationId: string,
-  participantName: string,
-  adTitle?: string
+  conversationId: string
 ): Promise<string | null> {
   // 1. Check DB cache first
   const cached = await getRelayEmailFromDB(conversationId)
   if (cached) return cached
 
-  // 2. Search Gmail
-  const found = await findRelayEmailFromGmail(participantName, adTitle)
+  // 2. Search Gmail by conversation_id (matching exact)
+  const found = await findRelayEmailFromGmail(conversationId)
   if (found) {
     // 3. Cache in DB
     await saveRelayEmailToDB(conversationId, found)

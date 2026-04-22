@@ -546,20 +546,19 @@ export default function MessagerieLBCPage() {
     if (!file || !selectedLead || uploadingFile) return
     e.target.value = ''
 
-    // If relay email is already known, send directly
+    // Si relay email déjà en cache → envoi direct (matching exact, 0 risque)
     if (selectedLead.relay_email) {
       await sendFileWithRelayEmail(file, selectedLead.relay_email)
       return
     }
 
-    // Otherwise, open modal to find/enter relay email
+    // Sinon ouvrir la modale + recherche auto par conversation_id (matching exact)
     setPendingFile(file)
     setRelayEmailInput('')
     setAttachmentText('Veuillez trouver ci-joint le document demande.')
     setRelayEmailStatus(null)
     setRelayEmailModal(true)
 
-    // Auto-search for relay email in background
     setRelayEmailSearching(true)
     try {
       const res = await fetch('/api/lbc-messaging', {
@@ -568,21 +567,19 @@ export default function MessagerieLBCPage() {
         body: JSON.stringify({
           action: 'find-relay-email',
           conv: selectedLead.conversation_id,
-          contactName: selectedLead.contact_name,
-          adTitle: selectedLead.ad_title,
         }),
       })
       if (res.ok) {
         const data = await res.json()
         if (data.relayEmail) {
           setRelayEmailInput(data.relayEmail)
-          setRelayEmailStatus('Trouve automatiquement dans Gmail')
+          setRelayEmailStatus('Trouve (match exact par conversation)')
         } else {
-          setRelayEmailStatus('Non trouve - entrez manuellement')
+          setRelayEmailStatus('Non trouve - collez depuis Gmail')
         }
       }
     } catch {
-      setRelayEmailStatus('Erreur recherche - entrez manuellement')
+      setRelayEmailStatus('Erreur recherche - collez depuis Gmail')
     } finally {
       setRelayEmailSearching(false)
     }
