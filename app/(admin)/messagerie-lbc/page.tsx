@@ -22,6 +22,7 @@ interface Lead {
   notes: string | null
   telephone: string | null
   relay_email: string | null
+  dernier_commercial: string | null
   dernier_message: string | null
   dernier_message_date: string | null
   dernier_message_is_me: boolean
@@ -235,9 +236,16 @@ function LeadCard({
             {lead.dernier_message_is_me ? 'Vous: ' : ''}{lead.dernier_message || '...'}
           </span>
         </div>
-        {lead.ad_price && (
-          <span className="text-[10px] font-semibold shrink-0 ml-1" style={{ color: '#16A34A' }}>{lead.ad_price}</span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0 ml-1">
+          {lead.dernier_commercial && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
+              {lead.dernier_commercial}
+            </span>
+          )}
+          {lead.ad_price && (
+            <span className="text-[10px] font-semibold" style={{ color: '#16A34A' }}>{lead.ad_price}</span>
+          )}
+        </div>
       </div>
 
       {/* Hover chevrons */}
@@ -517,6 +525,13 @@ export default function MessagerieLBCPage() {
         body: JSON.stringify({ action: 'send', conv: selectedLead.conversation_id, text: replyText.trim() }),
       })
       if (!res.ok) throw new Error('Erreur envoi')
+      const resData = await res.json()
+      // Mettre à jour le dernier commercial localement
+      if (resData.commercial) {
+        setLeads(prev => prev.map(l =>
+          l.conversation_id === selectedLead.conversation_id ? { ...l, dernier_commercial: resData.commercial } : l
+        ))
+      }
       const newMsg: Message = {
         id: crypto.randomUUID(),
         text: replyText.trim(),
@@ -930,9 +945,9 @@ export default function MessagerieLBCPage() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Quick replies */}
+            {/* Quick replies — menu déroulant */}
             {(classification || templates.length > 0) && !loadingMessages && panelMessages.length > 0 && (
-              <div className="px-4 py-2 border-t border-gray-100 overflow-x-auto shrink-0">
+              <div className="px-4 py-2 border-t border-gray-100 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] shrink-0 font-medium text-gray-400">
                     {classifying ? '⏳ Analyse...' : '💡 Réponses :'}
@@ -944,12 +959,18 @@ export default function MessagerieLBCPage() {
                       ✨ Cas {classification.cas}
                     </button>
                   )}
-                  {templates.map(t => (
-                    <button key={t.id} onClick={() => setReplyText(t.contenu)}
-                      className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium shrink-0 hover:opacity-80 bg-gray-100 text-gray-600 border border-gray-200">
-                      {t.label}
-                    </button>
-                  ))}
+                  {templates.length > 0 && (
+                    <select
+                      onChange={e => { if (e.target.value) { setReplyText(e.target.value); e.target.value = '' } }}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200 outline-none cursor-pointer"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Modèles de réponse...</option>
+                      {templates.map(t => (
+                        <option key={t.id} value={t.contenu}>{t.label}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
             )}
@@ -975,10 +996,10 @@ export default function MessagerieLBCPage() {
                   </svg>
                 </a>
                 <textarea ref={inputRef} value={replyText} onChange={e => setReplyText(e.target.value)}
-                  onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={2}
+                  onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={4}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  style={{ maxHeight: 200, minHeight: 60 }}
-                  onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px' }} />
+                  style={{ maxHeight: 300, minHeight: 120 }}
+                  onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 300) + 'px' }} />
                 <button onClick={handleSend} disabled={!replyText.trim() || sending}
                   className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={{ background: replyText.trim() ? '#0EA5E9' : '#F3F4F6', color: replyText.trim() ? '#fff' : '#9CA3AF', opacity: sending ? 0.5 : 1 }}>

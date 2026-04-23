@@ -132,8 +132,12 @@ export async function POST(req: NextRequest) {
             entity_id: conv,
             details: { text_preview: text.substring(0, 100) },
           })
+          // Sauvegarder le dernier commercial qui a traité ce lead
+          const { createAdminClient } = await import('@/lib/supabase')
+          const supabase = createAdminClient()
+          await supabase.from('lbc_leads').update({ dernier_commercial: me.nom || 'Inconnu' }).eq('conversation_id', conv)
         }
-        return NextResponse.json(data)
+        return NextResponse.json({ ...data, commercial: me?.nom })
       }
 
       case 'read': {
