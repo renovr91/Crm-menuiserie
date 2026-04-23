@@ -552,12 +552,18 @@ export default function MessagerieLBCPage() {
       return
     }
 
-    // Sinon ouvrir la modale + recherche auto par conversation_id (matching exact)
+    // Ouvrir la modale + recherche auto par nom + titre annonce (matching strict)
     setPendingFile(file)
     setRelayEmailInput('')
     setAttachmentText('Veuillez trouver ci-joint le document demande.')
     setRelayEmailStatus(null)
     setRelayEmailModal(true)
+
+    // Recherche auto seulement si on a le titre de l'annonce
+    if (!selectedLead.ad_title) {
+      setRelayEmailStatus('Pas de titre annonce — collez le relay email depuis Gmail')
+      return
+    }
 
     setRelayEmailSearching(true)
     try {
@@ -567,13 +573,15 @@ export default function MessagerieLBCPage() {
         body: JSON.stringify({
           action: 'find-relay-email',
           conv: selectedLead.conversation_id,
+          contactName: selectedLead.contact_name,
+          adTitle: selectedLead.ad_title,
         }),
       })
       if (res.ok) {
         const data = await res.json()
         if (data.relayEmail) {
           setRelayEmailInput(data.relayEmail)
-          setRelayEmailStatus('Trouve (match exact par conversation)')
+          setRelayEmailStatus(`Trouve : "${selectedLead.contact_name}" + "${selectedLead.ad_title}"`)
         } else {
           setRelayEmailStatus('Non trouve - collez depuis Gmail')
         }
