@@ -305,6 +305,9 @@ export default function MessagerieLBCPage() {
   const msgCacheRef = useRef<Record<string, Message[]>>({})
   const [panelMessages, setPanelMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false)
+  const [messagesPage, setMessagesPage] = useState(1)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
 
   // Templates + classification (chargés une seule fois)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -368,6 +371,26 @@ export default function MessagerieLBCPage() {
     }
   }, [searchQuery, loadLeads])
 
+  // --- Parse raw messages ---
+  const parseMessages = (rawMsgs: any[], convId: string, contactName: string): Message[] => {
+    return rawMsgs.map((m: any) => {
+      const isMe = m.outgoing === true
+      return {
+        id: m.messageId || m.id,
+        text: m.text || m.body || '',
+        createdAt: m.createdAt || m.date || '',
+        isMe,
+        senderName: isMe ? 'Moi (Renov-R)' : contactName,
+        partnerRead: m.partnerRead === true,
+        attachments: (m.attachments || []).map((a: any) => ({
+          url: `https://www.leboncoin.fr/messages/id/${convId}`,
+          type: a.contentType || a.type || 'application/octet-stream',
+          fileName: a.path ? a.path.split('/').pop() || 'fichier' : 'fichier',
+        })),
+      }
+    })
+  }
+
   // --- Load messages (with cache) ---
   const loadMessages = useCallback(async (convId: string, contactName: string) => {
     // Check cache first
@@ -378,27 +401,17 @@ export default function MessagerieLBCPage() {
 
     setLoadingMessages(true)
     setPanelMessages([])
+    setMessagesPage(1)
+    setHasMoreMessages(false)
     try {
       const res = await fetch(`/api/lbc-messaging?action=messages&conv=${convId}`)
       if (!res.ok) throw new Error('Erreur')
       const data = await res.json()
       const rawMsgs = data._embedded?.messages || data.messages || []
-      const msgs: Message[] = rawMsgs.map((m: any) => {
-        const isMe = m.outgoing === true
-        return {
-          id: m.messageId || m.id,
-          text: m.text || m.body || '',
-          createdAt: m.createdAt || m.date || '',
-          isMe,
-          senderName: isMe ? 'Moi (Renov-R)' : contactName,
-          partnerRead: m.partnerRead === true,
-          attachments: (m.attachments || []).map((a: any) => ({
-            url: `https://www.leboncoin.fr/messages/id/${convId}`,
-            type: a.contentType || a.type || 'application/octet-stream',
-            fileName: a.path ? a.path.split('/').pop() || 'fichier' : 'fichier',
-          })),
-        }
-      })
+      const msgs = parseMessages(rawMsgs, convId, contactName)
+
+      // S'il y a exactement 20 messages (taille de page LBC), il y en a probablement plus
+      setHasMoreMessages(rawMsgs.length >= 20)
 
       const sorted = msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       msgCacheRef.current[convId] = sorted
@@ -427,6 +440,33 @@ export default function MessagerieLBCPage() {
     } catch { /* ignore */ }
     finally { setLoadingMessages(false) }
   }, [])
+
+  // --- Load more messages (pagination) ---
+  const loadMoreMessages = useCallback(async () => {
+    if (!selectedConvId || !selectedLead || loadingMoreMessages) return
+    const nextPage = messagesPage + 1
+    setLoadingMoreMessages(true)
+    try {
+      const res = await fetch(`/api/lbc-messaging?action=messages&conv=${selectedConvId}&page=${nextPage}`)
+      if (!res.ok) throw new Error('Erreur')
+      const data = await res.json()
+      const rawMsgs = data._embedded?.messages || data.messages || []
+      if (rawMsgs.length === 0) {
+        setHasMoreMessages(false)
+        return
+      }
+      const olderMsgs = parseMessages(rawMsgs, selectedConvId, selectedLead.contact_name)
+      const allMsgs = [...olderMsgs, ...panelMessages]
+      const sorted = allMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      // Dédupliquer par ID
+      const unique = sorted.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
+      msgCacheRef.current[selectedConvId] = unique
+      setPanelMessages(unique)
+      setMessagesPage(nextPage)
+      setHasMoreMessages(rawMsgs.length >= 20)
+    } catch { /* ignore */ }
+    finally { setLoadingMoreMessages(false) }
+  }, [selectedConvId, selectedLead, messagesPage, panelMessages, loadingMoreMessages])
 
   // --- Load templates (once) ---
   useEffect(() => {
@@ -894,7 +934,24 @@ export default function MessagerieLBCPage() {
               ) : panelMessages.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 text-sm">Aucun message</div>
               ) : (
-                panelMessages.map((msg, i) => {
+                <>
+                  {hasMoreMessages && (
+                    <div className="text-center pb-2">
+                      <button
+                        onClick={loadMoreMessages}
+                        disabled={loadingMoreMessages}
+                        className="px-4 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 transition-all"
+                      >
+                        {loadingMoreMessages ? (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                            Chargement...
+                          </span>
+                        ) : 'Charger les messages précédents'}
+                      </button>
+                    </div>
+                  )}
+                  {panelMessages.map((msg, i) => {
                   const showName = i === 0 || panelMessages[i - 1].isMe !== msg.isMe
                   return (
                     <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
@@ -940,7 +997,8 @@ export default function MessagerieLBCPage() {
                       </div>
                     </div>
                   )
-                })
+                  })}
+                </>
               )}
               <div ref={chatEndRef} />
             </div>
@@ -962,7 +1020,7 @@ export default function MessagerieLBCPage() {
                   {templates.length > 0 && (
                     <select
                       onChange={e => { if (e.target.value) { setReplyText(e.target.value); e.target.value = '' } }}
-                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200 outline-none cursor-pointer"
+                      className="px-3 py-2 rounded-lg text-[13px] font-medium bg-gray-100 text-gray-600 border border-gray-200 outline-none cursor-pointer"
                       defaultValue=""
                     >
                       <option value="" disabled>Modèles de réponse...</option>
@@ -996,9 +1054,9 @@ export default function MessagerieLBCPage() {
                   </svg>
                 </a>
                 <textarea ref={inputRef} value={replyText} onChange={e => setReplyText(e.target.value)}
-                  onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={4}
+                  onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={6}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  style={{ maxHeight: 300, minHeight: 120 }}
+                  style={{ maxHeight: 400, minHeight: 180 }}
                   onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 300) + 'px' }} />
                 <button onClick={handleSend} disabled={!replyText.trim() || sending}
                   className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
