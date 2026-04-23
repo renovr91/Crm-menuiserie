@@ -963,18 +963,17 @@ export default function MessagerieLBCPage() {
                 </div>
               )}
               <div className="flex items-end gap-2">
-                <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleFileSelect} className="hidden" />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingFile}
+                <a
+                  href={`https://www.leboncoin.fr/messages/id/${selectedLead.conversation_id}`}
+                  target="_blank" rel="noopener noreferrer"
                   className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all hover:bg-gray-100"
-                  style={{ color: '#6B7280', opacity: uploadingFile ? 0.5 : 1 }}
-                  title="Joindre un fichier"
+                  style={{ color: '#6B7280' }}
+                  title="Ouvrir sur LBC pour envoyer une PJ"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
-                </button>
+                </a>
                 <textarea ref={inputRef} value={replyText} onChange={e => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown} placeholder="Écrire un message..." rows={2}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none resize-none bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -987,12 +986,7 @@ export default function MessagerieLBCPage() {
                 </button>
               </div>
               <div className="mt-1 text-[10px] text-gray-400">
-                Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 pour joindre
-                {selectedLead.relay_email && (
-                  <span className="ml-2" style={{ color: '#10B981' }}>
-                    | Email relay: {selectedLead.relay_email.split('@')[0].slice(0, 12)}...@messagerie.leboncoin.fr
-                  </span>
-                )}
+                Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 ouvrir sur LBC
               </div>
             </div>
           </div>
