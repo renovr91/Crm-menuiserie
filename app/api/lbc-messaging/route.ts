@@ -146,12 +146,12 @@ export async function POST(req: NextRequest) {
       }
 
       case 'find-relay-email': {
-        const { conv, contactName, conversationDate } = body
-        if (!conv || !contactName || !conversationDate) {
-          return NextResponse.json({ error: 'conv, contactName et conversationDate requis' }, { status: 400 })
+        const { conv, contactName, firstMessageText } = body
+        if (!conv || !firstMessageText) {
+          return NextResponse.json({ error: 'conv et firstMessageText requis' }, { status: 400 })
         }
         const { findRelayEmail } = await getRelayModules()
-        const relayEmail = await findRelayEmail(conv, contactName, conversationDate)
+        const relayEmail = await findRelayEmail(conv, contactName || '', firstMessageText)
         return NextResponse.json({ relayEmail })
       }
 

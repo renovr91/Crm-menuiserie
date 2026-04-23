@@ -552,16 +552,17 @@ export default function MessagerieLBCPage() {
       return
     }
 
-    // Ouvrir la modale + recherche auto par nom + date (matching strict)
+    // Ouvrir la modale + recherche auto par texte du premier message
     setPendingFile(file)
     setRelayEmailInput('')
     setAttachmentText('Veuillez trouver ci-joint le document demande.')
     setRelayEmailStatus(null)
     setRelayEmailModal(true)
 
-    // Recherche auto seulement si on a la date de création
-    if (!selectedLead.created_at) {
-      setRelayEmailStatus('Pas de date — collez le relay email depuis Gmail')
+    // Trouver le premier message du client (pas le nôtre)
+    const firstClientMsg = panelMessages.find(m => !m.isMe)
+    if (!firstClientMsg || !firstClientMsg.text) {
+      setRelayEmailStatus('Pas de message client — collez le relay email depuis Gmail')
       return
     }
 
@@ -574,14 +575,14 @@ export default function MessagerieLBCPage() {
           action: 'find-relay-email',
           conv: selectedLead.conversation_id,
           contactName: selectedLead.contact_name,
-          conversationDate: selectedLead.created_at,
+          firstMessageText: firstClientMsg.text,
         }),
       })
       if (res.ok) {
         const data = await res.json()
         if (data.relayEmail) {
           setRelayEmailInput(data.relayEmail)
-          setRelayEmailStatus(`Trouve pour "${selectedLead.contact_name}" (date la plus proche)`)
+          setRelayEmailStatus('Trouve (match par texte du message)')
         } else {
           setRelayEmailStatus('Non trouve - collez depuis Gmail')
         }
