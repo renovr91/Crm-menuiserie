@@ -63,7 +63,7 @@ async function findOriginalEmail(relayEmail: string): Promise<{
         // Parse references from headers
         const headersRaw = msg.headers?.toString() || ''
         const references: string[] = []
-        const refMatch = headersRaw.match(/References:\s*(.+?)(?:\r?\n(?!\s)|$)/is)
+        const refMatch = headersRaw.match(/References:\s*(.+?)(?:\r?\n(?!\s)|$)/i)
         if (refMatch) {
           const refs = refMatch[1].match(/<[^>]+>/g)
           if (refs) references.push(...refs)
