@@ -46,13 +46,14 @@ interface LBCMessage {
 /**
  * Helper: appel au relay VPS
  */
-async function relayFetch(path: string, options: RequestInit = {}): Promise<Response> {
+async function relayFetch(path: string, options: RequestInit = {}, manual: boolean = false): Promise<Response> {
   const url = `${RELAY_URL}${path}`
   const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': RELAY_API_KEY,
+      ...(manual ? { 'X-Manual-Request': 'true' } : {}),
       ...options.headers,
     },
   })
@@ -66,7 +67,7 @@ export async function listConversations(pageHash?: string): Promise<any> {
   const params = pageHash
     ? `pageHash=${encodeURIComponent(pageHash)}&next=false&size=50`
     : 'itemsPerPage=50'
-  const res = await relayFetch(`/api/conversations?${params}`)
+  const res = await relayFetch(`/api/conversations?${params}`, {}, true)  // manual=true → warmup si nécessaire
 
   if (!res.ok) {
     const text = await res.text()

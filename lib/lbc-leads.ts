@@ -56,7 +56,7 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
   // Charger TOUTES les conversations LBC (pagination complète)
   let rawConvs: any[] = []
   let pageHash: string | undefined = undefined
-  const MAX_PAGES = 20 // TEMPORAIRE : chargement 10 jours, remettre à 10 après
+  const MAX_PAGES = 10 // Max 500 conversations
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const data = await listConversations(pageHash)
