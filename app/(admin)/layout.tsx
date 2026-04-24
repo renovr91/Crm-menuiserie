@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/pipeline', label: 'Pipeline', icon: '📊' },
   { href: '/clients', label: 'Clients', icon: '👥' },
   { href: '/devis', label: 'Devis', icon: '📄' },
+  { href: '/devis-claudus', label: 'Devis Claudus', icon: '⚡' },
   { href: '/taches', label: 'Tâches', icon: '✅' },
   { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
   { href: '/livraisons', label: 'Livraisons', icon: '📦' },
@@ -83,9 +84,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Navigation */}
           <nav className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-hide">
             {NAV_ITEMS.map((item) => {
+              // Active si URL exacte OU si c'est une sous-route (avec `/` après le prefix)
+              // pour éviter que `/devis` matche aussi `/devis-claudus`.
+              // Active si URL exacte OU si c'est une sous-route (avec `/` après le prefix)
+              // pour éviter que `/devis` matche aussi `/devis-claudus`.
               const isActive =
                 pathname === item.href ||
-                (item.href !== '/' && pathname.startsWith(item.href))
+                (item.href !== '/' && pathname.startsWith(item.href + '/'))
               const inactiveColor = theme === 'dark' ? '#8A92A6' : '#475569'
               const hoverColor = theme === 'dark' ? '#E8EAF2' : '#0F172A'
               const activeColor = theme === 'dark' ? '#67E8F9' : '#0891B2'
