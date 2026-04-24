@@ -12,6 +12,9 @@ interface DevisClaudus {
   delai: string | null
   montant_ht: number | null
   montant_ttc: number | null
+  montant_achat_ht: number | null
+  marge_ht: number | null
+  taux_marge_pct: number | null
   pdf_path: string | null
   pdf_filename: string | null
   created_at: string
@@ -74,8 +77,18 @@ export default function DevisClaudusPage() {
   const stats = useMemo(() => {
     const total = filtered.length
     const totalTTC = filtered.reduce((s, d) => s + Number(d.montant_ttc || 0), 0)
+    const totalHT = filtered.reduce((s, d) => s + Number(d.montant_ht || 0), 0)
+    const totalAchat = filtered.reduce((s, d) => s + Number(d.montant_achat_ht || 0), 0)
+    const totalMarge = filtered.reduce((s, d) => s + Number(d.marge_ht || 0), 0)
+    const withMarge = filtered.filter((d) => d.marge_ht !== null).length
+    // Taux de marge moyen pondéré (sur les devis qui ont une marge)
+    const tauxMoyen = withMarge > 0
+      ? filtered.filter(d => d.marge_ht !== null).reduce((s, d) => s + Number(d.montant_ht || 0), 0) > 0
+        ? (totalMarge / filtered.filter(d => d.marge_ht !== null).reduce((s, d) => s + Number(d.montant_ht || 0), 0)) * 100
+        : 0
+      : 0
     const withPdf = filtered.filter((d) => d.pdf_path).length
-    return { total, totalTTC, withPdf }
+    return { total, totalTTC, totalHT, totalAchat, totalMarge, tauxMoyen, withMarge, withPdf }
   }, [filtered])
 
   async function handleDownload(numero: string) {
@@ -111,15 +124,28 @@ export default function DevisClaudusPage() {
             Devis générés via l&apos;outil CLI — partagés entre tous les Macs
           </p>
         </div>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-2 text-sm flex-wrap">
           <div className="bg-white border rounded-lg px-3 py-1.5">
-            <span className="text-gray-500">Total : </span>
+            <span className="text-gray-500">Devis : </span>
             <span className="font-semibold">{stats.total}</span>
           </div>
           <div className="bg-white border rounded-lg px-3 py-1.5">
             <span className="text-gray-500">CA TTC : </span>
             <span className="font-semibold">{eur(stats.totalTTC)}</span>
           </div>
+          {stats.withMarge > 0 && (
+            <>
+              <div className="bg-white border rounded-lg px-3 py-1.5">
+                <span className="text-gray-500">Achat HT : </span>
+                <span className="font-semibold">{eur(stats.totalAchat)}</span>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                <span className="text-green-700">Marge : </span>
+                <span className="font-semibold text-green-800">{eur(stats.totalMarge)}</span>
+                <span className="text-green-600 text-xs ml-1">({stats.tauxMoyen.toFixed(1)}%)</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -190,12 +216,16 @@ export default function DevisClaudusPage() {
                 <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Commercial</th>
                 <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                 <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
-                <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Montant TTC</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Achat HT</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Vente TTC</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider" title="Marge brute HT (Vente HT - Achat HT)">Marge HT</th>
                 <th className="text-center p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">PDF</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((d) => (
+              {filtered.map((d) => {
+                const hasMarge = d.marge_ht !== null && d.marge_ht !== undefined
+                return (
                 <tr key={d.numero} className="hover:bg-gray-50 transition-colors">
                   <td className="p-3 text-sm font-mono font-semibold">{d.numero}</td>
                   <td className="p-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(d.created_at)}</td>
@@ -217,7 +247,22 @@ export default function DevisClaudusPage() {
                     )}
                   </td>
                   <td className="p-3 text-sm text-gray-600 max-w-xs truncate">{d.reference || '—'}</td>
+                  <td className="p-3 text-sm text-right whitespace-nowrap text-gray-600">
+                    {hasMarge ? eur(d.montant_achat_ht) : <span className="text-gray-300 text-xs">—</span>}
+                  </td>
                   <td className="p-3 text-sm font-semibold text-right whitespace-nowrap">{eur(d.montant_ttc)}</td>
+                  <td className="p-3 text-sm text-right whitespace-nowrap">
+                    {hasMarge ? (
+                      <div>
+                        <div className="font-semibold text-green-700">{eur(d.marge_ht)}</div>
+                        {d.taux_marge_pct !== null && (
+                          <div className="text-xs text-green-600">{Number(d.taux_marge_pct).toFixed(1)}%</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs" title="Prix d'achat pas renseigné dans le JSON">—</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center">
                     {d.pdf_path ? (
                       <button
@@ -237,7 +282,7 @@ export default function DevisClaudusPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

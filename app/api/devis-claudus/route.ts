@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const supabase = createAdminClient()
     let query = supabase
       .from('devis_claudus')
-      .select('numero, created_by, client_nom, client_telephone, client_ville, reference, delai, montant_ht, montant_ttc, pdf_path, pdf_filename, created_at')
+      .select('numero, created_by, client_nom, client_telephone, client_ville, reference, delai, montant_ht, montant_ttc, montant_achat_ht, marge_ht, taux_marge_pct, pdf_path, pdf_filename, created_at')
       .order('created_at', { ascending: false })
       .limit(Math.min(Math.max(limit, 1), 1000))
 
