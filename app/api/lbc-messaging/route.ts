@@ -50,9 +50,33 @@ export async function GET(req: NextRequest) {
       case 'messages': {
         const conv = searchParams.get('conv')
         if (!conv) return NextResponse.json({ error: 'conv required' }, { status: 400 })
-        const page = parseInt(searchParams.get('page') || '1')
-        const data = await getMessages(conv, page)
-        return NextResponse.json(data)
+        // Lire depuis Supabase (rempli par le bridge Chrome Tampermonkey)
+        const { createAdminClient } = await import('@/lib/supabase')
+        const supabase = createAdminClient()
+        const { data: cached } = await supabase
+          .from('lbc_messages')
+          .select('messages, updated_at')
+          .eq('conversation_id', conv)
+          .single()
+        if (cached && cached.messages) {
+          return NextResponse.json({
+            messages: cached.messages,
+            source: 'chrome_bridge',
+            cached_at: cached.updated_at,
+          })
+        }
+        // Fallback: essayer le relay VPS (peut échouer)
+        try {
+          const page = parseInt(searchParams.get('page') || '1')
+          const data = await getMessages(conv, page)
+          return NextResponse.json({ ...data, source: 'relay' })
+        } catch(e: any) {
+          return NextResponse.json({
+            messages: [],
+            source: 'none',
+            error: 'Messages pas encore synchronisés. Ouvrez leboncoin.fr dans Chrome pour activer le bridge.',
+          })
+        }
       }
 
       case 'details': {
@@ -121,7 +145,17 @@ export async function POST(req: NextRequest) {
         if (!conv || !text) {
           return NextResponse.json({ error: 'conv and text required' }, { status: 400 })
         }
-        const data = await sendMessage(conv, text)
+        // Écrire dans l'outbox Supabase — le bridge Chrome enverra le message
+        const { createAdminClient } = await import('@/lib/supabase')
+        const supabase = createAdminClient()
+        const { data: outboxEntry, error: outboxErr } = await supabase
+          .from('lbc_outbox')
+          .insert({ conversation_id: conv, text, status: 'pending' })
+          .select()
+          .single()
+        if (outboxErr) {
+          return NextResponse.json({ error: outboxErr.message }, { status: 500 })
+        }
         const me = await getCurrentCommercial()
         if (me) {
           await logActivity({
@@ -132,12 +166,9 @@ export async function POST(req: NextRequest) {
             entity_id: conv,
             details: { text_preview: text.substring(0, 100) },
           })
-          // Sauvegarder le dernier commercial qui a traité ce lead
-          const { createAdminClient } = await import('@/lib/supabase')
-          const supabase = createAdminClient()
           await supabase.from('lbc_leads').update({ dernier_commercial: me.nom || 'Inconnu' }).eq('conversation_id', conv)
         }
-        return NextResponse.json({ ...data, commercial: me?.nom })
+        return NextResponse.json({ ok: true, outbox_id: outboxEntry.id, status: 'pending', commercial: me?.nom })
       }
 
       case 'read': {

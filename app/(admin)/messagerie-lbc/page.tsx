@@ -358,11 +358,17 @@ export default function MessagerieLBCPage() {
   const handleSync = useCallback(async () => {
     setSyncing(true)
     try {
-      await fetch('/api/lbc-leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync' }),
-      })
+      // Essayer le sync via relay VPS (peut échouer si relay down)
+      try {
+        await fetch('/api/lbc-leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync' }),
+        })
+      } catch {
+        // Relay down — pas grave, le bridge Chrome sync directement dans Supabase
+      }
+      // Toujours recharger les leads depuis Supabase
       await loadLeads(searchQuery)
     } catch (e: any) {
       setError(e.message)
