@@ -78,11 +78,10 @@ export async function listConversations(pageHash?: string): Promise<any> {
 }
 
 /**
- * Get messages for a specific conversation.
- * manual=true → relay fait un warmup forcé si cookie DD > 5 min, garantit que ça marche.
+ * Get messages for a specific conversation
  */
 export async function getMessages(conversationId: string, page = 1): Promise<any> {
-  const res = await relayFetch(`/api/conversations/${conversationId}/messages?page=${page}`, {}, true)
+  const res = await relayFetch(`/api/conversations/${conversationId}/messages?page=${page}`)
 
   if (!res.ok) {
     const text = await res.text()
