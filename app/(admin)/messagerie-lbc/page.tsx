@@ -354,21 +354,12 @@ export default function MessagerieLBCPage() {
     }
   }, [])
 
-  // --- Sync (manual only — heavy) ---
+  // --- Sync (manual only) --- Recharge les leads depuis Supabase (rempli par le bridge Chrome)
   const handleSync = useCallback(async () => {
     setSyncing(true)
     try {
-      // Essayer le sync via relay VPS (peut échouer si relay down)
-      try {
-        await fetch('/api/lbc-leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'sync' }),
-        })
-      } catch {
-        // Relay down — pas grave, le bridge Chrome sync directement dans Supabase
-      }
-      // Toujours recharger les leads depuis Supabase
+      // Plus de relay VPS — le bridge Chrome Tampermonkey sync directement dans Supabase
+      // On recharge simplement les leads depuis Supabase
       await loadLeads(searchQuery)
     } catch (e: any) {
       setError(e.message)

@@ -76,8 +76,9 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'sync': {
-        const result = await syncConversationsToLeads()
-        return NextResponse.json(result)
+        // Plus de relay VPS — le bridge Chrome Tampermonkey sync directement dans Supabase
+        // Cette action ne fait plus rien, les données sont déjà à jour dans lbc_leads
+        return NextResponse.json({ synced: 0, created: 0, updated: 0, source: 'chrome_bridge' })
       }
 
       case 'update-status': {
