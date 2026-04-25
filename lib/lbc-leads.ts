@@ -53,22 +53,16 @@ export async function syncConversationsToLeads(): Promise<{ synced: number; crea
   const supabase = createAdminClient()
   let synced = 0, created = 0, updated = 0
 
-  // Charger TOUTES les conversations LBC (pagination complète)
+  // Charger UNIQUEMENT les 50 conversations les plus récentes (page 1 seulement).
+  // La pagination en cascade timeoutait Vercel (10s) qui retry + crame des solves Hyper-SDK.
+  // Les conversations anciennes restent en base (plus besoin de re-sync).
   let rawConvs: any[] = []
-  let pageHash: string | undefined = undefined
-  const MAX_PAGES = 10 // Max 500 conversations
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const data = await listConversations(pageHash)
-    const convs = data._embedded?.conversations || data.conversations || []
-    if (convs.length === 0) break
-    rawConvs = rawConvs.concat(convs)
-    // Pagination cursor
-    const links = data._links || {}
-    const nextLink = links.next?.href || ''
-    const nextHash = nextLink.match(/pageHash=([^&]+)/)?.[1]
-    if (!nextHash || convs.length < 50) break
-    pageHash = decodeURIComponent(nextHash)
+  try {
+    const data = await listConversations()
+    rawConvs = data._embedded?.conversations || data.conversations || []
+  } catch (e) {
+    console.error('[lbc-leads] listConversations failed:', e)
+    return { synced, created, updated }
   }
 
   if (rawConvs.length === 0) return { synced, created, updated }
