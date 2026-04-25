@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  listConversations,
-  getMessages,
-  getConversationDetails,
-  sendMessage,
   sendAttachment,
-  markAsRead,
-  getUnreadCount,
   getAdInfo,
 } from '@/lib/lbc-messaging'
 import { getCurrentCommercial } from '@/lib/get-commercial'
@@ -42,9 +36,15 @@ export async function GET(req: NextRequest) {
 
     switch (action) {
       case 'conversations': {
-        const pageHash = searchParams.get('pageHash') || undefined
-        const data = await listConversations(pageHash)
-        return NextResponse.json(data)
+        // Lire depuis Supabase (rempli par le bridge Chrome Tampermonkey)
+        // Plus de relay VPS = plus de Hyper-SDK
+        const { createAdminClient } = await import('@/lib/supabase')
+        const supabase = createAdminClient()
+        const { data: leads } = await supabase
+          .from('lbc_leads')
+          .select('*')
+          .order('dernier_message_date', { ascending: false, nullsFirst: false })
+        return NextResponse.json({ conversations: leads || [], source: 'chrome_bridge' })
       }
 
       case 'messages': {
@@ -65,30 +65,38 @@ export async function GET(req: NextRequest) {
             cached_at: cached.updated_at,
           })
         }
-        // Fallback: essayer le relay VPS (peut échouer)
-        try {
-          const page = parseInt(searchParams.get('page') || '1')
-          const data = await getMessages(conv, page)
-          return NextResponse.json({ ...data, source: 'relay' })
-        } catch(e: any) {
-          return NextResponse.json({
-            messages: [],
-            source: 'none',
-            error: 'Messages pas encore synchronisés. Ouvrez leboncoin.fr dans Chrome pour activer le bridge.',
-          })
-        }
+        // Pas de fallback relay — tout passe par le bridge Chrome
+        return NextResponse.json({
+          messages: [],
+          source: 'none',
+          error: 'Messages pas encore synchronisés. Ouvrez leboncoin.fr dans Chrome pour activer le bridge.',
+        })
       }
 
       case 'details': {
         const conv = searchParams.get('conv')
         if (!conv) return NextResponse.json({ error: 'conv required' }, { status: 400 })
-        const data = await getConversationDetails(conv)
-        return NextResponse.json(data)
+        // Lire depuis Supabase
+        const { createAdminClient: createAdmin2 } = await import('@/lib/supabase')
+        const sb2 = createAdmin2()
+        const { data: lead } = await sb2
+          .from('lbc_leads')
+          .select('*')
+          .eq('conversation_id', conv)
+          .single()
+        return NextResponse.json(lead || { error: 'not found' })
       }
 
       case 'unread': {
-        const data = await getUnreadCount()
-        return NextResponse.json(data)
+        // Compter depuis Supabase au lieu du relay
+        const { createAdminClient } = await import('@/lib/supabase')
+        const supabase = createAdminClient()
+        const { data: unreadLeads } = await supabase
+          .from('lbc_leads')
+          .select('unread_count')
+          .gt('unread_count', 0)
+        const total = (unreadLeads || []).reduce((sum: number, l: any) => sum + (l.unread_count || 0), 0)
+        return NextResponse.json({ unreadCount: total, source: 'chrome_bridge' })
       }
 
       case 'adinfo': {
@@ -172,11 +180,15 @@ export async function POST(req: NextRequest) {
       }
 
       case 'read': {
-        const { conv, messageId } = body
-        if (!conv || !messageId) {
-          return NextResponse.json({ error: 'conv and messageId required' }, { status: 400 })
+        // markAsRead via relay supprimé — le bridge Chrome gère la lecture
+        // On met juste à jour le unread_count dans Supabase
+        const { conv } = body
+        if (!conv) {
+          return NextResponse.json({ error: 'conv required' }, { status: 400 })
         }
-        await markAsRead(conv, messageId)
+        const { createAdminClient: createAdmin3 } = await import('@/lib/supabase')
+        const sb3 = createAdmin3()
+        await sb3.from('lbc_leads').update({ unread_count: 0 }).eq('conversation_id', conv)
         return NextResponse.json({ ok: true })
       }
 
