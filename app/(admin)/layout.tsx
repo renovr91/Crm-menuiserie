@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/devis-claudus', label: 'Devis Claudus', icon: '⚡' },
   { href: '/taches', label: 'Tâches', icon: '✅' },
   { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
+  { href: '/telephonie', label: 'Téléphonie', icon: '📞' },
   { href: '/livraisons', label: 'Livraisons', icon: '📦' },
   { href: '/planning', label: 'Planning', icon: '📅' },
   { href: '/sav', label: 'SAV', icon: '🔧' },
