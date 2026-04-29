@@ -33,6 +33,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# LBC Chrome Bridge (contient des secrets en clair, doit rester local)
+lbc_chrome_bridge.user.js
+
 # vercel
 .vercel
 
