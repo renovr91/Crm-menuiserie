@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 })
   }
-  const conversation_id = typeof body.conversation_id === 'string' ? body.conversation_id : ''
+  const conversation_id = typeof body.conversation_id === 'string' ? body.conversation_id.trim() : ''
   if (!conversation_id) {
     return NextResponse.json({ error: 'conversation_id required' }, { status: 400 })
   }
@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ triggered: false, reason: 'not_found' })
     }
 
-    const messages = (row.messages || []) as LbcMessage[]
+    const rawMessages = row.messages
+    const messages: LbcMessage[] = Array.isArray(rawMessages) ? (rawMessages as LbcMessage[]) : []
 
     // 5. Garde-fou : doit être un seul message envoyé par l'acheteur
     if (messages.length !== 1) {
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
       .from('lbc_outbox')
       .select('*', { count: 'exact', head: true })
       .eq('conversation_id', conversation_id)
+      .in('status', ['pending', 'sent'])
     if (cntErr) {
       console.error('[auto-reply] count outbox error:', cntErr.message)
       return NextResponse.json({ error: cntErr.message }, { status: 500 })
