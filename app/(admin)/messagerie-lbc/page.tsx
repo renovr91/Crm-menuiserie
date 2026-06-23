@@ -527,6 +527,18 @@ export default function MessagerieLBCPage() {
     loadLeads(searchQuery)
   }, [searchQuery, loadLeads])
 
+  // --- Auto-refresh liste : polling 30s + refresh instantané au retour sur l'onglet ---
+  // Fini le clic "Sync" manuel : la liste se met à jour toute seule quand le bridge
+  // Chrome écrit de nouveaux leads/messages dans Supabase.
+  const searchRef = useRef(searchQuery)
+  useEffect(() => { searchRef.current = searchQuery }, [searchQuery])
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === 'visible') loadLeads(searchRef.current) }
+    const id = setInterval(tick, 30000)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick) }
+  }, [loadLeads])
+
   // --- Update status (optimistic) ---
   const updateStatus = async (convId: string, newStatut: LeadStatut) => {
     const oldLead = leads.find(l => l.conversation_id === convId)
