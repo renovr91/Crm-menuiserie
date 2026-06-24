@@ -751,6 +751,18 @@ export default function MessagerieLBCPage() {
       if (lead.statut === 'pas_interesse') continue
       if (map[lead.statut]) map[lead.statut].push(lead)
     }
+    // [FIX 24/06] Tri par colonne : les NON-LUS (client a répondu, attend une
+    // réponse) toujours EN HAUT, puis par message le plus récent. Évite qu'un
+    // client qui répond se retrouve enterré sous les leads qu'on vient de traiter.
+    const ts = (d: string | null) => (d ? new Date(d).getTime() : 0)
+    for (const code in map) {
+      map[code].sort((a, b) => {
+        const ua = (a.unread_count || 0) > 0 ? 1 : 0
+        const ub = (b.unread_count || 0) > 0 ? 1 : 0
+        if (ua !== ub) return ub - ua            // non-lus d'abord
+        return ts(b.dernier_message_date) - ts(a.dernier_message_date)  // puis + récent
+      })
+    }
     return map
   }, [leads])
 
