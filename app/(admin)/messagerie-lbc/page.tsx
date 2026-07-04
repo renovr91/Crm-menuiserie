@@ -84,6 +84,15 @@ const STATUT_CONFIG: Record<LeadStatut, { label: string; color: string; bg: stri
 
 const ALL_STATUTS: LeadStatut[] = ['nouveau', 'repondu', 'devis_a_traiter', 'devis_envoye', 'en_attente', 'relance', 'gagne', 'perdu', 'pas_interesse']
 
+// Message de relance groupée (colonne "Devis envoyé")
+const RELANCE_MESSAGE = `Bonjour,
+
+Avez-vous bien reçu le devis ?
+
+Souhaitez-vous des informations complémentaires ou éventuellement valider une commande ?
+
+Cordialement`
+
 // =============================================
 // SVG ICONS
 // =============================================
@@ -302,6 +311,10 @@ export default function MessagerieLBCPage() {
   const [syncing, setSyncing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Relance groupée
+  const [relanceModal, setRelanceModal] = useState(false)
+  const [relanceSending, setRelanceSending] = useState(false)
 
   // Messages cache : { convId → Message[] }
   const msgCacheRef = useRef<Record<string, Message[]>>({})
@@ -563,6 +576,29 @@ export default function MessagerieLBCPage() {
         body: JSON.stringify({ action: 'update-status', conversationId: convId, statut: newStatut }),
       })
     } catch { /* ignore */ }
+  }
+
+  // --- Relance groupée : file un message pour tous les leads "Devis envoyé" ---
+  const handleBulkRelance = async () => {
+    setRelanceSending(true)
+    try {
+      const res = await fetch('/api/lbc-messaging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulk-relance', statut: 'devis_envoye', text: RELANCE_MESSAGE }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Erreur' }))
+        throw new Error(err.error || 'Erreur relance')
+      }
+      const data = await res.json()
+      setRelanceModal(false)
+      alert(`✅ ${data.queued} relance(s) mise(s) en file.\nElles partent depuis ton Chrome (bridge), étalées dans le temps.`)
+    } catch (e) {
+      alert('Erreur : ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setRelanceSending(false)
+    }
   }
 
   // --- Send message ---
@@ -830,12 +866,23 @@ export default function MessagerieLBCPage() {
               return (
                 <div key={stage.code} className="w-72 flex flex-col shrink-0 rounded-md border border-gray-200 bg-gray-50/80">
                   <div className="px-3 py-2.5 border-b border-gray-200 bg-white rounded-t-md">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
-                      <span className="text-[13px] font-semibold text-gray-700">{stage.label}</span>
-                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                        {stageLeads.length}
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+                        <span className="text-[13px] font-semibold text-gray-700 truncate">{stage.label}</span>
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                          {stageLeads.length}
+                        </span>
+                      </div>
+                      {stage.code === 'devis_envoye' && stageLeads.length > 0 && (
+                        <button
+                          onClick={() => setRelanceModal(true)}
+                          title="Envoyer un message de relance à tous les clients de cette colonne"
+                          className="shrink-0 flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all"
+                        >
+                          📨 Relancer
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -1096,6 +1143,39 @@ export default function MessagerieLBCPage() {
               <div className="mt-1 text-[10px] text-gray-400">
                 Entrée pour envoyer · Shift+Entrée pour un saut de ligne · 📎 ouvrir sur LBC
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ========== MODALE RELANCE GROUPÉE ========== */}
+      {relanceModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => { if (!relanceSending) setRelanceModal(false) }} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-white rounded-xl shadow-2xl border border-gray-200 w-[460px] max-w-[90vw]">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">📨 Relance groupée — Devis envoyé</h3>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Le message ci-dessous va être envoyé à <strong>{(byStage['devis_envoye']?.length || 0)} client(s)</strong> de la colonne « Devis envoyé ».
+              </p>
+            </div>
+            <div className="px-5 py-4">
+              <div className="text-[12px] text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {RELANCE_MESSAGE}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">
+                Les messages sont mis en file et envoyés depuis ton Chrome (bridge), étalés dans le temps pour rester naturels.
+              </p>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setRelanceModal(false)} disabled={relanceSending}
+                className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50">
+                Annuler
+              </button>
+              <button onClick={handleBulkRelance} disabled={relanceSending || (byStage['devis_envoye']?.length || 0) === 0}
+                className="px-4 py-1.5 text-xs rounded-lg font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50">
+                {relanceSending ? 'Envoi...' : `Envoyer à ${(byStage['devis_envoye']?.length || 0)}`}
+              </button>
             </div>
           </div>
         </>

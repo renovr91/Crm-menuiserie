@@ -179,6 +179,44 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, outbox_id: outboxEntry.id, status: 'pending', commercial: me?.nom })
       }
 
+      case 'bulk-relance': {
+        // Relance groupée : file un message pour tous les leads d'une colonne (statut)
+        const { statut = 'devis_envoye', text: relanceText } = body
+        if (!relanceText) {
+          return NextResponse.json({ error: 'text required' }, { status: 400 })
+        }
+        const { createAdminClient: createAdminBulk } = await import('@/lib/supabase')
+        const sbBulk = createAdminBulk()
+        const { data: bulkLeads, error: bulkLeadsErr } = await sbBulk
+          .from('lbc_leads')
+          .select('conversation_id')
+          .eq('statut', statut)
+        if (bulkLeadsErr) {
+          return NextResponse.json({ error: bulkLeadsErr.message }, { status: 500 })
+        }
+        const convIds = (bulkLeads || []).map((l) => l.conversation_id).filter(Boolean)
+        if (convIds.length === 0) {
+          return NextResponse.json({ ok: true, queued: 0 })
+        }
+        const rows = convIds.map((cid) => ({ conversation_id: cid, text: relanceText, status: 'pending' }))
+        const { error: bulkInsErr } = await sbBulk.from('lbc_outbox').insert(rows)
+        if (bulkInsErr) {
+          return NextResponse.json({ error: bulkInsErr.message }, { status: 500 })
+        }
+        const meBulk = await getCurrentCommercial()
+        if (meBulk) {
+          await logActivity({
+            commercial_id: meBulk.id,
+            user_id: meBulk.user_id,
+            action_type: 'bulk_relance',
+            entity_type: 'message_lbc',
+            entity_id: statut,
+            details: { count: convIds.length, statut, text_preview: relanceText.substring(0, 100) },
+          })
+        }
+        return NextResponse.json({ ok: true, queued: convIds.length })
+      }
+
       case 'read': {
         // markAsRead via relay supprimé — le bridge Chrome gère la lecture
         // On met juste à jour le unread_count dans Supabase

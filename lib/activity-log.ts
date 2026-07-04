@@ -5,6 +5,7 @@ export type ActionType =
   | 'lead_note_update'
   | 'message_sent'
   | 'message_read'
+  | 'bulk_relance'
   | 'client_create'
   | 'client_update'
   | 'affaire_create'
