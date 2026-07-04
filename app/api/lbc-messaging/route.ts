@@ -181,7 +181,8 @@ export async function POST(req: NextRequest) {
 
       case 'bulk-relance': {
         // Relance groupée : file un message pour tous les leads d'une colonne (statut)
-        const { statut = 'devis_envoye', text: relanceText } = body
+        // + déplace ces leads vers l'étape suivante (moveTo) — cadence de relance.
+        const { statut = 'devis_envoye', text: relanceText, moveTo } = body
         if (!relanceText) {
           return NextResponse.json({ error: 'text required' }, { status: 400 })
         }
@@ -203,6 +204,10 @@ export async function POST(req: NextRequest) {
         if (bulkInsErr) {
           return NextResponse.json({ error: bulkInsErr.message }, { status: 500 })
         }
+        // Déplacement auto vers l'étape suivante (ex: devis_envoye → relance_1)
+        if (moveTo) {
+          await sbBulk.from('lbc_leads').update({ statut: moveTo }).in('conversation_id', convIds)
+        }
         const meBulk = await getCurrentCommercial()
         if (meBulk) {
           await logActivity({
@@ -214,7 +219,7 @@ export async function POST(req: NextRequest) {
             details: { count: convIds.length, statut, text_preview: relanceText.substring(0, 100) },
           })
         }
-        return NextResponse.json({ ok: true, queued: convIds.length })
+        return NextResponse.json({ ok: true, queued: convIds.length, moved: moveTo ? convIds.length : 0 })
       }
 
       case 'read': {

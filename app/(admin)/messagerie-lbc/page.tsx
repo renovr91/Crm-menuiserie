@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // TYPES
 // =============================================
 
-type LeadStatut = 'nouveau' | 'repondu' | 'devis_a_traiter' | 'devis_envoye' | 'en_attente' | 'relance' | 'gagne' | 'perdu' | 'pas_interesse'
+type LeadStatut = 'nouveau' | 'repondu' | 'devis_a_traiter' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
 
 interface Lead {
   id: string
@@ -64,8 +64,9 @@ const STAGES: { code: LeadStatut; label: string; color: string }[] = [
   { code: 'repondu',         label: 'Répondu',         color: '#0EA5E9' },
   { code: 'devis_a_traiter', label: 'Devis à traiter', color: '#EC4899' },
   { code: 'devis_envoye',    label: 'Devis envoyé',    color: '#F59E0B' },
+  { code: 'relance_1',       label: '1ère relance',    color: '#F97316' },
+  { code: 'relance_2',       label: '2ème relance',    color: '#EF4444' },
   { code: 'en_attente',   label: 'En attente',    color: '#8B5CF6' },
-  { code: 'relance',      label: 'Relance',       color: '#EF4444' },
   { code: 'gagne',        label: 'Gagné',         color: '#10B981' },
   { code: 'perdu',        label: 'Perdu',         color: '#6B7280' },
 ]
@@ -75,23 +76,38 @@ const STATUT_CONFIG: Record<LeadStatut, { label: string; color: string; bg: stri
   repondu:        { label: 'Répondu',         color: '#0EA5E9', bg: 'rgba(14,165,233,0.12)',  emoji: '💬' },
   devis_a_traiter:{ label: 'Devis à traiter', color: '#EC4899', bg: 'rgba(236,72,153,0.12)',  emoji: '📝' },
   devis_envoye:   { label: 'Devis envoyé',    color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  emoji: '📋' },
+  relance_1:      { label: '1ère relance',    color: '#F97316', bg: 'rgba(249,115,22,0.12)',  emoji: '📨' },
+  relance_2:      { label: '2ème relance',    color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   emoji: '🔔' },
   en_attente:   { label: 'En attente',     color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)',  emoji: '⏳' },
-  relance:      { label: 'Relance',        color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   emoji: '🔔' },
   gagne:        { label: 'Gagné',          color: '#10B981', bg: 'rgba(16,185,129,0.12)',  emoji: '✅' },
   perdu:        { label: 'Perdu',          color: '#6B7280', bg: 'rgba(107,114,128,0.12)', emoji: '❌' },
   pas_interesse:{ label: 'Pas intéressant', color: '#9CA3AF', bg: 'rgba(156,163,175,0.10)', emoji: '🚫' },
 }
 
-const ALL_STATUTS: LeadStatut[] = ['nouveau', 'repondu', 'devis_a_traiter', 'devis_envoye', 'en_attente', 'relance', 'gagne', 'perdu', 'pas_interesse']
+const ALL_STATUTS: LeadStatut[] = ['nouveau', 'repondu', 'devis_a_traiter', 'devis_envoye', 'relance_1', 'relance_2', 'en_attente', 'gagne', 'perdu', 'pas_interesse']
 
-// Message de relance groupée (colonne "Devis envoyé")
-const RELANCE_MESSAGE = `Bonjour,
+// Messages de relance + cadence (Devis envoyé → 1ère relance → 2ème relance → on lâche)
+const RELANCE_MESSAGE_1 = `Bonjour,
 
 Avez-vous bien reçu le devis ?
 
 Souhaitez-vous des informations complémentaires ou éventuellement valider une commande ?
 
 Cordialement`
+
+const RELANCE_MESSAGE_2 = `Bonjour,
+
+Je me permets de revenir vers vous concernant votre devis.
+
+Y a-t-il un point à ajuster ou une question avant de valider votre commande ? Je reste à votre disposition.
+
+Cordialement`
+
+// Colonnes relançables → message envoyé + étape suivante (déplacement auto)
+const RELANCE_CONFIG: Partial<Record<LeadStatut, { message: string; next: LeadStatut; titre: string }>> = {
+  devis_envoye: { message: RELANCE_MESSAGE_1, next: 'relance_1', titre: '1ère relance' },
+  relance_1:    { message: RELANCE_MESSAGE_2, next: 'relance_2', titre: '2ème relance' },
+}
 
 // =============================================
 // SVG ICONS
@@ -304,7 +320,7 @@ function LeadCard({
 export default function MessagerieLBCPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [counts, setCounts] = useState<Record<LeadStatut, number>>({
-    nouveau: 0, repondu: 0, devis_a_traiter: 0, devis_envoye: 0, en_attente: 0, relance: 0, gagne: 0, perdu: 0, pas_interesse: 0
+    nouveau: 0, repondu: 0, devis_a_traiter: 0, devis_envoye: 0, relance_1: 0, relance_2: 0, en_attente: 0, gagne: 0, perdu: 0, pas_interesse: 0
   })
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -312,8 +328,8 @@ export default function MessagerieLBCPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  // Relance groupée
-  const [relanceModal, setRelanceModal] = useState(false)
+  // Relance groupée (relanceStage = colonne en cours de relance, ou null)
+  const [relanceStage, setRelanceStage] = useState<LeadStatut | null>(null)
   const [relanceSending, setRelanceSending] = useState(false)
 
   // Messages cache : { convId → Message[] }
@@ -578,22 +594,26 @@ export default function MessagerieLBCPage() {
     } catch { /* ignore */ }
   }
 
-  // --- Relance groupée : file un message pour tous les leads "Devis envoyé" ---
+  // --- Relance groupée : file un message pour la colonne + déplace vers l'étape suivante ---
   const handleBulkRelance = async () => {
+    if (!relanceStage) return
+    const cfg = RELANCE_CONFIG[relanceStage]
+    if (!cfg) return
     setRelanceSending(true)
     try {
       const res = await fetch('/api/lbc-messaging', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bulk-relance', statut: 'devis_envoye', text: RELANCE_MESSAGE }),
+        body: JSON.stringify({ action: 'bulk-relance', statut: relanceStage, text: cfg.message, moveTo: cfg.next }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Erreur' }))
         throw new Error(err.error || 'Erreur relance')
       }
       const data = await res.json()
-      setRelanceModal(false)
-      alert(`✅ ${data.queued} relance(s) mise(s) en file.\nElles partent depuis ton Chrome (bridge), étalées dans le temps.`)
+      setRelanceStage(null)
+      await loadLeads(searchQuery)
+      alert(`✅ ${data.queued} relance(s) mise(s) en file et déplacée(s) vers « ${cfg.titre} ».\nLes messages partent depuis ton Chrome (bridge), étalés dans le temps.`)
     } catch (e) {
       alert('Erreur : ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -874,10 +894,10 @@ export default function MessagerieLBCPage() {
                           {stageLeads.length}
                         </span>
                       </div>
-                      {stage.code === 'devis_envoye' && stageLeads.length > 0 && (
+                      {RELANCE_CONFIG[stage.code] && stageLeads.length > 0 && (
                         <button
-                          onClick={() => setRelanceModal(true)}
-                          title="Envoyer un message de relance à tous les clients de cette colonne"
+                          onClick={() => setRelanceStage(stage.code)}
+                          title="Envoyer un message de relance + déplacer à l'étape suivante"
                           className="shrink-0 flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all"
                         >
                           📨 Relancer
@@ -1149,32 +1169,32 @@ export default function MessagerieLBCPage() {
       )}
 
       {/* ========== MODALE RELANCE GROUPÉE ========== */}
-      {relanceModal && (
+      {relanceStage && RELANCE_CONFIG[relanceStage] && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => { if (!relanceSending) setRelanceModal(false) }} />
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => { if (!relanceSending) setRelanceStage(null) }} />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-white rounded-xl shadow-2xl border border-gray-200 w-[460px] max-w-[90vw]">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-900">📨 Relance groupée — Devis envoyé</h3>
+              <h3 className="text-sm font-semibold text-gray-900">📨 {RELANCE_CONFIG[relanceStage]!.titre} — depuis « {STATUT_CONFIG[relanceStage].label} »</h3>
               <p className="text-[11px] text-gray-500 mt-1">
-                Le message ci-dessous va être envoyé à <strong>{(byStage['devis_envoye']?.length || 0)} client(s)</strong> de la colonne « Devis envoyé ».
+                Message envoyé à <strong>{(byStage[relanceStage]?.length || 0)} client(s)</strong>, puis déplacement automatique vers « <strong>{RELANCE_CONFIG[relanceStage]!.titre}</strong> ».
               </p>
             </div>
             <div className="px-5 py-4">
               <div className="text-[12px] text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-lg p-3">
-                {RELANCE_MESSAGE}
+                {RELANCE_CONFIG[relanceStage]!.message}
               </div>
               <p className="text-[10px] text-gray-400 mt-2">
                 Les messages sont mis en file et envoyés depuis ton Chrome (bridge), étalés dans le temps pour rester naturels.
               </p>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
-              <button onClick={() => setRelanceModal(false)} disabled={relanceSending}
+              <button onClick={() => setRelanceStage(null)} disabled={relanceSending}
                 className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50">
                 Annuler
               </button>
-              <button onClick={handleBulkRelance} disabled={relanceSending || (byStage['devis_envoye']?.length || 0) === 0}
+              <button onClick={handleBulkRelance} disabled={relanceSending || (byStage[relanceStage]?.length || 0) === 0}
                 className="px-4 py-1.5 text-xs rounded-lg font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50">
-                {relanceSending ? 'Envoi...' : `Envoyer à ${(byStage['devis_envoye']?.length || 0)}`}
+                {relanceSending ? 'Envoi...' : `Envoyer à ${(byStage[relanceStage]?.length || 0)}`}
               </button>
             </div>
           </div>
