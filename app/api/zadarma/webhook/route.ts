@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 import { getRecordingLink, verifyWebhookSignature } from '@/lib/zadarma'
 import { transcribeAudio, summarizeAndExtract } from '@/lib/mistral'
@@ -87,8 +86,8 @@ export async function POST(req: NextRequest) {
         .from('calls')
         .update({ is_recorded: true, call_id_with_rec: recId, status: 'processing' })
         .eq('pbx_call_id', pbxId)
-      // Traitement lourd APRÈS la réponse (télécharge, transcrit, résume)
-      after(() => processRecording(pbxId, recId))
+      // Traitement direct (rapide : ~3s) : télécharge, transcrit, résume
+      await processRecording(pbxId, recId)
     }
   } catch (e) {
     console.error('[zadarma webhook]', event, e)
