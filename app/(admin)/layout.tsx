@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: '/equipe', label: 'Équipe', icon: '👔' },
   { href: '/activite', label: 'Activité', icon: '📋' },
   { href: '/qonto', label: 'Qonto', icon: '🏦' },
+  { href: '/appels', label: 'Appels', icon: '📞' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
