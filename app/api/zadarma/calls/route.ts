@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // GET — liste des appels avec nom du client + URL audio signée
 export async function GET() {
   const supabase = createAdminClient()

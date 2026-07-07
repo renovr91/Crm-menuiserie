@@ -61,7 +61,7 @@ export default function AppelsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/zadarma/calls')
+      const res = await fetch('/api/zadarma/calls', { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json()).error || 'Erreur chargement')
       setCalls(await res.json())
     } catch (e) {
