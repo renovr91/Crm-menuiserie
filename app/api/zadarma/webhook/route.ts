@@ -118,7 +118,7 @@ async function processRecording(pbxCallId: string, recId: string) {
 
     await supabase
       .from('calls')
-      .update({ recording_url: path, transcript, summary, status: 'done' })
+      .update({ recording_url: path, transcript, summary, status: 'done', error: null })
       .eq('pbx_call_id', pbxCallId)
   } catch (e) {
     console.error('[processRecording]', pbxCallId, e)
