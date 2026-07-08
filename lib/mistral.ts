@@ -17,20 +17,24 @@ function apiKey(): string {
 }
 
 export interface TranscribeResult {
-  text: string
+  text: string // transcription brute (une seule chaîne)
+  diarized: string // transcription avec locuteurs (speaker_1: ... / speaker_2: ...)
+  segments: { speaker: string; text: string }[] // tours de parole regroupés par locuteur
   duration_s: number
   model: string
 }
 
 /**
- * Transcribe an audio buffer using Voxtral (Mistral).
- * Returns the French transcription.
+ * Transcribe an audio buffer using Voxtral (Mistral), avec séparation des locuteurs.
+ * Returns the French transcription (brute + diarisée).
  */
 export async function transcribeAudio(audio: Buffer, filename: string): Promise<TranscribeResult> {
   const fd = new FormData()
   fd.append('file', new Blob([new Uint8Array(audio)]), filename)
   fd.append('model', VOXTRAL_MODEL)
   fd.append('language', 'fr')
+  fd.append('diarize', 'true')
+  fd.append('timestamp_granularities', 'segment')
 
   const r = await fetch(`${MISTRAL_API}/audio/transcriptions`, {
     method: 'POST',
@@ -39,8 +43,24 @@ export async function transcribeAudio(audio: Buffer, filename: string): Promise<
   })
   if (!r.ok) throw new Error(`Voxtral ${r.status}: ${await r.text()}`)
   const data = await r.json()
+
+  // Regroupe les segments consécutifs d'un même locuteur en tours de parole
+  const rawSegments: { text?: string; speaker_id?: string }[] = data.segments || []
+  const segments: { speaker: string; text: string }[] = []
+  for (const s of rawSegments) {
+    const txt = (s.text || '').trim()
+    if (!txt) continue
+    const speaker = s.speaker_id || 'speaker_1'
+    const last = segments[segments.length - 1]
+    if (last && last.speaker === speaker) last.text += ' ' + txt
+    else segments.push({ speaker, text: txt })
+  }
+  const diarized = segments.map((g) => `${g.speaker}: ${g.text}`).join('\n')
+
   return {
     text: data.text || '',
+    diarized: diarized || data.text || '',
+    segments,
     duration_s: data.usage?.prompt_audio_seconds || 0,
     model: VOXTRAL_MODEL,
   }
@@ -62,6 +82,7 @@ export interface ExtractedData {
 export interface SummarizeResult {
   summary: string
   extracted: ExtractedData
+  client_speaker: string | null // "speaker_1" | "speaker_2" | null — lequel est le client
   model: string
 }
 
@@ -90,9 +111,12 @@ Voici la transcription d'un appel téléphonique :
 ${transcript}
 """
 
+La transcription peut être séparée par locuteurs (speaker_1, speaker_2). Renov-R est l'entreprise (celle qui décroche / propose ses services), le CLIENT est celui qui appelle ou demande un devis.
+
 Tâche : extraire les informations clients pertinentes au format JSON STRICT (pas de texte autour) selon ce schéma :
 {
   "summary": "résumé en 2-3 phrases en français",
+  "client_speaker": "si la transcription a des locuteurs, indique lequel est le CLIENT: 'speaker_1' ou 'speaker_2', sinon null",
   "extracted": {
     "name": "nom du client si mentionné, sinon null",
     "city": "ville si mentionnée, sinon null",
@@ -126,13 +150,14 @@ IMPORTANT : réponds UNIQUEMENT avec le JSON valide, rien d'autre.`
   const data = await r.json()
   const content = data.choices?.[0]?.message?.content || '{}'
 
-  let parsed: { summary?: string; extracted?: Partial<ExtractedData> }
+  let parsed: { summary?: string; extracted?: Partial<ExtractedData>; client_speaker?: string }
   try {
     parsed = JSON.parse(content)
   } catch {
     return {
       summary: 'Résumé IA non disponible (parsing JSON échoué).',
       extracted: { ...EMPTY_EXTRACTED },
+      client_speaker: null,
       model: SUMMARY_MODEL,
     }
   }
@@ -140,6 +165,7 @@ IMPORTANT : réponds UNIQUEMENT avec le JSON valide, rien d'autre.`
   return {
     summary: parsed.summary || '',
     extracted: { ...EMPTY_EXTRACTED, ...(parsed.extracted || {}) },
+    client_speaker: parsed.client_speaker || null,
     model: SUMMARY_MODEL,
   }
 }

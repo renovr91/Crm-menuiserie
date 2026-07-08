@@ -113,12 +113,26 @@ async function processRecording(pbxCallId: string, recId: string) {
       upsert: true,
     })
 
-    const { text: transcript } = await transcribeAudio(audio, path)
-    const summary = transcript ? (await summarizeAndExtract(transcript)).summary : ''
+    const tr = await transcribeAudio(audio, path)
+    const source = tr.diarized || tr.text
+    let transcript = source
+    let summary = ''
+    let extracted: unknown = null
+    if (source) {
+      const a = await summarizeAndExtract(source)
+      summary = a.summary
+      extracted = a.extracted
+      // Remplace speaker_1/speaker_2 par Renov-R / Client
+      if (tr.segments.length && a.client_speaker) {
+        transcript = tr.segments
+          .map((g) => `${g.speaker === a.client_speaker ? 'Client' : 'Renov-R'}: ${g.text}`)
+          .join('\n')
+      }
+    }
 
     await supabase
       .from('calls')
-      .update({ recording_url: path, transcript, summary, status: 'done', error: null })
+      .update({ recording_url: path, transcript, summary, extracted, status: 'done', error: null })
       .eq('pbx_call_id', pbxCallId)
   } catch (e) {
     console.error('[processRecording]', pbxCallId, e)

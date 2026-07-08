@@ -2,6 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+interface Extracted {
+  name?: string | null
+  city?: string | null
+  zip_code?: string | null
+  phone?: string | null
+  email?: string | null
+  product_type?: string | null
+  quantity?: number | null
+  estimated_amount?: string | null
+  urgency?: string | null
+  next_action?: string | null
+}
+
 interface Call {
   id: string
   direction: 'in' | 'out' | 'internal'
@@ -14,9 +27,77 @@ interface Call {
   is_recorded: boolean
   transcript: string | null
   summary: string | null
+  extracted: Extracted | null
   status: string
   audio: string | null
   clients: { nom: string } | null
+}
+
+// Rend une transcription "Client: ... / Renov-R: ..." en bulles colorées
+function Transcript({ text }: { text: string }) {
+  const lines = text.split('\n').filter((l) => l.trim())
+  const hasSpeakers = lines.some((l) => /^(Client|Renov-R)\s*:/i.test(l))
+  if (!hasSpeakers) {
+    return <div className="text-sm text-gray-600 whitespace-pre-wrap">{text}</div>
+  }
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) => {
+        const m = line.match(/^(Client|Renov-R)\s*:\s*(.*)$/i)
+        const who = m ? m[1] : ''
+        const body = m ? m[2] : line
+        const isClient = /client/i.test(who)
+        return (
+          <div key={i} className={`flex ${isClient ? 'justify-start' : 'justify-end'}`}>
+            <div
+              className={`max-w-[80%] rounded-lg px-3 py-1.5 text-sm ${
+                isClient ? 'bg-white border border-gray-200 text-gray-800' : 'bg-blue-600 text-white'
+              }`}
+            >
+              <div className={`text-[10px] font-semibold mb-0.5 ${isClient ? 'text-gray-400' : 'text-blue-100'}`}>
+                {who || '—'}
+              </div>
+              {body}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Fiche client extraite par l'IA (à vérifier)
+function FicheClient({ e }: { e: Extracted }) {
+  const rows = (
+    [
+      ['Nom', e.name],
+      ['Email', e.email],
+      ['Téléphone', e.phone],
+      ['Ville', e.city],
+      ['Code postal', e.zip_code],
+      ['Produit', e.product_type],
+      ['Quantité', e.quantity],
+      ['Montant estimé', e.estimated_amount],
+      ['Urgence', e.urgency],
+      ['Prochaine action', e.next_action],
+    ] as [string, string | number | null | undefined][]
+  ).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  if (!rows.length) return null
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+      <h3 className="text-xs font-semibold text-amber-800 uppercase mb-2">
+        Fiche client (IA — à vérifier)
+      </h3>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex gap-1">
+            <span className="text-gray-500">{k} :</span>
+            <span className="text-gray-900 font-medium">{String(v)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 const dateFr = (d: string | null) =>
@@ -56,6 +137,7 @@ export default function AppelsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'all' | 'in' | 'out'>('all')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -74,6 +156,16 @@ export default function AppelsPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const nbIn = calls.filter((c) => c.direction === 'in').length
+  const nbOut = calls.filter((c) => c.direction === 'out').length
+  const shown = filter === 'all' ? calls : calls.filter((c) => c.direction === filter)
+
+  const tabs: { key: 'all' | 'in' | 'out'; label: string }[] = [
+    { key: 'all', label: `Tous (${calls.length})` },
+    { key: 'in', label: `📥 Reçus (${nbIn})` },
+    { key: 'out', label: `📤 Émis (${nbOut})` },
+  ]
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -101,13 +193,30 @@ export default function AppelsPage() {
         </div>
       )}
 
+      {/* Filtre Reçus / Émis */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setFilter(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              filter === t.key
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {loading && calls.length === 0 ? (
         <p className="text-sm text-gray-400">Chargement…</p>
-      ) : calls.length === 0 ? (
-        <p className="text-sm text-gray-400">Aucun appel pour le moment.</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-gray-400">Aucun appel dans cette catégorie.</p>
       ) : (
         <div className="space-y-2">
-          {calls.map((c) => (
+          {shown.map((c) => (
             <div key={c.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => setOpen(open === c.id ? null : c.id)}
@@ -158,13 +267,14 @@ export default function AppelsPage() {
                       <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.summary}</div>
                     </div>
                   )}
+                  {c.extracted && <FicheClient e={c.extracted} />}
                   {c.transcript && (
                     <details>
                       <summary className="text-xs font-semibold text-gray-700 uppercase cursor-pointer">
-                        Transcription
+                        Transcription (Client / Renov-R)
                       </summary>
-                      <div className="text-sm text-gray-600 whitespace-pre-wrap mt-1">
-                        {c.transcript}
+                      <div className="mt-2">
+                        <Transcript text={c.transcript} />
                       </div>
                     </details>
                   )}
