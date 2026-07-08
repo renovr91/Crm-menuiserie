@@ -118,8 +118,50 @@ const durFr = (s: number) => {
   return m ? `${m}m${r.toString().padStart(2, '0')}` : `${r}s`
 }
 
-const dirIcon = (d: string) => (d === 'in' ? '📥' : d === 'out' ? '📤' : '🔁')
-const dirLabel = (d: string) => (d === 'in' ? 'Entrant' : d === 'out' ? 'Sortant' : 'Interne')
+// Pastille colorée + flèche selon le type d'appel (reçu / manqué / émis / interne)
+function CallIcon({ direction, disposition }: { direction: string; disposition: string | null }) {
+  const missed = direction === 'in' && disposition !== 'answered'
+  let bg = 'bg-gray-100'
+  let color = '#6b7280'
+  let title = 'Appel interne'
+  let path = 'M5 12 L19 12 M14 7 L19 12 L14 17' // flèche droite (interne)
+  if (direction === 'in') {
+    path = 'M18 6 L6 18 M6 11 L6 18 L13 18' // flèche entrante (bas-gauche)
+    if (missed) {
+      bg = 'bg-red-50'
+      color = '#dc2626'
+      title = 'Appel manqué'
+    } else {
+      bg = 'bg-green-50'
+      color = '#16a34a'
+      title = 'Appel reçu'
+    }
+  } else if (direction === 'out') {
+    path = 'M6 18 L18 6 M11 6 L18 6 L18 13' // flèche sortante (haut-droite)
+    bg = 'bg-blue-50'
+    color = '#2563eb'
+    title = 'Appel émis'
+  }
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-8 h-8 rounded-full shrink-0 ${bg}`}
+      title={title}
+    >
+      <svg
+        width="17"
+        height="17"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={path} />
+      </svg>
+    </span>
+  )
+}
 
 const dispoBadge = (d: string | null) => {
   const map: Record<string, string> = {
@@ -222,9 +264,7 @@ export default function AppelsPage() {
                 onClick={() => setOpen(open === c.id ? null : c.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50"
               >
-                <span className="text-lg" title={dirLabel(c.direction)}>
-                  {dirIcon(c.direction)}
-                </span>
+                <CallIcon direction={c.direction} disposition={c.disposition} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">
                     {c.clients?.nom || c.caller || c.callee || 'Inconnu'}

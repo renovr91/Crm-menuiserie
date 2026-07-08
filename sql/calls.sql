@@ -15,8 +15,9 @@ CREATE TABLE IF NOT EXISTS calls (
   disposition text,                        -- answered / no answer / busy / failed / cancel
   is_recorded boolean DEFAULT false,
   recording_url text,                      -- URL audio (Supabase Storage)
-  transcript text,                         -- transcription exacte (Voxtral)
+  transcript text,                         -- transcription exacte (Voxtral, séparée Client/Renov-R)
   summary text,                            -- résumé IA (Mistral)
+  extracted jsonb,                         -- fiche client extraite par l'IA (nom, email, ville…)
   status text DEFAULT 'new' CHECK (status IN ('new', 'processing', 'done', 'error')),
   error text,
   created_at timestamptz DEFAULT now(),
