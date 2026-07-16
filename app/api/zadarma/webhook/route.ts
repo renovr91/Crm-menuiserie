@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
-import { getRecordingLink, verifyWebhookSignature } from '@/lib/zadarma'
+import { getRecordingLink, verifyWebhookSignature, parseZadarmaDate } from '@/lib/zadarma'
 import { transcribeAudio, summarizeAndExtract } from '@/lib/mistral'
 
 export const maxDuration = 60
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
           caller,
           callee,
           extension: isOut ? params.internal : params.internal || params.destination,
-          started_at: params.call_start ? new Date(params.call_start).toISOString() : new Date().toISOString(),
+          started_at: parseZadarmaDate(params.call_start),
           client_id: await matchClient(supabase, isOut ? params.destination : params.caller_id),
           status: 'new',
         },
