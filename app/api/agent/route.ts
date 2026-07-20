@@ -154,6 +154,38 @@ export async function POST(request: Request) {
         return NextResponse.json({ devis_claudus: data })
       }
 
+      case 'devis_claudus_pdf': {
+        const numero = String(p.numero || '').trim()
+        if (!numero) return NextResponse.json({ error: 'numero requis' }, { status: 400 })
+
+        const { data: devis, error } = await supabase
+          .from('devis_claudus')
+          .select('numero, client_nom, pdf_path, pdf_filename, montant_ttc')
+          .eq('numero', numero)
+          .single()
+        if (error) throw error
+        if (!devis?.pdf_path) {
+          return NextResponse.json({ error: `Aucun PDF pour le devis ${numero}` }, { status: 404 })
+        }
+
+        // Bucket privé : lien signé de courte durée (5 min), jamais d'URL publique.
+        const { data: signed, error: errSign } = await supabase.storage
+          .from('devis-claudus-pdfs')
+          .createSignedUrl(devis.pdf_path, 300)
+        if (errSign || !signed?.signedUrl) {
+          return NextResponse.json({ error: 'Lien du PDF indisponible' }, { status: 500 })
+        }
+
+        return NextResponse.json({
+          numero: devis.numero,
+          client: devis.client_nom,
+          filename: devis.pdf_filename,
+          montant_ttc: devis.montant_ttc,
+          url: signed.signedUrl,
+          expire_dans_s: 300,
+        })
+      }
+
       // ---- Leads leboncoin -----------------------------------------------
       case 'recent_leads': {
         let req = supabase
@@ -194,8 +226,8 @@ export async function POST(request: Request) {
             error: 'Action inconnue',
             actions: [
               'search_clients', 'get_client', 'recent_calls', 'get_call_transcript',
-              'search_calls', 'list_devis', 'devis_claudus', 'recent_leads',
-              'taches', 'stats',
+              'search_calls', 'list_devis', 'devis_claudus', 'devis_claudus_pdf',
+              'recent_leads', 'taches', 'stats',
             ],
           },
           { status: 400 }
