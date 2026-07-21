@@ -7,12 +7,14 @@ export const dynamic = 'force-dynamic'
 
 // Route pour l'agent IA (Hermes).
 //
-// LECTURE SEULE, à trois exceptions près, strictement encadrées, qui servent
-// UNIQUEMENT à préparer puis envoyer une réponse leboncoin :
-//   - draft_reply    : crée un brouillon (status 'draft')
+// LECTURE SEULE, à cinq exceptions près, strictement encadrées :
+//   - draft_reply    : crée un brouillon de réponse (status 'draft')
 //   - send_draft     : bascule un brouillon en 'pending' → c'est CE moment qui
 //                      déclenche l'envoi réel par le relais
 //   - discard_draft  : supprime un brouillon
+//   - upsert_contact : crée un contact, ou COMPLÈTE uniquement ses champs vides
+//                      (ne remplace jamais une donnée saisie par un humain)
+//   - create_task    : crée un rappel
 //
 // Pourquoi c'est sûr : le relais ne consomme que `status = 'pending'`, donc un
 // brouillon ne peut PAS partir tout seul. Et `send_draft` ne prend qu'un id —
@@ -42,6 +44,16 @@ function tokenValide(request: Request): boolean {
   const b = Buffer.from(attendu)
   if (a.length !== b.length) return false
   return timingSafeEqual(a, b)
+}
+
+// Même normalisation que le webhook Zadarma, pour que deux fiches ne se
+// dédoublent pas selon la façon dont le numéro a été saisi.
+function normalisePhone(n: string): string {
+  if (!n) return ''
+  let s = n.replace(/[^\d+]/g, '')
+  if (s.startsWith('+33')) s = '0' + s.slice(3)
+  else if (s.startsWith('33') && s.length === 11) s = '0' + s.slice(2)
+  return s
 }
 
 function borne(n: unknown, defaut: number): number {
@@ -351,6 +363,123 @@ export async function POST(request: Request) {
         return NextResponse.json({ supprime: true, id })
       }
 
+      // ---- Création de contact / rappel ------------------------------------
+      case 'upsert_contact': {
+        const tel = String(p.telephone || '').trim()
+        const nom = String(p.nom || '').trim()
+        if (!tel) return NextResponse.json({ error: 'telephone requis' }, { status: 400 })
+        if (!nom) return NextResponse.json({ error: 'nom requis' }, { status: 400 })
+
+        const telNorm = normalisePhone(tel)
+        if (!telNorm) return NextResponse.json({ error: 'telephone invalide' }, { status: 400 })
+
+        // Recherche par téléphone normalisé (même logique que le webhook Zadarma).
+        const { data: tous } = await supabase
+          .from('clients')
+          .select('id, nom, telephone, email, adresse, code_postal, ville, besoin, notes')
+          .not('telephone', 'is', null)
+        const existant = (tous || []).find((c) => normalisePhone(c.telephone || '') === telNorm)
+
+        // Champs que l'agent a le droit de renseigner.
+        const proposes: Record<string, string> = {}
+        for (const champ of ['email', 'adresse', 'code_postal', 'ville', 'besoin'] as const) {
+          const v = String(p[champ] ?? '').trim()
+          if (v) proposes[champ] = v
+        }
+
+        if (!existant) {
+          const { data, error } = await supabase
+            .from('clients')
+            .insert({ nom, telephone: tel, source: 'leboncoin', ...proposes })
+            .select('id, nom, telephone, ville')
+            .single()
+          if (error) throw error
+          return NextResponse.json({ cree: true, client: data })
+        }
+
+        // RÈGLE : on ne remplace JAMAIS une valeur déjà saisie par un humain.
+        // On ne fait que combler les champs vides.
+        const aRemplir: Record<string, string> = {}
+        const conserves: string[] = []
+        for (const [champ, valeur] of Object.entries(proposes)) {
+          const actuel = String((existant as Record<string, unknown>)[champ] ?? '').trim()
+          if (actuel) conserves.push(champ)
+          else aRemplir[champ] = valeur
+        }
+
+        if (Object.keys(aRemplir).length === 0) {
+          return NextResponse.json({
+            cree: false,
+            modifie: false,
+            client: { id: existant.id, nom: existant.nom },
+            champs_conserves: conserves,
+            note: 'Contact déjà connu, aucune information vide à compléter.',
+          })
+        }
+
+        const { data, error } = await supabase
+          .from('clients')
+          .update(aRemplir)
+          .eq('id', existant.id)
+          .select('id, nom, telephone, ville')
+          .single()
+        if (error) throw error
+
+        return NextResponse.json({
+          cree: false,
+          modifie: true,
+          client: data,
+          champs_completes: Object.keys(aRemplir),
+          champs_conserves: conserves,
+          note: 'Seuls les champs vides ont été complétés. Rien n\'a été écrasé.',
+        })
+      }
+
+      case 'create_task': {
+        const titre = String(p.titre || '').trim()
+        if (!titre) return NextResponse.json({ error: 'titre requis' }, { status: 400 })
+
+        // Le rappel doit appartenir à quelqu'un (commercial_id est NOT NULL).
+        const nomCommercial = String(p.commercial || '').trim()
+        if (!nomCommercial) {
+          return NextResponse.json({ error: 'commercial requis' }, { status: 400 })
+        }
+        const { data: equipe } = await supabase.from('commerciaux').select('id, nom')
+        const commercial = (equipe || []).find(
+          (c) => c.nom.toLowerCase() === nomCommercial.toLowerCase()
+        )
+        if (!commercial) {
+          return NextResponse.json(
+            { error: `Commercial inconnu : ${nomCommercial}`, disponibles: (equipe || []).map((c) => c.nom) },
+            { status: 400 }
+          )
+        }
+
+        let rappelAt: string | null = null
+        if (p.rappel_at) {
+          const d = new Date(String(p.rappel_at))
+          if (isNaN(d.getTime())) {
+            return NextResponse.json({ error: 'rappel_at invalide (format ISO attendu)' }, { status: 400 })
+          }
+          rappelAt = d.toISOString()
+        }
+
+        const { data, error } = await supabase
+          .from('taches')
+          .insert({
+            titre,
+            note: String(p.note || '').trim() || null,
+            commercial_id: commercial.id,
+            client_id: p.client_id ? String(p.client_id) : null,
+            rappel_at: rappelAt,
+          })
+          .select('id, titre, rappel_at, client_id')
+          .single()
+        if (error) throw error
+
+        return NextResponse.json({ cree: true, tache: data, pour: commercial.nom })
+      }
+
       // ---- Suivi ----------------------------------------------------------
       case 'taches': {
         const { data, error } = await supabase
@@ -381,6 +510,7 @@ export async function POST(request: Request) {
               'search_calls', 'list_devis', 'devis_claudus', 'devis_claudus_pdf',
               'recent_leads', 'lead_conversation', 'taches', 'stats',
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
+              'upsert_contact', 'create_task',
             ],
           },
           { status: 400 }
