@@ -1,14 +1,25 @@
 import { NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
 import { createAdminClient } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-log'
 
 export const dynamic = 'force-dynamic'
 
-// Route de consultation pour l'agent IA (Hermes).
+// Route pour l'agent IA (Hermes).
 //
-// LECTURE SEULE : aucune action ci-dessous n'écrit en base. L'agent ne peut pas
-// modifier ni supprimer quoi que ce soit, même s'il était manipulé (injection de
-// prompt via un mail piégé par exemple).
+// LECTURE SEULE, à trois exceptions près, strictement encadrées, qui servent
+// UNIQUEMENT à préparer puis envoyer une réponse leboncoin :
+//   - draft_reply    : crée un brouillon (status 'draft')
+//   - send_draft     : bascule un brouillon en 'pending' → c'est CE moment qui
+//                      déclenche l'envoi réel par le relais
+//   - discard_draft  : supprime un brouillon
+//
+// Pourquoi c'est sûr : le relais ne consomme que `status = 'pending'`, donc un
+// brouillon ne peut PAS partir tout seul. Et `send_draft` ne prend qu'un id —
+// il n'accepte aucun texte. Le message envoyé est donc exactement celui que
+// l'utilisateur a relu, impossible de le modifier entre la validation et l'envoi.
+//
+// Aucune autre écriture n'est possible : ni client, ni devis, ni suppression.
 //
 // Table otp_codes volontairement inaccessible : elle permettrait de signer un
 // devis à la place d'un client.
@@ -199,6 +210,107 @@ export async function POST(request: Request) {
         return NextResponse.json({ leads: data })
       }
 
+      // ---- Réponses leboncoin : brouillon → validation → envoi -------------
+      case 'draft_reply': {
+        const conv = String(p.conversation_id || '').trim()
+        const texte = String(p.text || '').trim()
+        if (!conv) return NextResponse.json({ error: 'conversation_id requis' }, { status: 400 })
+        if (!texte) return NextResponse.json({ error: 'text requis' }, { status: 400 })
+        if (texte.length > 2000) {
+          return NextResponse.json({ error: 'Message trop long (2000 caractères max)' }, { status: 400 })
+        }
+
+        // La conversation doit exister — pas d'écriture dans le vide.
+        const { data: lead } = await supabase
+          .from('lbc_leads')
+          .select('conversation_id, contact_name, ad_title')
+          .eq('conversation_id', conv)
+          .single()
+        if (!lead) {
+          return NextResponse.json({ error: 'Conversation inconnue' }, { status: 404 })
+        }
+
+        const { data, error } = await supabase
+          .from('lbc_outbox')
+          .insert({ conversation_id: conv, text: texte, status: 'draft' })
+          .select('id, conversation_id, text, status, created_at')
+          .single()
+        if (error) throw error
+
+        return NextResponse.json({
+          brouillon: data,
+          destinataire: lead.contact_name,
+          annonce: lead.ad_title,
+          note: "Brouillon enregistré — RIEN n'est parti. Il faut send_draft pour envoyer.",
+        })
+      }
+
+      case 'list_drafts': {
+        const { data, error } = await supabase
+          .from('lbc_outbox')
+          .select('id, conversation_id, text, created_at')
+          .eq('status', 'draft')
+          .order('created_at', { ascending: false })
+          .limit(borne(p.limit, 20))
+        if (error) throw error
+        return NextResponse.json({ brouillons: data })
+      }
+
+      case 'send_draft': {
+        const id = parseInt(String(p.id ?? ''), 10)
+        if (!Number.isFinite(id)) {
+          return NextResponse.json({ error: 'id du brouillon requis' }, { status: 400 })
+        }
+
+        // Bascule atomique draft → pending. Le texte n'est JAMAIS modifié ici :
+        // ce qui part est exactement ce qui a été relu et validé.
+        // Le filtre `.eq('status','draft')` rend l'opération idempotente —
+        // un brouillon déjà envoyé ne peut pas repartir.
+        const { data, error } = await supabase
+          .from('lbc_outbox')
+          .update({ status: 'pending' })
+          .eq('id', id)
+          .eq('status', 'draft')
+          .select('id, conversation_id, text')
+          .single()
+
+        if (error || !data) {
+          return NextResponse.json(
+            { error: 'Brouillon introuvable ou déjà envoyé' },
+            { status: 404 }
+          )
+        }
+
+        await logActivity({
+          commercial_id: null,
+          action_type: 'message_sent',
+          entity_type: 'lead_lbc',
+          entity_id: data.conversation_id,
+          details: { via: 'agent_ia', outbox_id: data.id, texte: data.text },
+        })
+
+        return NextResponse.json({
+          envoye: true,
+          id: data.id,
+          conversation_id: data.conversation_id,
+          note: "Message mis en file d'envoi — le relais le transmettra sous ~30 s.",
+        })
+      }
+
+      case 'discard_draft': {
+        const id = parseInt(String(p.id ?? ''), 10)
+        if (!Number.isFinite(id)) {
+          return NextResponse.json({ error: 'id du brouillon requis' }, { status: 400 })
+        }
+        const { error } = await supabase
+          .from('lbc_outbox')
+          .delete()
+          .eq('id', id)
+          .eq('status', 'draft') // on ne supprime jamais un message déjà parti
+        if (error) throw error
+        return NextResponse.json({ supprime: true, id })
+      }
+
       // ---- Suivi ----------------------------------------------------------
       case 'taches': {
         const { data, error } = await supabase
@@ -228,6 +340,7 @@ export async function POST(request: Request) {
               'search_clients', 'get_client', 'recent_calls', 'get_call_transcript',
               'search_calls', 'list_devis', 'devis_claudus', 'devis_claudus_pdf',
               'recent_leads', 'taches', 'stats',
+              'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
             ],
           },
           { status: 400 }
