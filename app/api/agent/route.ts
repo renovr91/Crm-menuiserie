@@ -501,6 +501,91 @@ export async function POST(request: Request) {
         return NextResponse.json({ clients, devis, devis_claudus: devisClaudus, appels, leads })
       }
 
+      // ---- Génération de devis (outil de devis interne) -------------------
+      case 'next_devis_claudus_number': {
+        // Numéro DC-XXXXX atomique (RPC). Le VPS ne gère aucun compteur local.
+        const { data, error } = await supabase.rpc('devis_claudus_next_number')
+        if (error || !data) {
+          return NextResponse.json({ error: 'Numérotation indisponible' }, { status: 500 })
+        }
+        return NextResponse.json({ numero: data })
+      }
+
+      case 'devis_claudus_upload_url': {
+        // URL d'upload signée : le VPS pousse le PDF directement (les octets ne
+        // transitent pas par cette fonction, pas de limite de taille de body).
+        const numero = String(p.numero || '').trim()
+        if (!numero) return NextResponse.json({ error: 'numero requis' }, { status: 400 })
+        const safe = String(p.client_nom || 'client')
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'client'
+        const d = new Date()
+        const path = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${numero}_${safe}.pdf`
+        const { data, error } = await supabase.storage
+          .from('devis-claudus-pdfs')
+          .createSignedUploadUrl(path)
+        if (error || !data) {
+          return NextResponse.json({ error: 'URL d\'upload indisponible' }, { status: 500 })
+        }
+        return NextResponse.json({ path, token: data.token, signed_url: data.signedUrl })
+      }
+
+      case 'create_devis_claudus': {
+        const numero = String(p.numero || '').trim()
+        const commercial = String(p.commercial || '').trim()
+        if (!numero) return NextResponse.json({ error: 'numero requis' }, { status: 400 })
+        if (!commercial) return NextResponse.json({ error: 'commercial requis' }, { status: 400 })
+
+        const devis = (p.devis || {}) as Record<string, unknown>
+        const cli = (devis.client || {}) as Record<string, unknown>
+        const num = (v: unknown) => (typeof v === 'number' ? v : parseFloat(String(v ?? '')) || 0)
+
+        // Le commercial doit être un vrai membre de l'équipe (pas de hostname).
+        const { data: equipe } = await supabase.from('commerciaux').select('nom')
+        const noms = (equipe || []).map((c) => String(c.nom))
+        const commercialOk = noms.find((n) => n.toLowerCase() === commercial.toLowerCase())
+        if (!commercialOk) {
+          return NextResponse.json({ error: `Commercial inconnu : ${commercial}`, disponibles: noms }, { status: 400 })
+        }
+
+        const row = {
+          numero,
+          created_by: commercialOk,
+          client_civilite: cli.civilite || null,
+          client_nom: cli.nom || null,
+          client_telephone: cli.telephone || null,
+          client_email: cli.email || null,
+          client_adresse: cli.adresse || null,
+          client_cp: cli.cp || null,
+          client_ville: cli.ville || null,
+          reference: devis.reference || null,
+          delai: devis.delai || null,
+          tva_taux: num(devis.tva_taux) || 20,
+          acompte_pct: num(devis.acompte_pct),
+          lignes: devis.lignes || [],
+          livraison: devis.livraison || null,
+          pose: devis.pose || null,
+          montant_ht: num(p.montant_ht),
+          montant_tva: num(p.montant_tva),
+          montant_ttc: num(p.montant_ttc),
+          montant_achat_ht: p.montant_achat_ht != null ? num(p.montant_achat_ht) : null,
+          marge_ht: p.marge_ht != null ? num(p.marge_ht) : null,
+          taux_marge_pct: p.taux_marge_pct != null ? num(p.taux_marge_pct) : null,
+          pdf_path: p.pdf_path || null,
+          pdf_filename: p.pdf_filename || `DEVIS_${numero}.pdf`,
+          source_json: devis,
+        }
+
+        // Idempotent : un numéro déjà inséré (retour réseau) ne crée pas de doublon.
+        const { data, error } = await supabase
+          .from('devis_claudus')
+          .upsert(row, { onConflict: 'numero', ignoreDuplicates: false })
+          .select('id, numero')
+          .single()
+        if (error) throw error
+        return NextResponse.json({ ok: true, id: data.id, numero: data.numero })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -511,6 +596,7 @@ export async function POST(request: Request) {
               'recent_leads', 'lead_conversation', 'taches', 'stats',
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
               'upsert_contact', 'create_task',
+              'next_devis_claudus_number', 'devis_claudus_upload_url', 'create_devis_claudus',
             ],
           },
           { status: 400 }
