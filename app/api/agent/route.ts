@@ -83,6 +83,12 @@ function parseDateFiltre(v: unknown, sens: 'since' | 'until'): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
+// Métadonnées de pagination communes aux listes (offset + has_more depuis le count exact).
+function pageMeta(dataLen: number, count: number | null | undefined, offset: number, limit: number) {
+  const total = count ?? null
+  return { total, offset, limit, has_more: total != null && offset + dataLen < total }
+}
+
 export async function POST(request: Request) {
   if (!tokenValide(request)) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -147,13 +153,20 @@ export async function POST(request: Request) {
 
       // ---- Appels & transcriptions ---------------------------------------
       case 'recent_calls': {
-        const { data, error } = await supabase
+        const limit = borne(p.limit, 10)
+        const offset = borneOffset(p.offset)
+        const since = parseDateFiltre(p.since, 'since')
+        const until = parseDateFiltre(p.until, 'until')
+        let req = supabase
           .from('calls')
-          .select('pbx_call_id, started_at, direction, caller, callee, duration, summary, status, clients(nom)')
+          .select('pbx_call_id, started_at, direction, caller, callee, duration, summary, status, clients(nom)', { count: 'exact' })
           .order('started_at', { ascending: false })
-          .limit(borne(p.limit, 10))
+          .range(offset, offset + limit - 1)
+        if (since) req = req.gte('started_at', since)
+        if (until) req = req.lte('started_at', until)
+        const { data, error, count } = await req
         if (error) throw error
-        return NextResponse.json({ appels: data })
+        return NextResponse.json({ appels: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'get_call_transcript': {
@@ -241,15 +254,21 @@ export async function POST(request: Request) {
 
       // ---- Leads leboncoin -----------------------------------------------
       case 'recent_leads': {
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
+        const since = parseDateFiltre(p.since, 'since')
+        const until = parseDateFiltre(p.until, 'until')
         let req = supabase
           .from('lbc_leads')
-          .select('conversation_id, contact_name, ad_title, city, departement, statut, telephone, dernier_message, dernier_message_date, unread_count')
+          .select('conversation_id, contact_name, ad_title, city, departement, statut, telephone, dernier_message, dernier_message_date, unread_count', { count: 'exact' })
           .order('dernier_message_date', { ascending: false })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         if (p.statut) req = req.eq('statut', String(p.statut))
-        const { data, error } = await req
+        if (since) req = req.gte('dernier_message_date', since)
+        if (until) req = req.lte('dernier_message_date', until)
+        const { data, error, count } = await req
         if (error) throw error
-        return NextResponse.json({ leads: data })
+        return NextResponse.json({ leads: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'lead_conversation': {
