@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic'
 // liste publique du middleware (l'agent n'a pas de session navigateur), elle
 // porte donc sa propre authentification.
 
-const MAX_LIMIT = 50
+const MAX_LIMIT = 200
 
 function tokenValide(request: Request): boolean {
   const attendu = process.env.AGENT_API_TOKEN || ''
@@ -62,6 +62,27 @@ function borne(n: unknown, defaut: number): number {
   return Math.min(v, MAX_LIMIT)
 }
 
+// Décalage de pagination (>= 0). Permet de remonter au-delà d'une page.
+function borneOffset(n: unknown): number {
+  const v = typeof n === 'number' ? n : parseInt(String(n ?? ''), 10)
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0
+}
+
+// Filtre temporel : accepte un NOMBRE DE JOURS (ex '30' = les 30 derniers jours)
+// ou une DATE ISO (ex '2026-06-01'). Retourne une borne ISO ou null.
+// `sens` : 'since' = borne basse (date d'il y a N jours) ; 'until' = borne haute.
+function parseDateFiltre(v: unknown, sens: 'since' | 'until'): string | null {
+  if (v == null || v === '') return null
+  const s = String(v).trim()
+  if (/^\d{1,5}$/.test(s)) {
+    // nombre de jours : n'a de sens que pour 'since' (les N derniers jours)
+    if (sens === 'until') return null
+    return new Date(Date.now() - parseInt(s, 10) * 86_400_000).toISOString()
+  }
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
 export async function POST(request: Request) {
   if (!tokenValide(request)) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -83,15 +104,24 @@ export async function POST(request: Request) {
       // ---- Clients -------------------------------------------------------
       case 'search_clients': {
         const q = String(p.q || '').trim()
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
+        const since = parseDateFiltre(p.since, 'since')
+        const until = parseDateFiltre(p.until, 'until')
+        // count exact => on sait combien il reste (pagination fiable)
         let req = supabase
           .from('clients')
-          .select('id, nom, telephone, email, ville, code_postal, source, pipeline_stage, created_at')
+          .select('id, nom, telephone, email, ville, code_postal, source, pipeline_stage, created_at', { count: 'exact' })
           .order('created_at', { ascending: false })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         if (q) req = req.or(`nom.ilike.%${q}%,telephone.ilike.%${q}%,email.ilike.%${q}%,ville.ilike.%${q}%`)
-        const { data, error } = await req
+        if (since) req = req.gte('created_at', since)
+        if (until) req = req.lte('created_at', until)
+        const { data, error, count } = await req
         if (error) throw error
-        return NextResponse.json({ clients: data })
+        const total = count ?? null
+        const has_more = total != null && offset + (data?.length ?? 0) < total
+        return NextResponse.json({ clients: data, total, offset, limit, has_more })
       }
 
       case 'get_client': {

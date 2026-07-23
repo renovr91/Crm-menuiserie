@@ -32,6 +32,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 
 # LBC Chrome Bridge (contient des secrets en clair, doit rester local)
 lbc_chrome_bridge.user.js
