@@ -412,6 +412,36 @@ export async function POST(request: Request) {
         return NextResponse.json({ supprime: true, id })
       }
 
+      // ---- Statut d'un lead leboncoin (colonne du kanban) -------------------
+      case 'update_lead_statut': {
+        const conv = String(p.conversation_id || '').trim()
+        const statut = String(p.statut || '').trim()
+        // Liste FERMÉE = colonnes réelles du kanban (valeurs observées en base).
+        const STATUTS_VALIDES = [
+          'nouveau', 'a_repondre', 'devis_a_traiter', 'devis_envoye',
+          'repondu', 'en_attente', 'relance_1', 'pas_interesse', 'gagne', 'perdu',
+        ]
+        if (!conv) {
+          return NextResponse.json({ error: 'conversation_id requis' }, { status: 400 })
+        }
+        if (!STATUTS_VALIDES.includes(statut)) {
+          return NextResponse.json(
+            { error: 'Statut invalide', statuts_valides: STATUTS_VALIDES },
+            { status: 400 }
+          )
+        }
+        const { data, error } = await supabase
+          .from('lbc_leads')
+          .update({ statut })
+          .eq('conversation_id', conv)
+          .select('conversation_id, contact_name, statut')
+          .single()
+        if (error || !data) {
+          return NextResponse.json({ error: 'Lead introuvable' }, { status: 404 })
+        }
+        return NextResponse.json({ ok: true, lead: data })
+      }
+
       // ---- Création de contact / rappel ------------------------------------
       case 'upsert_contact': {
         const tel = String(p.telephone || '').trim()
@@ -644,7 +674,7 @@ export async function POST(request: Request) {
               'search_calls', 'list_devis', 'devis_claudus', 'devis_claudus_pdf',
               'recent_leads', 'lead_conversation', 'taches', 'stats',
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
-              'upsert_contact', 'create_task',
+              'update_lead_statut', 'upsert_contact', 'create_task',
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'create_devis_claudus',
             ],
           },
