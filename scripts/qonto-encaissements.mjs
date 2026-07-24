@@ -10,11 +10,15 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const YEAR = process.argv[2] || '2025'
 const IBAN = 'FR7616958000011144672670309'
 
-// Charger .env.local
+// Charger .env.local puis .env.vercel (pull Vercel) — le premier trouvé gagne
 const env = {}
-for (const line of readFileSync(join(ROOT, '.env.local'), 'utf8').split('\n')) {
-  const m = line.match(/^([A-Z_]+)=(.*)$/)
-  if (m) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '')
+for (const file of ['.env.local', '.env.vercel']) {
+  try {
+    for (const line of readFileSync(join(ROOT, file), 'utf8').split('\n')) {
+      const m = line.match(/^([A-Z_]+)=(.*)$/)
+      if (m && !(m[1] in env)) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '')
+    }
+  } catch {}
 }
 const LOGIN = (env.QONTO_LOGIN || '').trim()
 const SECRET = (env.QONTO_SECRET_KEY || '').trim()

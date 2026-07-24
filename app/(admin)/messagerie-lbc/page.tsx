@@ -63,7 +63,7 @@ const STAGES: { code: LeadStatut; label: string; color: string }[] = [
   { code: 'nouveau',         label: 'Nouveau',         color: '#3B82F6' },
   { code: 'a_repondre',      label: 'À répondre',      color: '#14B8A6' },
   { code: 'repondu',         label: 'Répondu',         color: '#0EA5E9' },
-  { code: 'devis_a_traiter', label: 'Devis à traiter', color: '#EC4899' },
+  { code: 'devis_a_traiter', label: 'Devis à traiter par Hermes', color: '#EC4899' },
   { code: 'devis_envoye',    label: 'Devis envoyé',    color: '#F59E0B' },
   { code: 'relance_1',       label: '1ère relance',    color: '#F97316' },
   { code: 'relance_2',       label: '2ème relance',    color: '#EF4444' },
@@ -311,156 +311,6 @@ function LeadCard({
           <IconChevronRight className="w-3 h-3" />
         </button>
       </div>
-    </div>
-  )
-}
-
-// =============================================
-// DEVIS À TRAITER PAR HERMES
-// File d'attente : on dépose une demande (texte libre, lead lié en option),
-// Hermes la lit via /api/agent et la traite depuis Telegram
-// (« traite les demandes de devis »). Autonome : bouton + panneau overlay.
-// =============================================
-
-interface HermesDemande {
-  id: string
-  created_at: string
-  contact_name: string | null
-  ad_title: string | null
-  demande: string
-  statut: string
-  traite_note: string | null
-}
-
-function HermesDevisPanel({ selectedLead }: { selectedLead: Lead | null }) {
-  const [open, setOpen] = useState(false)
-  const [demandes, setDemandes] = useState<HermesDemande[]>([])
-  const [texte, setTexte] = useState('')
-  const [lierLead, setLierLead] = useState(true)
-  const [envoi, setEnvoi] = useState(false)
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/hermes-devis-requests')
-      const data = await res.json()
-      if (res.ok) setDemandes(data.demandes || [])
-    } catch { /* silencieux */ }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-  useEffect(() => { if (open) load() }, [open, load])
-
-  const enAttente = demandes.filter(d => d.statut === 'en_attente')
-
-  const ajouter = async () => {
-    if (!texte.trim() || envoi) return
-    setEnvoi(true)
-    try {
-      const body: Record<string, string> = { demande: texte.trim() }
-      if (lierLead && selectedLead) {
-        body.conversation_id = selectedLead.conversation_id
-        body.contact_name = selectedLead.contact_name
-        if (selectedLead.ad_title) body.ad_title = selectedLead.ad_title
-      }
-      const res = await fetch('/api/hermes-devis-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (res.ok) { setTexte(''); await load() }
-    } finally {
-      setEnvoi(false)
-    }
-  }
-
-  const annuler = async (id: string) => {
-    await fetch(`/api/hermes-devis-requests?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    await load()
-  }
-
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3.5 py-2 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-medium">
-        🤖 Devis à traiter par Hermes
-        {enAttente.length > 0 && (
-          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
-            {enAttente.length}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-[440px] max-h-[70vh] overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-gray-900">Devis à traiter par Hermes</h3>
-            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
-              <IconClose className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Formulaire */}
-          <textarea
-            value={texte} onChange={e => setTexte(e.target.value)}
-            placeholder={'Ta demande, ex. :\n« Sectionnelle 2400×2100 anthracite avec portillon »\n« 3 volets solaires : 1200×1400, 900×1200, 1000×1350, blancs »'}
-            rows={3}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-y text-gray-700"
-          />
-          <div className="flex items-center justify-between mt-2 mb-3">
-            <label className={`flex items-center gap-1.5 text-xs ${selectedLead ? 'text-gray-600' : 'text-gray-300'}`}>
-              <input type="checkbox" checked={lierLead && !!selectedLead} disabled={!selectedLead}
-                onChange={e => setLierLead(e.target.checked)} className="rounded" />
-              {selectedLead
-                ? <>Lier à <b>{selectedLead.contact_name}</b>{selectedLead.ad_title ? ` (${selectedLead.ad_title.slice(0, 28)}…)` : ''}</>
-                : 'Ouvre une conversation pour lier un contact'}
-            </label>
-            <button onClick={ajouter} disabled={!texte.trim() || envoi}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all">
-              {envoi ? '…' : 'Déposer'}
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-400 mb-3">
-            Puis dis à Hermes sur Telegram : « <b>traite les demandes de devis</b> » — il génère,
-            te montre le récap et n&apos;envoie qu&apos;après ta confirmation.
-          </p>
-
-          {/* Liste */}
-          {demandes.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-3">Aucune demande.</p>
-          ) : (
-            <ul className="space-y-2">
-              {demandes.map(d => (
-                <li key={d.id} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50/60">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs text-gray-700 whitespace-pre-wrap break-words">{d.demande}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        {d.contact_name ? `${d.contact_name} · ` : ''}
-                        {d.ad_title ? `${d.ad_title.slice(0, 30)} · ` : ''}
-                        {timeSince(d.created_at)}
-                        {d.statut === 'traite' && d.traite_note ? ` — ${d.traite_note}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {d.statut === 'traite' ? (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">traité</span>
-                      ) : (
-                        <>
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">en attente</span>
-                          <button onClick={() => annuler(d.id)} title="Annuler"
-                            className="text-gray-300 hover:text-red-400">
-                            <IconClose className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -1003,7 +853,6 @@ export default function MessagerieLBCPage() {
           )}
         </div>
         <div className="flex items-center gap-2.5">
-          <HermesDevisPanel selectedLead={selectedLead} />
           <input type="text" placeholder="Rechercher..."
             value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 w-56" />
