@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // TYPES
 // =============================================
 
-type LeadStatut = 'nouveau' | 'a_repondre' | 'repondu' | 'devis_a_traiter' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
+type LeadStatut = 'nouveau' | 'a_repondre' | 'repondu' | 'devis_a_traiter' | 'devis_hermes' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
 
 interface Lead {
   id: string
@@ -63,7 +63,8 @@ const STAGES: { code: LeadStatut; label: string; color: string }[] = [
   { code: 'nouveau',         label: 'Nouveau',         color: '#3B82F6' },
   { code: 'a_repondre',      label: 'À répondre',      color: '#14B8A6' },
   { code: 'repondu',         label: 'Répondu',         color: '#0EA5E9' },
-  { code: 'devis_a_traiter', label: 'Devis à traiter par Hermes', color: '#EC4899' },
+  { code: 'devis_a_traiter', label: 'Devis à traiter', color: '#EC4899' },
+  { code: 'devis_hermes',    label: '🤖 Devis à traiter par Hermes', color: '#8B5CF6' },
   { code: 'devis_envoye',    label: 'Devis envoyé',    color: '#F59E0B' },
   { code: 'relance_1',       label: '1ère relance',    color: '#F97316' },
   { code: 'relance_2',       label: '2ème relance',    color: '#EF4444' },
@@ -77,6 +78,7 @@ const STATUT_CONFIG: Record<LeadStatut, { label: string; color: string; bg: stri
   a_repondre:     { label: 'À répondre',      color: '#14B8A6', bg: 'rgba(20,184,166,0.12)',  emoji: '✍️' },
   repondu:        { label: 'Répondu',         color: '#0EA5E9', bg: 'rgba(14,165,233,0.12)',  emoji: '💬' },
   devis_a_traiter:{ label: 'Devis à traiter', color: '#EC4899', bg: 'rgba(236,72,153,0.12)',  emoji: '📝' },
+  devis_hermes:   { label: 'Devis Hermes',     color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)',  emoji: '🤖' },
   devis_envoye:   { label: 'Devis envoyé',    color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  emoji: '📋' },
   relance_1:      { label: '1ère relance',    color: '#F97316', bg: 'rgba(249,115,22,0.12)',  emoji: '📨' },
   relance_2:      { label: '2ème relance',    color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   emoji: '🔔' },
@@ -86,7 +88,7 @@ const STATUT_CONFIG: Record<LeadStatut, { label: string; color: string; bg: stri
   pas_interesse:{ label: 'Pas intéressant', color: '#9CA3AF', bg: 'rgba(156,163,175,0.10)', emoji: '🚫' },
 }
 
-const ALL_STATUTS: LeadStatut[] = ['nouveau', 'a_repondre', 'repondu', 'devis_a_traiter', 'devis_envoye', 'relance_1', 'relance_2', 'en_attente', 'gagne', 'perdu', 'pas_interesse']
+const ALL_STATUTS: LeadStatut[] = ['nouveau', 'a_repondre', 'repondu', 'devis_a_traiter', 'devis_hermes', 'devis_envoye', 'relance_1', 'relance_2', 'en_attente', 'gagne', 'perdu', 'pas_interesse']
 
 // Messages de relance + cadence (Devis envoyé → 1ère relance → 2ème relance → on lâche)
 const RELANCE_MESSAGE_1 = `Bonjour,
@@ -322,7 +324,7 @@ function LeadCard({
 export default function MessagerieLBCPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [counts, setCounts] = useState<Record<LeadStatut, number>>({
-    nouveau: 0, a_repondre: 0, repondu: 0, devis_a_traiter: 0, devis_envoye: 0, relance_1: 0, relance_2: 0, en_attente: 0, gagne: 0, perdu: 0, pas_interesse: 0
+    nouveau: 0, a_repondre: 0, repondu: 0, devis_a_traiter: 0, devis_hermes: 0, devis_envoye: 0, relance_1: 0, relance_2: 0, en_attente: 0, gagne: 0, perdu: 0, pas_interesse: 0
   })
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

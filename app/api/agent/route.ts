@@ -418,8 +418,8 @@ export async function POST(request: Request) {
         const statut = String(p.statut || '').trim()
         // Liste FERMÉE = colonnes réelles du kanban (valeurs observées en base).
         const STATUTS_VALIDES = [
-          'nouveau', 'a_repondre', 'devis_a_traiter', 'devis_envoye',
-          'repondu', 'en_attente', 'relance_1', 'pas_interesse', 'gagne', 'perdu',
+          'nouveau', 'a_repondre', 'devis_a_traiter', 'devis_hermes', 'devis_envoye',
+          'repondu', 'en_attente', 'relance_1', 'relance_2', 'pas_interesse', 'gagne', 'perdu',
         ]
         if (!conv) {
           return NextResponse.json({ error: 'conversation_id requis' }, { status: 400 })
