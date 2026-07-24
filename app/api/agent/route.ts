@@ -442,6 +442,39 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, lead: data })
       }
 
+      // ---- File « Devis à traiter par Hermes » (section messagerie LBC) -----
+      case 'devis_requests': {
+        const { data, error } = await supabase
+          .from('hermes_devis_requests')
+          .select('id, created_at, conversation_id, contact_name, ad_title, demande, statut')
+          .eq('statut', 'en_attente')
+          .order('created_at', { ascending: true }) // les plus anciennes d'abord
+          .limit(borne(p.limit, 20))
+        if (error) throw error
+        return NextResponse.json({ demandes: data })
+      }
+
+      case 'update_devis_request': {
+        const id = String(p.id || '').trim()
+        const statut = String(p.statut || '').trim()
+        if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+        if (!['traite', 'annule'].includes(statut)) {
+          return NextResponse.json({ error: "statut invalide ('traite' ou 'annule')" }, { status: 400 })
+        }
+        const patch: Record<string, unknown> = { statut, traite_at: new Date().toISOString() }
+        if (p.note) patch.traite_note = String(p.note).slice(0, 500)
+        const { data, error } = await supabase
+          .from('hermes_devis_requests')
+          .update(patch)
+          .eq('id', id)
+          .select('id, statut, traite_note')
+          .single()
+        if (error || !data) {
+          return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 })
+        }
+        return NextResponse.json({ ok: true, demande: data })
+      }
+
       // ---- Création de contact / rappel ------------------------------------
       case 'upsert_contact': {
         const tel = String(p.telephone || '').trim()
@@ -674,7 +707,8 @@ export async function POST(request: Request) {
               'search_calls', 'list_devis', 'devis_claudus', 'devis_claudus_pdf',
               'recent_leads', 'lead_conversation', 'taches', 'stats',
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
-              'update_lead_statut', 'upsert_contact', 'create_task',
+              'update_lead_statut', 'devis_requests', 'update_devis_request',
+              'upsert_contact', 'create_task',
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'create_devis_claudus',
             ],
           },
