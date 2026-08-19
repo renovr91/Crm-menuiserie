@@ -184,40 +184,46 @@ export async function POST(request: Request) {
       case 'search_calls': {
         const q = String(p.q || '').trim()
         if (!q) return NextResponse.json({ error: 'q requis' }, { status: 400 })
-        const { data, error } = await supabase
+        const limit = borne(p.limit, 10)
+        const offset = borneOffset(p.offset)
+        const { data, error, count } = await supabase
           .from('calls')
-          .select('pbx_call_id, started_at, caller, summary')
+          .select('pbx_call_id, started_at, caller, summary', { count: 'exact' })
           .or(`transcript.ilike.%${q}%,summary.ilike.%${q}%,caller.ilike.%${q}%`)
           .order('started_at', { ascending: false })
-          .limit(borne(p.limit, 10))
+          .range(offset, offset + limit - 1)
         if (error) throw error
-        return NextResponse.json({ appels: data })
+        return NextResponse.json({ appels: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       // ---- Devis ---------------------------------------------------------
       case 'list_devis': {
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
         let req = supabase
           .from('devis')
-          .select('id, reference, status, montant_ht, montant_ttc, sent_at, read_at, signed_at, expires_at, clients(nom)')
+          .select('id, reference, status, montant_ht, montant_ttc, sent_at, read_at, signed_at, expires_at, clients(nom)', { count: 'exact' })
           .order('created_at', { ascending: false })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         if (p.status) req = req.eq('status', String(p.status))
-        const { data, error } = await req
+        const { data, error, count } = await req
         if (error) throw error
-        return NextResponse.json({ devis: data })
+        return NextResponse.json({ devis: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'devis_claudus': {
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
         let req = supabase
           .from('devis_claudus')
-          .select('numero, created_at, created_by, client_nom, client_ville, reference, montant_ht, montant_ttc, marge_ht, taux_marge_pct')
+          .select('numero, created_at, created_by, client_nom, client_ville, reference, montant_ht, montant_ttc, marge_ht, taux_marge_pct', { count: 'exact' })
           .order('created_at', { ascending: false })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         const q = String(p.client || '').trim()
         if (q) req = req.ilike('client_nom', `%${q}%`)
-        const { data, error } = await req
+        const { data, error, count } = await req
         if (error) throw error
-        return NextResponse.json({ devis_claudus: data })
+        return NextResponse.json({ devis_claudus: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'devis_claudus_pdf': {
@@ -347,14 +353,16 @@ export async function POST(request: Request) {
       }
 
       case 'list_drafts': {
-        const { data, error } = await supabase
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
+        const { data, error, count } = await supabase
           .from('lbc_outbox')
-          .select('id, conversation_id, text, created_at')
+          .select('id, conversation_id, text, created_at', { count: 'exact' })
           .eq('status', 'draft')
           .order('created_at', { ascending: false })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         if (error) throw error
-        return NextResponse.json({ brouillons: data })
+        return NextResponse.json({ brouillons: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'send_draft': {
@@ -561,13 +569,15 @@ export async function POST(request: Request) {
 
       // ---- Suivi ----------------------------------------------------------
       case 'taches': {
-        const { data, error } = await supabase
+        const limit = borne(p.limit, 20)
+        const offset = borneOffset(p.offset)
+        const { data, error, count } = await supabase
           .from('taches')
-          .select('id, titre, note, rappel_at, client_id, affaire_id')
+          .select('id, titre, note, rappel_at, client_id, affaire_id', { count: 'exact' })
           .order('rappel_at', { ascending: true })
-          .limit(borne(p.limit, 20))
+          .range(offset, offset + limit - 1)
         if (error) throw error
-        return NextResponse.json({ taches: data })
+        return NextResponse.json({ taches: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
       case 'stats': {
