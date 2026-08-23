@@ -737,9 +737,13 @@ export async function POST(request: Request) {
           .eq('reference', numero)
           .maybeSingle()
 
+        // INSERT et non upsert : l'index unique sur submission_id est PARTIEL
+        // (`where submission_id is not null`), or Postgres refuse un ON CONFLICT
+        // dont la clause ne reprend pas celle de l'index. Le doublon est déjà
+        // écarté par la vérification `dejaLa` ci-dessus. (23/08)
         const { data, error } = await supabase
           .from('signatures')
-          .upsert(
+          .insert(
             {
               devis_id: devis?.id ?? null,
               numero,
@@ -754,7 +758,6 @@ export async function POST(request: Request) {
               evenements: p.evenements ?? null,
               signed_at: p.signe_le ? String(p.signe_le) : new Date().toISOString(),
             },
-            { onConflict: 'submission_id' },
           )
           .select('id')
           .single()
