@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/devis', label: 'Devis', icon: '📄' },
   { href: '/devis-claudus', label: 'Devis Claudus', icon: '⚡' },
   { href: '/compta', label: 'Compta', icon: '💶' },
+  { href: '/pointage', label: 'Pointage', icon: '🏷️' },
   { href: '/taches', label: 'Tâches', icon: '✅' },
   { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
   { href: '/livraisons', label: 'Livraisons', icon: '📦' },
