@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { timingSafeEqual } from 'crypto'
+import { timingSafeEqual, createHash } from 'crypto'
 import { createAdminClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 
@@ -15,6 +15,10 @@ export const dynamic = 'force-dynamic'
 //   - upsert_contact : crée un contact, ou COMPLÈTE uniquement ses champs vides
 //                      (ne remplace jamais une donnée saisie par un humain)
 //   - create_task    : crée un rappel
+//   - archiver_signature : range le dossier de preuve d'une signature
+//                      DocuSeal déjà ABOUTIE. N'écrit que dans `signatures`,
+//                      ne modifie ni devis ni client, et ne peut rien
+//                      déclencher — c'est un enregistrement, pas une action.
 //
 // Pourquoi c'est sûr : le relais ne consomme que `status = 'pending'`, donc un
 // brouillon ne peut PAS partir tout seul. Et `send_draft` ne prend qu'un id —
@@ -673,6 +677,97 @@ export async function POST(request: Request) {
           .single()
         if (error) throw error
         return NextResponse.json({ ok: true, id: data.id, numero: data.numero })
+      }
+
+      // Archivage du dossier de preuve d'une signature DocuSeal.
+      //
+      // Appelée par le cron nocturne d'Hermes. Pas de webhook : un webhook qui
+      // échoue perd la preuve SANS QUE PERSONNE NE LE SACHE, et on le découvre
+      // deux ans plus tard en litige. Le cron redemande la liste à chaque passe
+      // et rattrape ce qui manque. Idempotent : l'index unique sur
+      // submission_id garantit qu'un rappel ne crée pas de doublon.
+      case 'archiver_signature': {
+        const submissionId = Number(p.submission_id)
+        const numero = String(p.numero || '').trim()
+        if (!submissionId || !numero) {
+          return NextResponse.json(
+            { error: 'submission_id et numero requis' },
+            { status: 400 },
+          )
+        }
+
+        // Déjà là ? Le cron repasse tous les soirs, on ne refait rien.
+        const { data: dejaLa } = await supabase
+          .from('signatures')
+          .select('id, pdf_signe_path')
+          .eq('submission_id', submissionId)
+          .maybeSingle()
+        if (dejaLa?.pdf_signe_path) {
+          return NextResponse.json({ ok: true, deja_archive: true, id: dejaLa.id })
+        }
+
+        // Les URL DocuSeal sont signées et EXPIRENT : elles doivent être
+        // fraîches, d'où leur transmission par le cron à chaque passe.
+        const ranger = async (url: unknown, suffixe: string) => {
+          if (!url) return { path: null as string | null, buf: null as Buffer | null }
+          const r = await fetch(String(url), { cache: 'no-store' })
+          if (!r.ok) return { path: null, buf: null }
+          const buf = Buffer.from(await r.arrayBuffer())
+          const chemin = `signatures/${numero}${suffixe}`
+          const { error } = await supabase.storage
+            .from('devis-pdf')
+            .upload(chemin, buf, { contentType: 'application/pdf', upsert: true })
+          return { path: error ? null : chemin, buf }
+        }
+
+        const pdf = await ranger(p.pdf_url, '_signe.pdf')
+        if (!pdf.path) {
+          return NextResponse.json(
+            { error: 'Document signé introuvable ou non stocké — rien enregistré' },
+            { status: 502 },
+          )
+        }
+        const cert = await ranger(p.certificat_url, '_certificat.pdf')
+
+        // Rattachement au devis quand il existe : un devis produit par Hermes
+        // n'est pas forcément dans la table `devis`.
+        const { data: devis } = await supabase
+          .from('devis')
+          .select('id')
+          .eq('reference', numero)
+          .maybeSingle()
+
+        const { data, error } = await supabase
+          .from('signatures')
+          .upsert(
+            {
+              devis_id: devis?.id ?? null,
+              numero,
+              source: 'docuseal',
+              submission_id: submissionId,
+              signer_name: p.signataire_nom ? String(p.signataire_nom) : null,
+              signer_ip: p.signataire_ip ? String(p.signataire_ip) : null,
+              verification: p.verification ? String(p.verification) : null,
+              document_hash: createHash('sha256').update(pdf.buf!).digest('hex'),
+              pdf_signe_path: pdf.path,
+              certificat_path: cert.path,
+              evenements: p.evenements ?? null,
+              signed_at: p.signe_le ? String(p.signe_le) : new Date().toISOString(),
+            },
+            { onConflict: 'submission_id' },
+          )
+          .select('id')
+          .single()
+        if (error) throw error
+
+        return NextResponse.json({
+          ok: true,
+          id: data.id,
+          numero,
+          pdf: pdf.path,
+          certificat: cert.path,
+          certificat_manquant: !cert.path,
+        })
       }
 
       default:
