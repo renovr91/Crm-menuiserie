@@ -761,7 +761,15 @@ export async function POST(request: Request) {
           )
           .select('id')
           .single()
-        if (error) throw error
+        // On renvoie l'erreur RÉELLE : cet appel vient de notre propre cron,
+        // authentifié, pas d'un client. Un message générique ici ne protège
+        // personne et rend le diagnostic impossible.
+        if (error) {
+          return NextResponse.json(
+            { error: `Enregistrement refusé : ${error.message}` },
+            { status: 500 },
+          )
+        }
 
         return NextResponse.json({
           ok: true,
