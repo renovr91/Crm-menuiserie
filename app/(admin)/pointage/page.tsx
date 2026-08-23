@@ -189,8 +189,11 @@ function Ligne({
             <span className="text-xs text-gray-400 tabular-nums">{dateFr(o.date_operation)}</span>
             <span className="text-xs uppercase tracking-wide text-gray-400">{o.source}</span>
             {!o.definitive && (
-              <span className="text-[11px] rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
-                provisoire — sera annulée
+              <span
+                className="text-[11px] rounded bg-gray-100 px-1.5 py-0.5 text-gray-600"
+                title="Contrepartie technique d’une remise de chèque, sous réserve de bon encaissement. Elle s’annule d’elle-même : rien à faire."
+              >
+                sous réserve d’encaissement
               </span>
             )}
             {o.pointee_le && (

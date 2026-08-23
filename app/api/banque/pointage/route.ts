@@ -95,8 +95,10 @@ export async function GET(request: Request) {
 
   const lignes = (operations || []).map((o) => {
     const montant = Number(o.montant)
-    // On ne propose rien sur un débit ni sur du provisoire : une provision de
-    // chèque en attente sera annulée, la rapprocher créerait un faux paiement.
+    // On ne propose rien sur un débit ni sur une écriture encore provisoire.
+    // Cas typique : la contrepartie d'une remise de chèque, passée au débit
+    // sous réserve de bon encaissement. Elle s'annule d'elle-même — le crédit
+    // correspondant, lui, est définitif et se rapproche normalement.
     const rapprochable = montant > 0 && o.definitive && !o.pointee_le && !o.ignoree_le
     const suggestions = rapprochable
       ? candidats
@@ -174,7 +176,7 @@ export async function POST(request: Request) {
   }
   if (!op.definitive) {
     return NextResponse.json(
-      { error: 'Opération provisoire : elle sera annulée par la banque, elle ne doit pas être rapprochée.' },
+      { error: 'Écriture encore provisoire chez la banque : attendre qu’elle soit définitive.' },
       { status: 400 },
     )
   }
