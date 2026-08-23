@@ -15,6 +15,10 @@ export const dynamic = 'force-dynamic'
 //   - upsert_contact : crée un contact, ou COMPLÈTE uniquement ses champs vides
 //                      (ne remplace jamais une donnée saisie par un humain)
 //   - create_task    : crée un rappel
+//   - operations_bancaires : enregistre les mouvements lus chez la banque.
+//                      N'écrit que dans `operations_bancaires`, ne touche à
+//                      aucune facture ni aucun devis, et ne pointe rien —
+//                      le rapprochement reste un geste humain.
 //   - archiver_signature : range le dossier de preuve d'une signature
 //                      DocuSeal déjà ABOUTIE. N'écrit que dans `signatures`,
 //                      ne modifie ni devis ni client, et ne peut rien
@@ -778,6 +782,79 @@ export async function POST(request: Request) {
           pdf: pdf.path,
           certificat: cert.path,
           certificat_manquant: !cert.path,
+        })
+      }
+
+      // Réception des mouvements bancaires, poussés par le VPS après chaque
+      // synchro. Le VPS pousse plutôt que le CRM ne tire : la clé bancaire est
+      // volontairement isolée sur le serveur, sous un utilisateur distinct de
+      // l'agent, et n'a pas à être dupliquée ici.
+      //
+      // Idempotent : contrainte d'unicité sur (source, ref_externe). Une
+      // opération déjà connue est mise à jour — son statut peut passer de
+      // provisoire à définitif — mais JAMAIS son pointage, qui appartient à
+      // l'humain.
+      case 'operations_bancaires': {
+        const source = String(p.source || '').trim()
+        const lignes = Array.isArray(p.operations) ? p.operations : []
+        if (!source) {
+          return NextResponse.json({ error: 'source requise' }, { status: 400 })
+        }
+        if (!lignes.length) {
+          return NextResponse.json({ ok: true, recues: 0, nouvelles: 0 })
+        }
+
+        const aEcrire = []
+        for (const o of lignes) {
+          const ref = String(o?.id || '').trim()
+          const date = String(o?.date || '').slice(0, 10)
+          const montant = Number(o?.montant)
+          if (!ref || !date || !Number.isFinite(montant)) continue
+          aEcrire.push({
+            source,
+            ref_externe: ref,
+            date_operation: date,
+            libelle: String(o?.libelle || '(sans libellé)').slice(0, 300),
+            montant,
+            definitive: o?.definitive !== false,
+            statut_banque: o?.statut ? String(o.statut) : null,
+            vue_le: new Date().toISOString(),
+          })
+        }
+        if (!aEcrire.length) {
+          return NextResponse.json(
+            { error: 'aucune opération exploitable (date, id ou montant manquant)' },
+            { status: 400 },
+          )
+        }
+
+        // Quelles références sont déjà connues ? On veut compter les NOUVELLES,
+        // pas prétendre en avoir ajouté à chaque passage.
+        const refs = aEcrire.map((l) => l.ref_externe)
+        const { data: connues } = await supabase
+          .from('operations_bancaires')
+          .select('ref_externe')
+          .eq('source', source)
+          .in('ref_externe', refs)
+        const dejaLa = new Set((connues || []).map((r) => r.ref_externe))
+
+        const { error } = await supabase
+          .from('operations_bancaires')
+          .upsert(aEcrire, { onConflict: 'source,ref_externe' })
+        if (error) {
+          return NextResponse.json(
+            { error: `Enregistrement refusé : ${error.message}` },
+            { status: 500 },
+          )
+        }
+
+        const nouvelles = aEcrire.filter((l) => !dejaLa.has(l.ref_externe)).length
+        return NextResponse.json({
+          ok: true,
+          source,
+          recues: aEcrire.length,
+          nouvelles,
+          ignorees: lignes.length - aEcrire.length,
         })
       }
 
