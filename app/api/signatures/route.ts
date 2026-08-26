@@ -43,9 +43,10 @@ export async function GET(request: NextRequest) {
           .in('numero', numeros)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     numeros.length
-      ? supabase.from('devis_reglements')
-          .select('numero, type, mode, montant, statut, recu_le, reference')
-          .in('numero', numeros)
+      ? supabase.from('factures')
+          .select('id, numero, devis_numero, type, statut, total_ttc, emise_le, facture_paiements(montant, moyen, date_paiement, reference)')
+          .in('devis_numero', numeros)
+          .neq('statut', 'brouillon')
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     supabase.from('devis_signatures').select('submission_id, masque').eq('masque', true),
   ])
@@ -56,17 +57,21 @@ export async function GET(request: NextRequest) {
 
   type DevisRow = { numero: string; client_nom?: string; client_email?: string; client_telephone?: string; montant_ttc?: number; acompte_pct?: number; created_by?: string }
   type SigRow = { numero: string; pdf_signe_path?: string; certificat_path?: string }
-  type ReglRow = { numero: string; type: string; mode: string | null; montant: number; statut: string; recu_le?: string; reference?: string }
+  type PaiementRow = { montant: number; moyen: string; date_paiement: string; reference?: string | null }
+  type FactureRow = {
+    id: string; numero: string; devis_numero: string; type: string; statut: string
+    total_ttc: number; emise_le?: string | null; facture_paiements?: PaiementRow[]
+  }
 
   const devisMap = new Map<string, DevisRow>()
   ;((devisRes.data || []) as DevisRow[]).forEach((d) => devisMap.set(d.numero, d))
   const sigMap = new Map<string, SigRow>()
   ;((sigsRes.data || []) as SigRow[]).forEach((s) => sigMap.set(s.numero, s))
-  const reglMap = new Map<string, ReglRow[]>()
-  ;((reglRes.data || []) as ReglRow[]).forEach((r) => {
-    const arr = reglMap.get(r.numero) || []
-    arr.push(r)
-    reglMap.set(r.numero, arr)
+  const facturesMap = new Map<string, FactureRow[]>()
+  ;((reglRes.data || []) as FactureRow[]).forEach((f) => {
+    const arr = facturesMap.get(f.devis_numero) || []
+    arr.push(f)
+    facturesMap.set(f.devis_numero, arr)
   })
 
   // Liens signés vers les PDF archivés (1 h)
@@ -85,7 +90,8 @@ export async function GET(request: NextRequest) {
       const sent = envoyeLe(s)
       const devis = numero ? devisMap.get(numero) : undefined
       const sig = numero ? sigMap.get(numero) : undefined
-      const regl = (numero ? reglMap.get(numero) : undefined) || []
+      const factures = (numero ? facturesMap.get(numero) : undefined) || []
+      const paiements = factures.flatMap((f) => f.facture_paiements || [])
 
       const joursDepuisEnvoi = sent
         ? Math.floor((maintenant - new Date(sent).getTime()) / 86_400_000)
@@ -117,8 +123,19 @@ export async function GET(request: NextRequest) {
         pdf_signe_url: await lienSigne(sig?.pdf_signe_path),
         certificat_url: await lienSigne(sig?.certificat_path),
         audit_url: s.audit_log_url,
-        reglements: regl,
-        acompte_regle: regl.some((r) => r.type === 'acompte' && (r.statut === 'recu' || r.statut === 'encaisse')),
+        factures: factures.map((f) => ({
+          numero: f.numero, type: f.type, statut: f.statut,
+          total_ttc: f.total_ttc, emise_le: f.emise_le,
+        })),
+        paiements,
+        // Acompte attendu d'après le devis (montant TTC × pourcentage d'acompte)
+        acompte_attendu:
+          devis?.montant_ttc != null && devis?.acompte_pct != null
+            ? Math.round((Number(devis.montant_ttc) * Number(devis.acompte_pct)) / 100)
+            : null,
+        total_regle: paiements.reduce((t, r) => t + (Number(r.montant) || 0), 0),
+        facture_emise: factures.length > 0,
+        acompte_regle: paiements.length > 0,
       }
     }),
   )

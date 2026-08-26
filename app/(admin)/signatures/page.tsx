@@ -2,13 +2,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
-interface Reglement {
+interface Facture {
   numero: string
   type: string
-  mode: string | null
-  montant: number
   statut: string
-  recu_le?: string | null
+  total_ttc: number
+  emise_le?: string | null
+}
+
+interface Paiement {
+  montant: number
+  moyen: string
+  date_paiement: string
   reference?: string | null
 }
 
@@ -33,7 +38,11 @@ interface Ligne {
   pdf_signe_url: string | null
   certificat_url: string | null
   audit_url: string | null
-  reglements: Reglement[]
+  factures: Facture[]
+  paiements: Paiement[]
+  acompte_attendu: number | null
+  total_regle: number
+  facture_emise: boolean
   acompte_regle: boolean
   envois: number
   masque?: boolean
@@ -235,8 +244,19 @@ export default function SignaturesPage() {
                       <td className="px-4 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                         {euro(l.montant_ttc)}
                         {l.statut === 'signe' && (
-                          <div className={`text-xs font-normal ${l.acompte_regle ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            {l.acompte_regle ? 'acompte reçu' : 'acompte à encaisser'}
+                          <div className={`text-xs font-normal ${l.acompte_regle ? 'text-emerald-600' : l.facture_emise ? 'text-amber-600' : 'text-gray-500'}`}>
+                            {l.acompte_regle
+                              ? `réglé ${euro(l.total_regle)}`
+                              : l.facture_emise
+                                ? 'facture émise, non réglée'
+                                : l.acompte_attendu
+                                  ? `acompte ${euro(l.acompte_attendu)} à facturer`
+                                  : 'à facturer'}
+                          </div>
+                        )}
+                        {l.factures.length > 0 && (
+                          <div className="text-xs text-gray-400">
+                            {l.factures.map((f) => f.numero).join(', ')}
                           </div>
                         )}
                       </td>
