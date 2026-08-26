@@ -36,6 +36,7 @@ interface Ligne {
   reglements: Reglement[]
   acompte_regle: boolean
   envois: number
+  masque?: boolean
 }
 
 interface Stats {
@@ -44,6 +45,8 @@ interface Stats {
   montant_en_attente: number; montant_signe: number
   acomptes_a_encaisser: number
   taux_signature: number | null; delai_moyen_h: number | null
+  masques?: number
+  periode?: string
 }
 
 const STATUTS = {
@@ -69,12 +72,14 @@ export default function SignaturesPage() {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState<string | null>(null)
   const [filtre, setFiltre] = useState<'tous' | 'attente' | 'chaud' | 'signe' | 'clos'>('tous')
+  const [voirMasques, setVoirMasques] = useState(false)
+  const [periode, setPeriode] = useState<'mois' | 'mois_dernier' | '3mois' | 'annee' | 'tout'>('mois')
 
   const charger = useCallback(async () => {
     setChargement(true)
     setErreur(null)
     try {
-      const r = await fetch('/api/signatures', { cache: 'no-store' })
+      const r = await fetch(`/api/signatures?periode=${periode}${voirMasques ? '&masques=1' : ''}`, { cache: 'no-store' })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Erreur de chargement')
       setLignes(j.lignes || [])
@@ -84,9 +89,22 @@ export default function SignaturesPage() {
     } finally {
       setChargement(false)
     }
-  }, [])
+  }, [voirMasques, periode])
 
   useEffect(() => { charger() }, [charger])
+
+  // Masquage LOCAL : range l'envoi hors de l'écran (tests, doublons).
+  // Le document reste intact chez DocuSeal — rien n'est supprimé chez eux.
+  const basculerMasque = useCallback(async (l: Ligne) => {
+    const masquer = !l.masque
+    if (masquer && !confirm(`Retirer « ${l.numero || l.titre} » du tableau ?\n\nLe document reste intact chez DocuSeal, tu pourras le réafficher.`)) return
+    await fetch('/api/signatures/masquer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission_id: l.submission_id, numero: l.numero, masque: masquer }),
+    })
+    charger()
+  }, [charger])
 
   const visibles = useMemo(() => lignes.filter((l) => {
     if (filtre === 'attente') return l.statut === 'envoye'
@@ -110,11 +128,31 @@ export default function SignaturesPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">✍️ Signatures électroniques</h1>
           <p className="text-sm text-gray-500 mt-1">Suivi des devis envoyés en signature (DocuSeal) — consultation seule</p>
+          <div className="flex gap-1.5 mt-3 flex-wrap">
+            {([
+              ['mois', 'Ce mois'],
+              ['mois_dernier', 'Mois dernier'],
+              ['3mois', '3 mois'],
+              ['annee', 'Cette année'],
+              ['tout', 'Tout'],
+            ] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setPeriode(id)}
+                className={`px-2.5 py-1 text-xs rounded-md border transition ${
+                  periode === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}>{label}</button>
+            ))}
+          </div>
         </div>
+        <div className="flex items-center">
+        <button onClick={() => setVoirMasques((v) => !v)}
+          className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 mr-2">
+          {voirMasques ? '👁 Masquer les tests' : `🗂 Voir les masqués${stats?.masques ? ` (${stats.masques})` : ''}`}
+        </button>
         <button onClick={charger} disabled={chargement}
           className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
           {chargement ? '⏳ Actualisation…' : '🔄 Actualiser'}
         </button>
+        </div>
       </div>
 
       {erreur && (
@@ -159,7 +197,10 @@ export default function SignaturesPage() {
         {chargement && lignes.length === 0 ? (
           <div className="p-12 text-center text-gray-400">Chargement…</div>
         ) : visibles.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">Aucun envoi dans cette catégorie</div>
+          <div className="p-12 text-center text-gray-400">
+            Aucun envoi sur cette période
+            {periode === 'mois' && <div className="text-xs mt-1">Essaie « Cette année » ou « Tout »</div>}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -227,6 +268,11 @@ export default function SignaturesPage() {
                           {!l.pdf_signe_url && l.statut === 'signe' && (
                             <span className="text-xs text-gray-400">archivage en attente</span>
                           )}
+                          <button onClick={() => basculerMasque(l)}
+                            title={l.masque ? 'Réafficher dans le tableau' : 'Retirer du tableau (reste intact chez DocuSeal)'}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-400">
+                            {l.masque ? '↩︎ Réafficher' : '🗂 Retirer'}
+                          </button>
                         </div>
                       </td>
                     </tr>

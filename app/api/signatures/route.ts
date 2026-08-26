@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 import { listSubmissions, extractNumero, statutDe, envoyeLe, type StatutSignature } from '@/lib/docuseal'
 
@@ -10,8 +10,13 @@ export const dynamic = 'force-dynamic'
  * ne contient que les documents déjà signés, archivés la nuit).
  * Aucune route d'écriture ici : pas d'envoi ni de suppression de demande.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
+  // ?masques=1 pour réafficher les envois masqués (tests rangés par l'utilisateur)
+  const voirMasques = request.nextUrl.searchParams.get('masques') === '1'
+  // Période affichée : par défaut le mois en cours, filtrée sur la DATE D'ENVOI.
+  const periode = request.nextUrl.searchParams.get('periode') || 'mois'
+  const depuis = debutPeriode(periode)
 
   let submissions
   try {
@@ -26,7 +31,7 @@ export async function GET() {
   )
 
   // Enrichissements (une requête par table, pas de N+1)
-  const [devisRes, sigsRes, reglRes] = await Promise.all([
+  const [devisRes, sigsRes, reglRes, masquesRes] = await Promise.all([
     numeros.length
       ? supabase.from('devis_claudus')
           .select('numero, client_nom, client_email, client_telephone, montant_ttc, acompte_pct, created_by')
@@ -42,7 +47,12 @@ export async function GET() {
           .select('numero, type, mode, montant, statut, recu_le, reference')
           .in('numero', numeros)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    supabase.from('devis_signatures').select('submission_id, masque').eq('masque', true),
   ])
+
+  const masques = new Set<number>(
+    ((masquesRes.data || []) as { submission_id: number }[]).map((m) => Number(m.submission_id)),
+  )
 
   type DevisRow = { numero: string; client_nom?: string; client_email?: string; client_telephone?: string; montant_ttc?: number; acompte_pct?: number; created_by?: string }
   type SigRow = { numero: string; pdf_signe_path?: string; certificat_path?: string }
@@ -113,15 +123,29 @@ export async function GET() {
     }),
   )
 
+  // Les envois masqués (tests rangés depuis l'écran) sortent des listes ET des
+  // statistiques — sinon un test fausserait le montant en attente.
+  const jusqua = finPeriode(periode)
+  const dansLaPeriode = (l: { sent_at: string | null }) => {
+    if (!depuis && !jusqua) return true
+    if (!l.sent_at) return false
+    const t = new Date(l.sent_at).getTime()
+    if (depuis && t < depuis.getTime()) return false
+    if (jusqua && t >= jusqua.getTime()) return false
+    return true
+  }
+  const visibles = (voirMasques ? lignes : lignes.filter((l) => !masques.has(Number(l.submission_id))))
+    .filter(dansLaPeriode)
+
   // Dédoublonnage : un même devis peut être envoyé plusieurs fois (correction,
   // relance, test). Sans ça, son montant serait compté autant de fois qu'il y a
   // eu d'envois — sur DC-00882 renvoyé 11×, le "en attente" était multiplié par 11.
   // On garde une ligne par devis : la signée en priorité, sinon la plus récente.
-  type LigneT = (typeof lignes)[number] & { envois: number }
+  type LigneT = (typeof lignes)[number] & { envois: number; masque?: boolean }
   const groupes = new Map<string, typeof lignes>()
   const isoles: LigneT[] = []
-  lignes.forEach((l) => {
-    if (!l.numero) { isoles.push({ ...l, envois: 1 }); return }
+  visibles.forEach((l) => {
+    if (!l.numero) { isoles.push({ ...l, envois: 1, masque: masques.has(Number(l.submission_id)) }); return }
     const arr = groupes.get(l.numero) || []
     arr.push(l)
     groupes.set(l.numero, arr)
@@ -132,7 +156,7 @@ export async function GET() {
       (a, b) => new Date(b.sent_at || 0).getTime() - new Date(a.sent_at || 0).getTime(),
     )
     const choisi = arr.find((x) => x.statut === 'signe') || recent[0]
-    dedup.push({ ...choisi, envois: arr.length })
+    dedup.push({ ...choisi, envois: arr.length, masque: masques.has(Number(choisi.submission_id)) })
   })
   const uniques: LigneT[] = [...dedup, ...isoles]
   uniques.sort((a, b) => new Date(b.sent_at || 0).getTime() - new Date(a.sent_at || 0).getTime())
@@ -151,7 +175,10 @@ export async function GET() {
   const traites = signes.length + parStatut('refuse').length
   return NextResponse.json({
     stats: {
-      total: lignes.length,
+      total: uniques.length,
+      masques: masques.size,
+      periode,
+      depuis: depuis ? depuis.toISOString() : null,
       envoye: parStatut('envoye').length,
       ouvert: parStatut('ouvert').length,
       signe: signes.length,
@@ -167,4 +194,31 @@ export async function GET() {
     },
     lignes: uniques,
   })
+}
+
+/** Début de la période demandée (null = pas de borne). */
+function debutPeriode(p: string): Date | null {
+  const n = new Date()
+  switch (p) {
+    case 'tout':
+      return null
+    case 'annee':
+      return new Date(n.getFullYear(), 0, 1)
+    case '12mois':
+      return new Date(n.getFullYear() - 1, n.getMonth(), n.getDate())
+    case '3mois':
+      return new Date(n.getFullYear(), n.getMonth() - 2, 1)
+    case 'mois_dernier':
+      return new Date(n.getFullYear(), n.getMonth() - 1, 1)
+    case 'mois':
+    default:
+      return new Date(n.getFullYear(), n.getMonth(), 1)
+  }
+}
+
+/** Fin de période (seul "mois_dernier" est borné à droite). */
+function finPeriode(p: string): Date | null {
+  const n = new Date()
+  if (p === 'mois_dernier') return new Date(n.getFullYear(), n.getMonth(), 1)
+  return null
 }
