@@ -12,7 +12,7 @@ async function sendEmail(to: string, clientNom: string, reference: string, devis
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
     <div style="background: #0f172a; padding: 24px;">
-      <h1 style="color: white; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">RENOV-R 91</h1>
+      <h1 style="color: white; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">RENOV-R</h1>
       <p style="color: #94a3b8; margin: 4px 0 0; font-size: 14px;">Votre devis est prêt</p>
     </div>
     <div style="padding: 28px 24px;">
@@ -29,7 +29,7 @@ async function sendEmail(to: string, clientNom: string, reference: string, devis
       </p>
     </div>
     <div style="background: #f8fafc; padding: 16px 24px; border-top: 1px solid #e2e8f0;">
-      <p style="font-size: 12px; color: #94a3b8; margin: 0; text-align: center;">RENOV-R 91 — Menuiseries</p>
+      <p style="font-size: 12px; color: #94a3b8; margin: 0; text-align: center;">RENOV-R — Menuiseries</p>
     </div>
   </div>
 </body>
@@ -42,9 +42,9 @@ async function sendEmail(to: string, clientNom: string, reference: string, devis
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'RENOV-R 91 <contact@renov-r.com>',
+      from: 'RENOV-R <contact@renov-r.com>',
       to: [to],
-      subject: `Votre devis ${reference || ''} RENOV-R 91`,
+      subject: `Votre devis ${reference || ''} RENOV-R`,
       html,
     }),
   })
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const reqUrl = new URL(request.url)
   const origin = `${reqUrl.protocol}//${reqUrl.host}`
   const devisUrl = `${origin}/d/${devis.token}`
-  const smsMessage = `Bonjour ${client.nom}, votre devis ${devis.reference || ''} est disponible. Consultez et signez-le en ligne : ${devisUrl} - RENOV-R 91`
+  const smsMessage = `Bonjour ${client.nom}, votre devis ${devis.reference || ''} est disponible. Consultez et signez-le en ligne : ${devisUrl} - RENOV-R`
 
   const results: { sms?: 'ok' | string; email?: 'ok' | string } = {}
 

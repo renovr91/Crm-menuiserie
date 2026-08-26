@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RENOV-R 91 — CRM",
+  title: "RENOV-R — CRM",
   description: "CRM Menuiserie",
 };
 
