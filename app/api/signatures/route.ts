@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     numeros.length
       ? supabase.from('factures')
-          .select('id, numero, devis_numero, type, statut, total_ttc, emise_le, facture_paiements(montant, moyen, date_paiement, reference)')
+          .select('id, numero, devis_numero, type, statut, environnement, total_ttc, emise_le, facture_paiements(montant, moyen, date_paiement, reference)')
           .in('devis_numero', numeros)
           .neq('statut', 'brouillon')
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   type PaiementRow = { montant: number; moyen: string; date_paiement: string; reference?: string | null }
   type FactureRow = {
     id: string; numero: string; devis_numero: string; type: string; statut: string
-    total_ttc: number; emise_le?: string | null; facture_paiements?: PaiementRow[]
+    total_ttc: number; environnement: string; emise_le?: string | null; facture_paiements?: PaiementRow[]
   }
 
   const devisMap = new Map<string, DevisRow>()
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
         audit_url: s.audit_log_url,
         factures: factures.map((f) => ({
           numero: f.numero, type: f.type, statut: f.statut,
-          total_ttc: f.total_ttc, emise_le: f.emise_le,
+          environnement: f.environnement, total_ttc: f.total_ttc, emise_le: f.emise_le,
         })),
         paiements,
         // Acompte attendu d'après le devis (montant TTC × pourcentage d'acompte)

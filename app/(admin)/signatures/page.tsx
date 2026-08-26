@@ -6,6 +6,7 @@ interface Facture {
   numero: string
   type: string
   statut: string
+  environnement: string
   total_ttc: number
   emise_le?: string | null
 }
@@ -256,7 +257,14 @@ export default function SignaturesPage() {
                         )}
                         {l.factures.length > 0 && (
                           <div className="text-xs text-gray-400">
-                            {l.factures.map((f) => f.numero).join(', ')}
+                            {l.factures.map((f) => (
+                              <span key={f.numero} className="mr-1.5">
+                                {f.numero}
+                                {f.environnement === 'test' && (
+                                  <span className="ml-1 px-1 rounded bg-purple-100 text-purple-700">TEST</span>
+                                )}
+                              </span>
+                            ))}
                           </div>
                         )}
                       </td>
