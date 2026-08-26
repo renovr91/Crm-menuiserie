@@ -521,12 +521,12 @@ export default function DevisClientPage() {
                   <div className="border-t" />
                   <div className="flex justify-between items-start">
                     <span className="text-sm text-gray-500">IBAN</span>
-                    <span className="font-mono text-sm font-medium text-gray-900 text-right">FR76 1695 8000 0111<br/>4467 2670 309</span>
+                    <span className="font-mono text-sm font-medium text-gray-900 text-right">FR76 3006 6103 8000<br/>0211 7200 135</span>
                   </div>
                   <div className="border-t" />
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">BIC</span>
-                    <span className="font-mono text-sm font-medium text-gray-900">QNTOFRP1XXX</span>
+                    <span className="font-mono text-sm font-medium text-gray-900">CMCIFRPP</span>
                   </div>
                   <div className="border-t" />
                   <div className="flex justify-between items-center">
