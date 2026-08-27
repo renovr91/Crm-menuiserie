@@ -23,7 +23,7 @@ import { createAdminClient } from '@/lib/supabase'
 //  hachage : elle ne se défait que par un avoir. Ce geste reste humain.
 // ============================================================================
 
-type Ligne = { designation: string; quantite: number; prix_unitaire_ht: number; tva: number }
+type Ligne = { designation: string; details?: string; quantite: number; prix_unitaire_ht: number; tva: number }
 
 const TVA_ADMISES = [0, 5.5, 10, 20]
 
@@ -83,12 +83,17 @@ export async function POST(request: Request) {
   if (Array.isArray(body.lignes) && body.lignes.length) {
     lignes = body.lignes
   } else if (devis && Array.isArray(devis.lignes)) {
-    // On ne reprend que ce qui fait une ligne de facture : le descriptif
-    // technique et le visuel appartiennent au devis, pas au document comptable.
+    // Le DESCRIPTIF COMPLET du devis est repris : les mentions obligatoires
+    // exigent la dénomination PRÉCISE des biens vendus, et « porte de garage »
+    // tout court ne l'est pas. La facture doit dire ce que le devis disait —
+    // c'est le même produit, au même prix, décrit pareil (décision 27/08/2026).
+    // Seuls les visuels restent au devis : chemins de fichiers du VPS,
+    // illisibles d'ici, et sans place sur un document comptable.
     lignes = (devis.lignes as Record<string, any>[])
       .filter((l) => Number(l.prix_unitaire_ht) > 0)
       .map((l) => ({
         designation: String(l.designation || 'Prestation'),
+        ...(l.details ? { details: String(l.details) } : {}),
         quantite: Number(l.quantite) || 1,
         prix_unitaire_ht: Number(l.prix_unitaire_ht),
         tva: Number(l.tva ?? devis?.tva_taux ?? 20),
