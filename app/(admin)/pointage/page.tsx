@@ -21,7 +21,7 @@ interface Suggestion {
   motif: string
   // Sur quoi repose la proposition. « montant seul » est le plus fragile : deux
   // chantiers au même prix se ressemblent, le nom départage, pas la somme.
-  certitude?: 'nom et montant' | 'nom du client' | 'montant seul'
+  certitude?: 'référence du virement' | 'nom et montant' | 'nom du client' | 'montant seul'
 }
 
 interface Operation {
@@ -228,18 +228,22 @@ function Ligne({
                     {s.certitude && (
                       <span
                         className={`ml-2 text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 ${
-                          s.certitude === 'nom et montant'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : s.certitude === 'nom du client'
-                              ? 'bg-amber-100 text-amber-900'
-                              : 'bg-gray-100 text-gray-600'
+                          s.certitude === 'référence du virement'
+                            ? 'bg-emerald-600 text-white'
+                            : s.certitude === 'nom et montant'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : s.certitude === 'nom du client'
+                                ? 'bg-amber-100 text-amber-900'
+                                : 'bg-gray-100 text-gray-600'
                         }`}
                         title={
-                          s.certitude === 'nom et montant'
-                            ? 'Le nom du client et le montant concordent.'
-                            : s.certitude === 'nom du client'
-                              ? 'Le nom concorde mais pas le montant : acompte ou solde partiel.'
-                              : 'Seul le montant concorde. Vérifiez le client avant de rapprocher.'
+                          s.certitude === 'référence du virement'
+                            ? 'Le client a écrit le numéro de devis dans sa référence. Rien à deviner.'
+                            : s.certitude === 'nom et montant'
+                              ? 'Le nom du client et le montant concordent.'
+                              : s.certitude === 'nom du client'
+                                ? 'Le nom concorde mais pas le montant : acompte ou solde partiel.'
+                                : 'Seul le montant concorde. Vérifiez le client avant de rapprocher.'
                         }
                       >
                         {s.certitude}
@@ -256,11 +260,8 @@ function Ligne({
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-xs text-gray-400">
-              Aucune correspondance au même montant. À rapprocher à la main, ou à écarter.
-            </p>
-          )}
+          ) : null}
+          <RechercheManuelle op={o} agir={agir} occupe={occupe} />
         </div>
       )}
 
@@ -283,6 +284,104 @@ function Ligne({
             className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-40"
           >
             Remettre à pointer
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Recherche manuelle — le filet quand rien n'est proposé.
+ *
+ * Deux cas réels, tous deux fréquents :
+ *  - le client a oublié la référence, et son nom n'apparaît pas non plus ;
+ *  - le devis vient de ProDevis et n'est pas en base.
+ *
+ * Sans ce bloc, la seule issue était « écarter » — ce qui ferait disparaître un
+ * vrai encaissement client de la comptabilité. On préfère un rattachement noté
+ * à la main qu'un mouvement effacé.
+ */
+function RechercheManuelle({
+  op, agir, occupe,
+}: {
+  op: Operation
+  agir: (c: Record<string, unknown>) => void
+  occupe: boolean
+}) {
+  const [ouvert, setOuvert] = useState(false)
+  const [q, setQ] = useState('')
+  const [res, setRes] = useState<Suggestion[]>([])
+  const [cherche, setCherche] = useState(false)
+
+  const chercher = async (valeur: string) => {
+    setQ(valeur)
+    if (valeur.trim().length < 2) { setRes([]); return }
+    setCherche(true)
+    try {
+      const r = await fetch(`/api/banque/pointage?q=${encodeURIComponent(valeur.trim())}`)
+      const d = await r.json()
+      setRes(d.resultats || [])
+    } catch { setRes([]) } finally { setCherche(false) }
+  }
+
+  if (!ouvert) {
+    return (
+      <button
+        onClick={() => setOuvert(true)}
+        className="mt-2 text-xs text-gray-500 hover:text-gray-900 underline"
+      >
+        {op.suggestions.length ? 'Chercher un autre devis' : 'Chercher le devis à rapprocher'}
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-3 rounded border border-gray-200 bg-gray-50 p-3">
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => chercher(e.target.value)}
+        placeholder="Nom du client, ou numéro de devis…"
+        className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+      />
+
+      {cherche && <p className="mt-2 text-xs text-gray-400">Recherche…</p>}
+
+      {res.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {res.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-sm text-gray-700">
+                <span className="font-medium">{s.reference}</span>
+                {s.client && <span className="text-gray-500"> · {s.client}</span>}
+                <span className="text-xs text-gray-400"> — {eur(s.montant_attendu)}</span>
+              </span>
+              <button
+                disabled={occupe}
+                onClick={() =>
+                  agir({ id: op.id, type: 'devis', cible: s.id, reference: s.reference, date: op.date_operation })
+                }
+                className="shrink-0 rounded bg-gray-900 px-3 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-40"
+              >
+                Rapprocher
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {q.trim().length >= 2 && !cherche && res.length === 0 && (
+        <div className="mt-2">
+          <p className="text-xs text-gray-500">
+            Aucun devis trouvé. S’il vient de ProDevis, notez sa référence :
+          </p>
+          <button
+            disabled={occupe}
+            onClick={() => agir({ id: op.id, type: 'libre', reference: q.trim() })}
+            className="mt-1.5 rounded border border-gray-300 bg-white px-3 py-1 text-xs text-gray-800 hover:bg-gray-100 disabled:opacity-40"
+          >
+            Rattacher à « {q.trim()} »
           </button>
         </div>
       )}

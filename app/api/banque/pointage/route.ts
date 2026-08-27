@@ -45,6 +45,16 @@ const normaliser = (s: string) =>
     .replace(/[^A-Z0-9]+/g, ' ')
     .trim()
 
+/** Le numéro de devis écrit par le client dans sa référence de virement.
+ *  C'est le signal le PLUS FORT : il ne doit rien au hasard, le client l'a
+ *  recopié depuis le devis. Depuis le 27/08/2026 le numéro figure sous l'IBAN
+ *  sur tous les documents, précisément pour rendre ce cas fréquent. */
+const REF_DEVIS = /\bDC[-\s]?0*(\d{3,6})\b/i
+const numeroDansLibelle = (libelle: string): string | null => {
+  const m = REF_DEVIS.exec(libelle || '')
+  return m ? `DC-${m[1].padStart(5, '0')}` : null
+}
+
 /** Le nom du client apparaît-il dans le libellé bancaire ? */
 const nomDansLibelle = (client: string | null, libelle: string) => {
   const c = normaliser(client || '')
@@ -58,6 +68,31 @@ const nomDansLibelle = (client: string | null, libelle: string) => {
 export async function GET(request: Request) {
   const sb = createAdminClient()
   const url = new URL(request.url)
+
+  // RECHERCHE MANUELLE — le filet de sécurité quand rien n'est proposé.
+  // Le client oublie souvent la référence, et certains devis viennent d'un autre
+  // outil (ProDevis) et n'existent pas en base. Sans ce mode, l'écran ne laissait
+  // que « écarter » : on aurait fait disparaître de vrais encaissements clients.
+  const q = (url.searchParams.get('q') || '').trim()
+  if (q) {
+    const { data } = await sb
+      .from('devis_claudus')
+      .select('id, numero, client_nom, montant_ttc, acompte_pct, created_at')
+      .or(`numero.ilike.%${q}%,client_nom.ilike.%${q}%`)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    return NextResponse.json({
+      resultats: (data || []).map((d) => ({
+        type: 'devis' as const,
+        id: d.id,
+        reference: d.numero,
+        client: d.client_nom,
+        montant_attendu: Number(d.montant_ttc) || 0,
+        emis_le: d.created_at,
+        motif: 'recherche manuelle',
+      })),
+    })
+  }
   const inclureTraitees = url.searchParams.get('tout') === '1'
 
   let req = sb
@@ -178,13 +213,27 @@ export async function GET(request: Request) {
           const libelle = String(o.libelle || '')
           const proches = candidats.filter(dansLaFenetre)
 
+          // Référence explicite : elle écrase tout le reste. Si le client a
+          // recopié « DC-00903 », il n'y a rien à deviner.
+          const refEcrite = numeroDansLibelle(libelle)
+          const parReference = refEcrite
+            ? proches.filter((c) => c.reference === refEcrite)
+            : []
+
           const parNom = proches.filter((c) => nomDansLibelle(c.client, libelle))
           const parMontant = proches.filter(
             (c) => Math.abs(c.montant_attendu - montant) <= TOLERANCE_EUR,
           )
 
           const notes = new Map<string, { c: Candidat; certitude: string }>()
+          for (const c of parReference) {
+            notes.set(`${c.type}-${c.id}-${c.montant_attendu}`, {
+              c,
+              certitude: 'référence du virement',
+            })
+          }
           for (const c of parNom) {
+            if (notes.has(`${c.type}-${c.id}-${c.montant_attendu}`)) continue
             const exact = Math.abs(c.montant_attendu - montant) <= TOLERANCE_EUR
             notes.set(`${c.type}-${c.id}-${c.montant_attendu}`, {
               c,
@@ -194,13 +243,15 @@ export async function GET(request: Request) {
           // Le montant seul n'entre QUE si aucun nom n'a repondu et qu'il est
           // sans ambiguite. Deux devis au meme montant, c'est un piege : on
           // prefere ne rien proposer plutot que de faire cliquer au hasard.
-          if (!notes.size && parMontant.length === 1) {
+          if (!notes.size && !refEcrite && parMontant.length === 1) {
             const c = parMontant[0]
             notes.set(`${c.type}-${c.id}-${c.montant_attendu}`, { c, certitude: 'montant seul' })
           }
 
           const rang = (s: string) =>
-            s === 'nom et montant' ? 0 : s === 'nom du client' ? 1 : 2
+            s === 'référence du virement' ? 0
+              : s === 'nom et montant' ? 1
+                : s === 'nom du client' ? 2 : 3
           return [...notes.values()]
             .sort((a, b) => {
               const d = rang(a.certitude) - rang(b.certitude)
@@ -281,6 +332,27 @@ export async function POST(request: Request) {
   }
 
   const type = String(corps.type || '')
+
+  // RÉFÉRENCE LIBRE : un devis produit par ProDevis n'est pas en base. On note
+  // alors le numéro tel quel. L'opération sort de la liste et le lien reste
+  // tracé — au lieu d'être « écartée », ce qui l'aurait fait disparaître de la
+  // comptabilité alors que c'est un vrai encaissement client.
+  if (type === 'libre') {
+    const ref = String(corps.reference || '').trim()
+    if (!ref) return NextResponse.json({ error: 'référence requise' }, { status: 400 })
+    const { error } = await sb
+      .from('operations_bancaires')
+      .update({
+        pointee_le: new Date().toISOString(),
+        pointee_par: 'crm:manuel',
+        devis_numero: ref.slice(0, 60),
+        note: (corps.note as string) || 'rattachement manuel',
+      })
+      .eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, etat: 'pointée', type: 'libre', reference: ref })
+  }
+
   const cible = String(corps.cible || '')
   if (!cible) return NextResponse.json({ error: 'cible requise' }, { status: 400 })
 
