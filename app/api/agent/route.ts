@@ -794,6 +794,58 @@ export async function POST(request: Request) {
       // opération déjà connue est mise à jour — son statut peut passer de
       // provisoire à définitif — mais JAMAIS son pointage, qui appartient à
       // l'humain.
+      // LECTURE des mouvements bancaires. L'agent voyait les devis et les appels,
+      // mais pas la banque : il repondait « je n'ai pas cette visibilite » alors
+      // que la donnee etait la depuis qu'on a branche le CIC. Un seul outil, qui
+      // repond aux trois questions reelles : « X a-t-il paye ? », « qu'est-ce qui
+      // est rentre cette semaine ? », « qu'est-ce qui n'est pas encore pointe ? ».
+      case 'operations_bancaires_lire': {
+        const jours = Math.min(Math.max(Number(p.jours) || 15, 1), 180)
+        const sens = String(p.sens || 'tous')
+        const depuis = new Date(Date.now() - jours * 86400000).toISOString().slice(0, 10)
+
+        let q = supabase
+          .from('operations_bancaires')
+          .select('date_operation, libelle, montant, definitive, pointee_le, devis_numero, source')
+          .gte('date_operation', depuis)
+          .order('date_operation', { ascending: false })
+          .limit(120)
+
+        if (sens === 'credit') q = q.gt('montant', 0)
+        else if (sens === 'debit') q = q.lt('montant', 0)
+        if (p.non_pointees) q = q.is('pointee_le', null)
+
+        // Recherche par MONTANT : la question « untel a-t-il paye ? » se resout
+        // par le montant, jamais par le libelle — les libelles CIC sont le plus
+        // souvent « LIBELLE NON RENSEIGNE ». Tolerance d'un centime.
+        const montant = Number(p.montant)
+        if (Number.isFinite(montant) && montant !== 0) {
+          q = q.gte('montant', Math.abs(montant) - 0.01).lte('montant', Math.abs(montant) + 0.01)
+        }
+
+        const { data, error } = await q
+        if (error) {
+          return NextResponse.json({ error: `Lecture refusee : ${error.message}` }, { status: 500 })
+        }
+
+        // La fraicheur compte autant que les lignes : la synchro passe a 7h, 13h
+        // et 19h. Un virement recu apres le dernier passage n'est PAS absent, il
+        // n'est pas encore vu. Sans cette date, l'agent conclurait a tort.
+        const { data: derniere } = await supabase
+          .from('operations_bancaires')
+          .select('vue_le')
+          .order('vue_le', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        return NextResponse.json({
+          operations: data || [],
+          nombre: (data || []).length,
+          derniere_synchro: derniere?.vue_le || null,
+          note: 'Synchro a 7h, 13h et 19h. Une operation posterieure au dernier passage n\'est pas encore visible : ne conclus pas a un non-paiement.',
+        })
+      }
+
       case 'operations_bancaires': {
         const source = String(p.source || '').trim()
         const lignes = Array.isArray(p.operations) ? p.operations : []
