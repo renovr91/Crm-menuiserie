@@ -19,6 +19,9 @@ interface Suggestion {
   montant_attendu: number
   emis_le: string | null
   motif: string
+  // Sur quoi repose la proposition. « montant seul » est le plus fragile : deux
+  // chantiers au même prix se ressemblent, le nom départage, pas la somme.
+  certitude?: 'nom et montant' | 'nom du client' | 'montant seul'
 }
 
 interface Operation {
@@ -222,6 +225,26 @@ function Ligne({
                     <span className="font-medium">{s.reference}</span>
                     {s.client && <span className="text-gray-500"> · {s.client}</span>}
                     <span className="text-gray-400 text-xs"> — {s.motif}, {eur(s.montant_attendu)}</span>
+                    {s.certitude && (
+                      <span
+                        className={`ml-2 text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 ${
+                          s.certitude === 'nom et montant'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : s.certitude === 'nom du client'
+                              ? 'bg-amber-100 text-amber-900'
+                              : 'bg-gray-100 text-gray-600'
+                        }`}
+                        title={
+                          s.certitude === 'nom et montant'
+                            ? 'Le nom du client et le montant concordent.'
+                            : s.certitude === 'nom du client'
+                              ? 'Le nom concorde mais pas le montant : acompte ou solde partiel.'
+                              : 'Seul le montant concorde. Vérifiez le client avant de rapprocher.'
+                        }
+                      >
+                        {s.certitude}
+                      </span>
+                    )}
                   </div>
                   <button
                     disabled={occupe}
