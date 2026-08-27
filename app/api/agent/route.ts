@@ -799,6 +799,33 @@ export async function POST(request: Request) {
       // que la donnee etait la depuis qu'on a branche le CIC. Un seul outil, qui
       // repond aux trois questions reelles : « X a-t-il paye ? », « qu'est-ce qui
       // est rentre cette semaine ? », « qu'est-ce qui n'est pas encore pointe ? ».
+      // Création d'un BROUILLON de facture par l'agent. Il ne peut pas émettre :
+      // aucune action ne l'expose, et c'est délibéré — l'émission consomme un
+      // numéro de la séquence et verrouille la chaîne de hachage.
+      case 'facture_brouillon': {
+        const r = await fetch(new URL('/api/factures/creer', request.url).toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            environnement: p.environnement === 'prod' ? 'prod' : 'test',
+            type: p.type_facture || 'facture',
+            devis_numero: p.devis_numero || '',
+            reference_externe: p.reference_externe || '',
+            acompte_pct: Number(p.acompte_pct) || 0,
+            lignes: Array.isArray(p.lignes) ? p.lignes : [],
+            categorie_operation: p.categorie_operation || undefined,
+            conditions_reglement: p.conditions_reglement || undefined,
+            client: {
+              nom: p.client_nom, adresse: p.client_adresse,
+              cp: p.client_cp, ville: p.client_ville,
+            },
+            acteur: 'hermes',
+          }),
+        })
+        const d = await r.json()
+        return NextResponse.json(d, { status: r.status })
+      }
+
       case 'operations_bancaires_lire': {
         const jours = Math.min(Math.max(Number(p.jours) || 15, 1), 180)
         const sens = String(p.sens || 'tous')
