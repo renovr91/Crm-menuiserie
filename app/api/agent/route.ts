@@ -852,6 +852,120 @@ export async function POST(request: Request) {
       // Telegram → « vas-y » → émission). Le moteur revalide tout et refuse
       // proprement si quoi que ce soit manque ; un numéro n'est consommé qu'en
       // cas de succès.
+      // ============ DOSSIERS CLIENTS (exécution des commandes) ============
+      // Le registre : signé → à commander → commandé → livré. Créé par la
+      // signature, avancé par le pointage bancaire ou par l'agent.
+
+      case 'commandes_lister': {
+        const stage = String(p.stage || '')
+        let q = supabase
+          .from('commandes')
+          .select('devis_numero, designation, montant_ttc, stage, paye_le, paye_via, fournisseur, date_commande, date_reception_prevue, confirmation_pj, date_livraison_reelle, notes, updated_at, clients(nom, telephone)')
+          .order('updated_at', { ascending: false })
+          .limit(60)
+        if (stage) q = q.eq('stage', stage)
+        else q = q.neq('stage', 'livree')
+        const { data, error } = await q
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ dossiers: data || [], nombre: (data || []).length })
+      }
+
+      case 'commande_avancer': {
+        const ref = String(p.devis_numero || '').trim()
+        const etape = String(p.etape || '')
+        if (!ref) return NextResponse.json({ error: 'devis_numero requis' }, { status: 400 })
+
+        const { data: dossier } = await supabase
+          .from('commandes').select('id, stage').eq('devis_numero', ref).maybeSingle()
+        if (!dossier) {
+          return NextResponse.json(
+            { error: `Aucun dossier pour ${ref}. Il se crée à la signature — devis signé ?` },
+            { status: 404 },
+          )
+        }
+
+        const maj: Record<string, unknown> = { updated_at: new Date().toISOString() }
+        if (etape === 'payee') {
+          const via = String(p.moyen || '')
+          if (!['cheque', 'especes', 'cb', 'virement'].includes(via)) {
+            return NextResponse.json({ error: 'moyen requis : cheque | especes | cb | virement' }, { status: 400 })
+          }
+          maj.stage = 'a_commander'
+          maj.paye_le = String(p.date || new Date().toISOString().slice(0, 10))
+          maj.paye_via = via
+        } else if (etape === 'commandee') {
+          if (dossier.stage === 'signe') {
+            // Commander une marchandise pas payée est PARFOIS voulu (client de
+            // confiance) mais jamais par accident : on refuse, l'agent doit le
+            // dire à l'utilisateur qui marquera le paiement d'abord.
+            return NextResponse.json(
+              { error: `${ref} n'est pas marqué payé. Marque le règlement d'abord (etape=payee).` },
+              { status: 409 },
+            )
+          }
+          maj.stage = 'commandee'
+          maj.date_commande = String(p.date || new Date().toISOString().slice(0, 10))
+          if (p.fournisseur) maj.fournisseur = String(p.fournisseur).slice(0, 80)
+          if (p.date_reception_prevue) maj.date_reception_prevue = String(p.date_reception_prevue)
+          if (p.confirmation_pj) maj.confirmation_pj = String(p.confirmation_pj)
+          if (p.reference_commande) maj.reference_commande = String(p.reference_commande).slice(0, 80)
+        } else if (etape === 'livree') {
+          maj.stage = 'livree'
+          maj.status = 'termine'
+          maj.date_livraison_reelle = String(p.date || new Date().toISOString().slice(0, 10))
+        } else if (etape === 'reception_prevue') {
+          if (!p.date_reception_prevue) return NextResponse.json({ error: 'date_reception_prevue requise' }, { status: 400 })
+          maj.date_reception_prevue = String(p.date_reception_prevue)
+        } else if (etape === 'piece') {
+          if (!p.confirmation_pj) return NextResponse.json({ error: 'confirmation_pj requise' }, { status: 400 })
+          maj.confirmation_pj = String(p.confirmation_pj)
+        } else {
+          return NextResponse.json({ error: 'etape : payee | commandee | reception_prevue | piece | livree' }, { status: 400 })
+        }
+        const { error } = await supabase.from('commandes').update(maj).eq('id', dossier.id)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ ok: true, devis_numero: ref, ...maj })
+      }
+
+      // URL signée pour ranger une PIÈCE au dossier (confirmation de commande,
+      // métré…). Même bucket que les devis, sous dossiers/DC-xxxxx/.
+      case 'dossier_upload_url': {
+        const ref = String(p.devis_numero || '').trim()
+        const nom = String(p.nom_fichier || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80)
+        if (!ref || !nom) return NextResponse.json({ error: 'devis_numero et nom_fichier requis' }, { status: 400 })
+        const chemin = `dossiers/${ref}/${nom}`
+        const { data, error } = await supabase.storage
+          .from('devis-claudus-pdfs')
+          .createSignedUploadUrl(chemin, { upsert: true })
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ signed_url: data.signedUrl, chemin })
+      }
+
+      // LE DOSSIER COMPLET d'un client — l'équivalent du classeur physique :
+      // tout ce qui se rattache à un numéro de devis, en une réponse.
+      case 'dossier_client': {
+        const ref = String(p.devis_numero || '').trim()
+        if (!ref) return NextResponse.json({ error: 'devis_numero requis' }, { status: 400 })
+        const [devis, commande, signature, factures, reglements, pieces] = await Promise.all([
+          supabase.from('devis_claudus')
+            .select('numero, client_nom, client_telephone, client_ville, reference, montant_ttc, created_at, pdf_filename')
+            .eq('numero', ref).maybeSingle(),
+          supabase.from('commandes').select('*').eq('devis_numero', ref).maybeSingle(),
+          supabase.from('devis_signatures').select('statut, signed_at').eq('numero', ref).maybeSingle(),
+          supabase.from('factures').select('numero, type, statut, total_ttc, emise_le, pdf_path').eq('devis_numero', ref),
+          supabase.from('operations_bancaires').select('date_operation, montant, source, libelle').eq('devis_numero', ref),
+          supabase.storage.from('devis-claudus-pdfs').list(`dossiers/${ref}`, { limit: 30 }),
+        ])
+        return NextResponse.json({
+          devis: devis.data,
+          dossier: commande.data,
+          signature: signature.data,
+          factures: factures.data || [],
+          reglements_pointes: reglements.data || [],
+          pieces_jointes: (pieces.data || []).map((f) => `dossiers/${ref}/${f.name}`),
+        })
+      }
+
       case 'facture_emettre': {
         const fid = String(p.facture_id || '')
         if (!fid) return NextResponse.json({ error: 'facture_id requis' }, { status: 400 })

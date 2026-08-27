@@ -97,5 +97,70 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // ============================================================
+  // OUVERTURE DU DOSSIER CLIENT — la signature est le coup d'envoi.
+  // Deux effets, ni l'un ni l'autre ne doit dépendre d'une saisie :
+  //  1. le CLIENT entre dans la base (s'il n'y est pas déjà) ;
+  //  2. un DOSSIER s'ouvre en « signé, attente règlement » — c'est lui
+  //     que le brief du matin surveillera jusqu'à la livraison.
+  // Best-effort : un échec ici ne doit pas faire rejouer le webhook
+  // (DocuSeal renverrait l'événement et dupliquerait la notification).
+  // ============================================================
+  if (numero) {
+    try {
+      const { data: devisComplet } = await supabase
+        .from('devis_claudus')
+        .select('client_nom, client_telephone, client_email, client_ville, reference, montant_ttc')
+        .eq('numero', numero)
+        .maybeSingle()
+
+      let clientId: string | null = null
+      if (devisComplet?.client_nom) {
+        // Retrouver le client par téléphone d'abord (le plus discriminant),
+        // sinon par nom exact ; créer à défaut.
+        const tel = (devisComplet.client_telephone || '').replace(/\s/g, '')
+        let existant = null
+        if (tel) {
+          const { data } = await supabase.from('clients').select('id').eq('telephone', tel).maybeSingle()
+          existant = data
+        }
+        if (!existant) {
+          const { data } = await supabase.from('clients').select('id').eq('nom', devisComplet.client_nom).maybeSingle()
+          existant = data
+        }
+        if (existant) clientId = existant.id
+        else {
+          const { data: cree } = await supabase
+            .from('clients')
+            .insert({
+              nom: devisComplet.client_nom,
+              telephone: tel || null,
+              email: devisComplet.client_email || null,
+              ville: devisComplet.client_ville || null,
+              source: 'signature devis',
+            })
+            .select('id')
+            .maybeSingle()
+          clientId = cree?.id || null
+        }
+      }
+
+      await supabase.from('commandes').upsert(
+        {
+          devis_numero: numero,
+          client_id: clientId,
+          designation: devisComplet?.reference || `Devis ${numero}`,
+          montant_ttc: devisComplet?.montant_ttc != null ? Number(devisComplet.montant_ttc) : montant,
+          stage: 'signe',
+          status: 'en_cours',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'devis_numero', ignoreDuplicates: true },
+      )
+    } catch (e) {
+      console.error('[docuseal webhook] ouverture dossier', numero, e)
+    }
+  }
+
   return NextResponse.json({ ok: true, numero, telegram: envoye })
 }

@@ -382,5 +382,26 @@ export async function POST(request: Request) {
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Le DOSSIER CLIENT avance tout seul : un virement rapproché d'un devis fait
+  // passer sa commande en « à commander » — c'est le déclencheur du rappel
+  // quotidien « commande la marchandise ». Chèque, espèces et CB, eux, passent
+  // par l'agent (« il m'a réglé par chèque ») : la banque ne les voit pas assez
+  // vite ou pas du tout.
+  if (type === 'devis') {
+    const ref = String(corps.reference || '')
+    if (ref) {
+      await sb
+        .from('commandes')
+        .update({
+          stage: 'a_commander',
+          paye_le: String(corps.date || new Date().toISOString().slice(0, 10)),
+          paye_via: 'virement',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('devis_numero', ref)
+        .eq('stage', 'signe')
+    }
+  }
+
   return NextResponse.json({ ok: true, etat: 'pointée', type })
 }
