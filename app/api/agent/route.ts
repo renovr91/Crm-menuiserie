@@ -838,11 +838,32 @@ export async function POST(request: Request) {
           .limit(1)
           .maybeSingle()
 
+        // La FRAÎCHEUR PAR BANQUE, plutôt qu'une phrase figée dans l'outil.
+        // L'entreprise a deux comptes (CIC et Qonto) ; si l'un des deux ne
+        // remonte plus, une absence de mouvement n'y prouve rien. L'agent doit
+        // pouvoir le constater dans la donnée au lieu de le supposer.
+        const { data: toutes } = await supabase
+          .from('operations_bancaires')
+          .select('source, vue_le')
+          .order('vue_le', { ascending: false })
+          .limit(500)
+        const parBanque: Record<string, string> = {}
+        for (const o of toutes || []) {
+          if (o.source && !parBanque[o.source]) parBanque[o.source] = o.vue_le
+        }
+
         return NextResponse.json({
           operations: data || [],
           nombre: (data || []).length,
           derniere_synchro: derniere?.vue_le || null,
-          note: 'Synchro a 7h, 13h et 19h. Une operation posterieure au dernier passage n\'est pas encore visible : ne conclus pas a un non-paiement.',
+          derniere_synchro_par_banque: parBanque,
+          note:
+            'CIC synchronisé à 7h, 13h et 19h ; Qonto une fois par jour. ' +
+            'Une opération postérieure au dernier passage de SA banque n\'est pas ' +
+            'encore visible. Et si une banque est absente de ' +
+            'derniere_synchro_par_banque, elle ne remonte pas du tout : une ' +
+            'absence n\'y prouve alors rien. Ne conclus jamais à un non-paiement ' +
+            'sans avoir regardé ces dates.',
         })
       }
 
