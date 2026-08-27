@@ -847,6 +847,40 @@ export async function POST(request: Request) {
         return NextResponse.json(corps, { status })
       }
 
+      // ÉMISSION d'une facture par l'agent — autorisée le 27/08/2026 sur décision
+      // de l'utilisateur (flux « secrétaire » : brouillon → il vérifie sur
+      // Telegram → « vas-y » → émission). Le moteur revalide tout et refuse
+      // proprement si quoi que ce soit manque ; un numéro n'est consommé qu'en
+      // cas de succès.
+      case 'facture_emettre': {
+        const fid = String(p.facture_id || '')
+        if (!fid) return NextResponse.json({ error: 'facture_id requis' }, { status: 400 })
+        const { data: numero, error } = await supabase.rpc('facture_emettre', {
+          p_id: fid,
+          p_acteur: 'hermes (ordre utilisateur Telegram)',
+        })
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        return NextResponse.json({ ok: true, numero })
+      }
+
+      // Suppression d'un BROUILLON — le « annule » du flux secrétaire. Le WHERE
+      // sur le statut rend l'action inoffensive sur une facture émise.
+      case 'facture_brouillon_supprimer': {
+        const fid = String(p.facture_id || '')
+        if (!fid) return NextResponse.json({ error: 'facture_id requis' }, { status: 400 })
+        const { data, error } = await supabase
+          .from('factures')
+          .delete()
+          .eq('id', fid)
+          .eq('statut', 'brouillon')
+          .select('id')
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        if (!data?.length) {
+          return NextResponse.json({ error: 'Introuvable, ou déjà émise (une émise ne se supprime pas — avoir)' }, { status: 404 })
+        }
+        return NextResponse.json({ ok: true, etat: 'brouillon supprimé' })
+      }
+
       case 'operations_bancaires_lire': {
         const jours = Math.min(Math.max(Number(p.jours) || 15, 1), 180)
         const sens = String(p.sens || 'tous')
