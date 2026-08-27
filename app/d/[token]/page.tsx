@@ -529,6 +529,13 @@ export default function DevisClientPage() {
                     <span className="font-mono text-sm font-medium text-gray-900">CMCIFRPP</span>
                   </div>
                   <div className="border-t" />
+                  {/* La référence du virement : sans elle, le libellé bancaire est
+                      « LIBELLÉ NON RENSEIGNÉ » et le rapprochement devient manuel. */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Référence à indiquer</span>
+                    <span className="font-mono text-sm font-semibold text-gray-900">{devis.reference}</span>
+                  </div>
+                  <div className="border-t" />
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Montant</span>
                     <span className="font-bold text-lg text-gray-900">
