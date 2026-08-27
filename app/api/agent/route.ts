@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { timingSafeEqual, createHash } from 'crypto'
 import { createAdminClient } from '@/lib/supabase'
+import { creerBrouillonFacture } from '@/lib/factures-creer'
 import { logActivity } from '@/lib/activity-log'
 
 export const dynamic = 'force-dynamic'
@@ -820,28 +821,30 @@ export async function POST(request: Request) {
       // Création d'un BROUILLON de facture par l'agent. Il ne peut pas émettre :
       // aucune action ne l'expose, et c'est délibéré — l'émission consomme un
       // numéro de la séquence et verrouille la chaîne de hachage.
+      // Création d'un BROUILLON de facture par l'agent. Il ne peut pas émettre :
+      // aucune action ne l'expose, et c'est délibéré — l'émission consomme un
+      // numéro de la séquence et verrouille la chaîne de hachage.
+      // ⚠️ Appel DIRECT de la logique partagée, pas de fetch interne : la
+      // première version passait par HTTP et se faisait bloquer par le
+      // middleware (« Erreur lors de la consultation », vécu par l'agent le
+      // 27/08/2026, deux tentatives perdues).
       case 'facture_brouillon': {
-        const r = await fetch(new URL('/api/factures/creer', request.url).toString(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            environnement: p.environnement === 'prod' ? 'prod' : 'test',
-            type: p.type_facture || 'facture',
-            devis_numero: p.devis_numero || '',
-            reference_externe: p.reference_externe || '',
-            acompte_pct: Number(p.acompte_pct) || 0,
-            lignes: Array.isArray(p.lignes) ? p.lignes : [],
-            categorie_operation: p.categorie_operation || undefined,
-            conditions_reglement: p.conditions_reglement || undefined,
-            client: {
-              nom: p.client_nom, adresse: p.client_adresse,
-              cp: p.client_cp, ville: p.client_ville,
-            },
-            acteur: 'hermes',
-          }),
+        const { status, corps } = await creerBrouillonFacture(supabase, {
+          environnement: p.environnement === 'prod' ? 'prod' : 'test',
+          type: p.type_facture || 'facture',
+          devis_numero: p.devis_numero || '',
+          reference_externe: p.reference_externe || '',
+          acompte_pct: Number(p.acompte_pct) || 0,
+          lignes: Array.isArray(p.lignes) ? p.lignes : [],
+          categorie_operation: p.categorie_operation || undefined,
+          conditions_reglement: p.conditions_reglement || undefined,
+          client: {
+            nom: p.client_nom, adresse: p.client_adresse,
+            cp: p.client_cp, ville: p.client_ville,
+          },
+          acteur: 'hermes',
         })
-        const d = await r.json()
-        return NextResponse.json(d, { status: r.status })
+        return NextResponse.json(corps, { status })
       }
 
       case 'operations_bancaires_lire': {
