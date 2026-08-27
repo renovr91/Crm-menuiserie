@@ -15,7 +15,10 @@ const NAV_ITEMS = [
   { href: '/pointage', label: 'Pointage', icon: '🏷️' },
   { href: '/taches', label: 'Tâches', icon: '✅' },
   { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
-  { href: '/livraisons', label: 'Livraisons', icon: '📦' },
+  // « Livraisons » est devenu « Commandes » : le registre des dossiers
+  // clients (signé → payé → commandé → livré). L'ancienne page reste sur
+  // /livraisons, hors menu.
+  { href: '/commandes', label: 'Commandes', icon: '📦' },
   { href: '/planning', label: 'Planning', icon: '📅' },
   { href: '/sav', label: 'SAV', icon: '🔧' },
   { href: '/equipe', label: 'Équipe', icon: '👔' },
