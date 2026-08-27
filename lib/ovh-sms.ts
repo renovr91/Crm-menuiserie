@@ -54,7 +54,9 @@ export async function sendSMS(phone: string, message: string) {
   return ovhRequest('POST', `/sms/${SERVICE}/jobs`, {
     message,
     receivers: [formatPhone(phone)],
-    sender: process.env.OVH_SMS_SENDER || '+33179725225',
+    // Un numéro FIXE ne peut pas être expéditeur de SMS : sans OVH_SMS_SENDER
+    // (mobile validé chez OVH), on laisse OVH fournir un numéro permettant la réponse.
+    ...(process.env.OVH_SMS_SENDER ? { sender: process.env.OVH_SMS_SENDER } : { senderForResponse: true }),
     noStopClause: true,
     priority: 'high',
   })
