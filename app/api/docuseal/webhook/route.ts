@@ -152,7 +152,9 @@ export async function POST(request: NextRequest) {
           designation: devisComplet?.reference || `Devis ${numero}`,
           montant_ttc: devisComplet?.montant_ttc != null ? Number(devisComplet.montant_ttc) : montant,
           stage: 'signe',
-          status: 'en_cours',
+          // `status` est la colonne HISTORIQUE (check en_attente/commandee/…)
+          // encore lue par l'ancienne page : on la maintient en miroir du stage.
+          status: 'en_attente',
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'devis_numero', ignoreDuplicates: true },

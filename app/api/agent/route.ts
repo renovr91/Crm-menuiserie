@@ -904,6 +904,7 @@ export async function POST(request: Request) {
             )
           }
           maj.stage = 'commandee'
+          maj.status = 'commandee'   // miroir colonne historique
           maj.date_commande = String(p.date || new Date().toISOString().slice(0, 10))
           if (p.fournisseur) maj.fournisseur = String(p.fournisseur).slice(0, 80)
           if (p.date_reception_prevue) maj.date_reception_prevue = String(p.date_reception_prevue)
@@ -911,7 +912,7 @@ export async function POST(request: Request) {
           if (p.reference_commande) maj.reference_commande = String(p.reference_commande).slice(0, 80)
         } else if (etape === 'livree') {
           maj.stage = 'livree'
-          maj.status = 'termine'
+          maj.status = 'livree'   // valeur admise par le check historique
           maj.date_livraison_reelle = String(p.date || new Date().toISOString().slice(0, 10))
         } else if (etape === 'reception_prevue') {
           if (!p.date_reception_prevue) return NextResponse.json({ error: 'date_reception_prevue requise' }, { status: 400 })
