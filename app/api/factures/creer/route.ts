@@ -94,6 +94,13 @@ export async function POST(request: Request) {
       .map((l) => ({
         designation: String(l.designation || 'Prestation'),
         ...(l.details ? { details: String(l.details) } : {}),
+        // Le VISUEL n'est repris que s'il a été archivé par devis dans le
+        // bucket (chemin « visuels/DC-xxxxx/i.png »). Un chemin local du VPS
+        // est ignoré : ces fichiers s'écrasent entre devis, et une facture
+        // montrerait la configuration d'un autre client.
+        ...(typeof l.image === 'string' && l.image.startsWith('visuels/')
+          ? { image: l.image, image_cote: true, image_raw: true }
+          : {}),
         quantite: Number(l.quantite) || 1,
         prix_unitaire_ht: Number(l.prix_unitaire_ht),
         tva: Number(l.tva ?? devis?.tva_taux ?? 20),

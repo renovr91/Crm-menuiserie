@@ -608,6 +608,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ numero: data })
       }
 
+      // URL d'upload signée pour un VISUEL de ligne de devis. Les PNG du VPS
+      // s'appellent « visuel_vr_0_1200x1400.png » — SANS numéro de devis : deux
+      // clients aux mêmes cotes s'écrasent mutuellement. Archivés ICI, par
+      // devis, ils deviennent stables — et réutilisables sur la facture.
+      case 'visuel_devis_upload_url': {
+        const numero = String(p.numero || '').trim()
+        const index = Number(p.index)
+        if (!numero || !Number.isInteger(index) || index < 0 || index > 40) {
+          return NextResponse.json({ error: 'numero et index requis' }, { status: 400 })
+        }
+        const chemin = `visuels/${numero}/${index}.png`
+        const { data, error } = await supabase.storage
+          .from('devis-claudus-pdfs')
+          .createSignedUploadUrl(chemin, { upsert: true })
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ signed_url: data.signedUrl, chemin })
+      }
+
       case 'devis_claudus_upload_url': {
         // URL d'upload signée : le VPS pousse le PDF directement (les octets ne
         // transitent pas par cette fonction, pas de limite de taille de body).
@@ -968,7 +986,7 @@ export async function POST(request: Request) {
               'recent_leads', 'lead_conversation', 'taches', 'stats',
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
               'update_lead_statut', 'upsert_contact', 'create_task',
-              'next_devis_claudus_number', 'devis_claudus_upload_url', 'create_devis_claudus',
+              'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
             ],
           },
           { status: 400 }
