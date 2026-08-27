@@ -158,6 +158,81 @@ function ModalPaiement({ facture, onFerme, onOk }: {
   )
 }
 
+// ---------- brouillons en attente d'émission ----------
+// L'agent (ou une route) prépare des brouillons ; ils n'apparaissaient NULLE
+// PART — la liste des factures les exclut à raison, mais le bouton d'émission
+// n'existait pas. Résultat vécu le 27/08 : un brouillon prêt, et personne ne
+// pouvait appuyer. L'émission est LE geste humain de la chaîne, il lui faut
+// un bouton.
+type BrouillonRow = {
+  id: string; type: string; client_nom: string; devis_numero: string | null
+  nb_lignes: number; total_ht: number; total_ttc: number
+  cree_par: string | null; cree_le: string
+}
+
+function BlocBrouillons({ onEmis }: { onEmis: () => void }) {
+  const [rows, setRows] = useState<BrouillonRow[]>([])
+  const [occupe, setOccupe] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const charger = useCallback(() => {
+    fetch('/api/compta/factures/brouillons' + envQS('?'))
+      .then((r) => r.json())
+      .then((d) => setRows(Array.isArray(d) ? d : []))
+      .catch(console.error)
+  }, [])
+  useEffect(charger, [charger])
+
+  const agir = async (id: string, action: 'emettre' | 'supprimer') => {
+    if (action === 'emettre' && !window.confirm(
+      'Émettre cette facture ?\n\nUn numéro définitif sera attribué et la chaîne comptable verrouillée. Cette action ne se défait que par un avoir.')) return
+    if (action === 'supprimer' && !window.confirm('Supprimer ce brouillon ? (aucune trace, aucun numéro consommé)')) return
+    setOccupe(id); setMessage(null)
+    try {
+      const r = await fetch('/api/compta/factures/brouillons' + envQS('?'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action, acteur: 'CRM' }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setMessage(`Refusé : ${d.error}`); return }
+      setMessage(action === 'emettre' ? `Facture émise : ${d.numero}` : 'Brouillon supprimé.')
+      charger(); onEmis()
+    } catch { setMessage('Erreur réseau') } finally { setOccupe(null) }
+  }
+
+  if (!rows.length && !message) return null
+  return (
+    <div className="mb-5 rounded-lg border p-4" style={{ borderColor: 'var(--border-default)', background: 'var(--surface-2)' }}>
+      <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+        Brouillons en attente d&apos;émission {rows.length ? `(${rows.length})` : ''}
+      </h3>
+      {message && <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>{message}</p>}
+      {rows.map((b) => (
+        <div key={b.id} className="flex flex-wrap items-center gap-3 py-2 border-t text-sm"
+             style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)' }}>
+          <span className="font-medium">{b.client_nom || '(sans nom)'}</span>
+          {b.devis_numero && <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{b.devis_numero}</span>}
+          <span>{eur(b.total_ttc)} TTC</span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {b.nb_lignes} ligne{b.nb_lignes > 1 ? 's' : ''} · préparé par {b.cree_par || '?'} le {dateFr(b.cree_le)}
+          </span>
+          <span className="ml-auto flex gap-2">
+            <button onClick={() => agir(b.id, 'emettre')} disabled={occupe === b.id}
+                    className="px-3 py-1 rounded text-xs font-semibold text-white bg-green-700 hover:bg-green-800 disabled:opacity-50">
+              {occupe === b.id ? '…' : 'Émettre'}
+            </button>
+            <button onClick={() => agir(b.id, 'supprimer')} disabled={occupe === b.id}
+                    className="px-3 py-1 rounded text-xs border hover:bg-red-50"
+                    style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+              Supprimer
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ---------- onglets ----------
 function OngletFactures() {
   const [rows, setRows] = useState<FactureRow[]>([])
@@ -197,6 +272,7 @@ function OngletFactures() {
 
   return (
     <div>
+      <BlocBrouillons onEmis={charger} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <Carte label="Factures" valeur={String(stats.nb)} />
         <Carte label="Total TTC (avoirs déduits)" valeur={eur(stats.ttc)} />
