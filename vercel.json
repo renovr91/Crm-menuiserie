@@ -7,6 +7,10 @@
     {
       "path": "/api/taches/rappels",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/appels/purge",
+      "schedule": "0 4 1 * *"
     }
   ]
 }
