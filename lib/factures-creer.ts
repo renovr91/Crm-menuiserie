@@ -94,21 +94,54 @@ export async function creerBrouillonFacture(
       }))
   }
 
-  // Un acompte se facture en UNE ligne, pas en reprenant le détail : c'est une
-  // avance sur l'ensemble, pas la vente d'un article précis.
+  // UN ACOMPTE NE SE FACTURE QU'UNE FOIS, mais il doit DIRE SUR QUOI il porte.
+  // Première version (28/08) : une ligne sèche « Acompte 50 % sur devis
+  // DC-00925 », et rien d'autre — ni le descriptif des travaux, ni le montant
+  // de la commande. Le client lisait « TOTAL TTC 601,50 € » et pouvait croire
+  // que la porte coûtait ça. On garde donc UNE SEULE ligne facturée (c'est bien
+  // une avance, pas la vente d'articles), mais elle porte le descriptif complet,
+  // et le récapitulatif de commande est figé dans `mentions`.
   const pct = Number(body.acompte_pct ?? 0)
+  let mentions: Record<string, unknown> | null = null
   if (type === 'acompte') {
     if (!(pct > 0 && pct < 100)) {
       return reponse({ error: 'Un acompte demande un pourcentage entre 1 et 99' }, 400)
     }
     const baseHt = lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht, 0)
+    const baseTtc = lignes.reduce(
+      (s, l) => s + l.quantite * l.prix_unitaire_ht * (1 + Number(l.tva) / 100), 0)
     const tva = Number(body.tva ?? devis?.tva_taux ?? lignes[0]?.tva ?? 20)
     const montant = Math.round((baseHt * pct) / 100 * 100) / 100
     if (!(montant > 0)) {
       return reponse({ error: 'Montant HT introuvable pour calculer l’acompte' }, 400)
     }
+
+    // Le descriptif de la commande passe SOUS la ligne d'acompte : la
+    // désignation seule est trop vague pour l'art. 242 nonies A, et c'est la
+    // règle que l'entreprise s'est donnée pour toutes ses factures.
+    const descriptif = lignes
+      .map((l) => {
+        const q = l.quantite > 1 ? ` (× ${l.quantite})` : ''
+        return `— ${l.designation}${q}${l.details ? `\n${l.details}` : ''}`
+      })
+      .join('\n')
+
+    const arrondi = (n: number) => Math.round(n * 100) / 100
+    const acompteTtc = arrondi(montant * (1 + tva / 100))
+    mentions = {
+      acompte: {
+        pct,
+        devis: devisNumero || null,
+        commande_ht: arrondi(baseHt),
+        commande_ttc: arrondi(baseTtc),
+        facture_ttc: acompteTtc,
+        reste_ttc: arrondi(baseTtc - acompteTtc),
+      },
+    }
+
     lignes = [{
       designation: `Acompte ${pct} %${devisNumero ? ` sur devis ${devisNumero}` : ''}`,
+      details: descriptif,
       quantite: 1,
       prix_unitaire_ht: montant,
       tva,
@@ -141,6 +174,7 @@ export async function creerBrouillonFacture(
     date_echeance: String(body.date_echeance || aujourdhui),
     conditions_reglement:
       body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
+    ...(mentions ? { mentions } : {}),
   }
 
   const { data: id, error } = await supabase.rpc('facture_creer_brouillon', {
