@@ -117,44 +117,30 @@ export async function creerBrouillonFacture(
     if (!(pct > 0 && pct < 100)) {
       return reponse({ error: 'Un acompte demande un pourcentage entre 1 et 99' }, 400)
     }
+    const arr = (n: number) => Math.round(n * 100) / 100
     const baseHt = lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht, 0)
     const baseTtc = lignes.reduce(
       (s, l) => s + l.quantite * l.prix_unitaire_ht * (1 + Number(l.tva) / 100), 0)
-    const tva = Number(body.tva ?? devis?.tva_taux ?? lignes[0]?.tva ?? 20)
-    const montant = Math.round((baseHt * pct) / 100 * 100) / 100
+
+    // UN ACOMPTE SE VENTILE PAR TAUX DE TVA. Un devis fourniture + pose porte
+    // deux taux (20 % et 10 %) : taxer tout l'acompte au premier taux rencontré
+    // fausse la TVA déclarée ET la déduction au solde, sans que rien ne le
+    // signale. On produit donc une ligne d'acompte PAR TAUX, au prorata.
+    const parTaux = new Map<number, number>()
+    for (const l of lignes) {
+      const t = Number(l.tva ?? 20)
+      parTaux.set(t, (parTaux.get(t) || 0) + l.quantite * l.prix_unitaire_ht)
+    }
+    const taux = [...parTaux.keys()].sort((a, b) => b - a)
+    const plusieursTaux = taux.length > 1
+    const montant = arr((baseHt * pct) / 100)
     if (!(montant > 0)) {
       return reponse({ error: 'Montant HT introuvable pour calculer l’acompte' }, 400)
     }
 
-    // Le descriptif de la commande passe SOUS la ligne d'acompte : la
-    // désignation seule est trop vague pour l'art. 242 nonies A, et c'est la
-    // règle que l'entreprise s'est donnée pour toutes ses factures.
-    // CE QUI IDENTIFIE le produit, PAS la fiche technique du fabricant.
-    // Le descriptif intégral (règle posée pour les factures) tient sur deux
-    // pages ici et recopie 20 lignes de specs : chaque ligne recopiée est une
-    // occasion de contredire le devis, qui reste LE document technique. On
-    // garde donc les caractéristiques qui distinguent CE produit d'un autre
-    // (cotes, coloris, motorisation) — c'est ce qu'exige l'art. 242 nonies A.
-    const IDENTIFIANT = /dimension|cote|largeur|hauteur|coloris|couleur|RAL|motoris|moteur|t[ée]l[ée]commande|manœuvre|manoeuvre|type de|vitrage|lame|remplissage|pose/i
-    const descriptif = lignes
-      .map((l) => {
-        const q = l.quantite > 1 ? ` (× ${l.quantite})` : ''
-        const utiles = String(l.details || '')
-          .split('\n')
-          .filter((d) => IDENTIFIANT.test(d))
-          // Les devis déjà enregistrés portent les scories du libellé
-          // fournisseur (« Lisse Lisse ») : les corriger à la source ne répare
-          // que les devis À VENIR. Sur une facture, un mot doublé se lit comme
-          // une faute de saisie — on nettoie donc aussi ce qu'on recopie.
-          .map((d) => d.split(/\s+/)
-            .filter((mot, i, t) => mot.toLowerCase() !== (t[i - 1] || '').toLowerCase())
-            .join(' '))
-        return `— ${l.designation}${q}` + (utiles.length ? `\n${utiles.join('\n')}` : '')
-      })
-      .join('\n')
-
-    const arrondi = (n: number) => Math.round(n * 100) / 100
-    const acompteTtc = arrondi(montant * (1 + tva / 100))
+    const arrondi = arr
+    const acompteTtc = arr(
+      taux.reduce((s, t) => s + ((parTaux.get(t) as number) * pct) / 100 * (1 + t / 100), 0))
     // QUAND LE SOLDE EST-IL DÛ ? Trois cas, et ils ne se disent pas pareil :
     //  - chantier (pose) : à l'achèvement des travaux ;
     //  - fourniture livrée : AVANT la livraison — la marchandise ne part pas
@@ -203,18 +189,39 @@ export async function creerBrouillonFacture(
 
     // La désignation doit IDENTIFIER LE PRODUIT, pas seulement le pourcentage :
     // « Acompte 50 % sur devis DC-00925 » ne dit pas ce qui est vendu.
+    // CE QUI IDENTIFIE le produit, PAS la fiche technique du fabricant : le
+    // devis reste LE document technique, et chaque ligne recopiée est une
+    // occasion de le contredire (« 600 Nm » au lieu de 600 N, « Lisse Lisse »).
+    const IDENTIFIANT = /dimension|cote|largeur|hauteur|coloris|couleur|RAL|motoris|moteur|t[ée]l[ée]commande|manœuvre|manoeuvre|type de|vitrage|lame|remplissage|pose/i
+    const descriptif = lignes
+      .map((l) => {
+        const q = l.quantite > 1 ? ` (× ${l.quantite})` : ''
+        const utiles = String(l.details || '')
+          .split('\n')
+          .filter((d) => IDENTIFIANT.test(d))
+          // Les devis déjà enregistrés portent les scories du libellé
+          // fournisseur : sur une facture, un mot doublé se lit comme une faute.
+          .map((d) => d.split(/\s+/)
+            .filter((mot, i, t) => mot.toLowerCase() !== (t[i - 1] || '').toLowerCase())
+            .join(' '))
+        return `— ${l.designation}${q}` + (utiles.length ? `\n${utiles.join('\n')}` : '')
+      })
+      .join('\n')
+
     const objets = lignes.map((l) => l.designation).filter(Boolean)
     const resume = objets.length > 2
       ? `${objets.slice(0, 2).join(', ')} et ${objets.length - 2} autre(s) poste(s)`
       : objets.join(' et ')
-    lignes = [{
-      designation: `Acompte ${pct} % sur ${resume || 'la commande'}` +
-        `${devisNumero ? `, selon devis ${devisNumero} accepté` : ''}`,
-      details: descriptif,
+    const intitule = `Acompte ${pct} % sur ${resume || 'la commande'}` +
+      `${devisNumero ? `, selon devis ${devisNumero} accepté` : ''}`
+    lignes = taux.map((t, i) => ({
+      designation: plusieursTaux ? `${intitule} — part TVA ${t} %` : intitule,
+      // Le descriptif ne se répète pas : il porte sur la commande entière.
+      ...(i === 0 ? { details: descriptif } : {}),
       quantite: 1,
-      prix_unitaire_ht: montant,
-      tva,
-    }]
+      prix_unitaire_ht: arr(((parTaux.get(t) as number) * pct) / 100),
+      tva: t,
+    }))
   }
 
   // AVOIR : le SEUL moyen d'annuler une facture émise (elle est numérotée,
