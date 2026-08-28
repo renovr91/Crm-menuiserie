@@ -81,8 +81,13 @@ export async function POST(request: NextRequest) {
     messageSignature({ numero, client: clientNom, montant, titre: numero ? null : titre }),
   )
 
+  // Les échecs d'écriture ne doivent plus être muets : la panne du 28/08
+  // (clés env corrompues) a envoyé la notification puis perdu le dossier
+  // sans un bruit. On collecte, et on alerte Telegram à la fin.
+  const soucis: string[] = []
+
   if (submissionId) {
-    await supabase.from('devis_signatures').upsert(
+    const { error: eTrace } = await supabase.from('devis_signatures').upsert(
       {
         submission_id: submissionId,
         numero,
@@ -95,6 +100,7 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'submission_id' },
     )
+    if (eTrace) soucis.push(`trace signature : ${eTrace.message}`)
   }
 
   // ============================================================
@@ -198,8 +204,20 @@ export async function POST(request: NextRequest) {
       )
     } catch (e) {
       console.error('[docuseal webhook] ouverture dossier', numero, e)
+      soucis.push(`ouverture dossier : ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
-  return NextResponse.json({ ok: true, numero, telegram: envoye })
+  if (soucis.length) {
+    // Second message, distinct de la notification de signature : il dit
+    // exactement quoi rejouer. Best-effort lui aussi — s'il échoue, le
+    // brief du matin reste le filet.
+    await envoyerTelegram(
+      `⚠️ Devis ${numero || '?'} signé : notification envoyée mais ÉCRITURE EN BASE INCOMPLÈTE.\n` +
+        soucis.map((s) => `— ${s}`).join('\n') +
+        `\nDemander à Claude de rejouer la signature (submission ${submissionId || '?'}).`,
+    )
+  }
+
+  return NextResponse.json({ ok: true, numero, telegram: envoye, soucis: soucis.length || undefined })
 }
