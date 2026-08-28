@@ -6,6 +6,7 @@ import { avancerCommande } from '@/lib/commandes-avancer'
 import { logActivity } from '@/lib/activity-log'
 import { zadarma } from '@/lib/zadarma'
 import { calculerPointage } from '@/lib/pointage'
+import { creerProforma, convertirProforma } from '@/lib/proformas'
 
 export const dynamic = 'force-dynamic'
 
@@ -1296,6 +1297,66 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, numero, encaisse: montant, statut: apres?.statut })
       }
 
+      // ---- PROFORMA : l'appel de fonds qui n'est PAS une facture -------
+      case 'proforma_creer': {
+        const { status, corps } = await creerProforma(supabase, {
+          ...p,
+          environnement: p.environnement === 'prod' ? 'prod' : 'test',
+          client: {
+            nom: p.client_nom, adresse: p.client_adresse,
+            cp: p.client_cp, ville: p.client_ville,
+          },
+          acteur: 'hermes (ordre utilisateur Telegram)',
+        })
+        return NextResponse.json(corps, { status })
+      }
+
+      case 'proforma_convertir': {
+        const { status, corps } = await convertirProforma(supabase, {
+          ...p, acteur: 'hermes (ordre utilisateur Telegram)',
+        })
+        return NextResponse.json(corps, { status })
+      }
+
+      case 'proforma_lister': {
+        const { data, error } = await supabase
+          .from('proformas')
+          .select('numero, statut, client, devis_numero, total_ttc, created_at, convertie_le, validite_jours')
+          .eq('environnement', p.environnement === 'prod' ? 'prod' : 'test')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({
+          proformas: (data || []).map((f) => ({
+            numero: f.numero,
+            statut: f.statut,
+            client: (f.client as Record<string, string>)?.nom || null,
+            devis: f.devis_numero,
+            total_ttc: f.total_ttc,
+            creee_le: f.created_at,
+            // Une proforma périmée ne doit pas être payée sur un vieux prix.
+            expiree: f.statut === 'active' &&
+              Date.now() - new Date(f.created_at).getTime() > (f.validite_jours || 30) * 86400000,
+          })),
+        })
+      }
+
+      case 'proforma_supprimer': {
+        // Une proforma se supprime sans trace — c'est toute sa raison d'être.
+        // Sauf convertie : la facture qui en découle la rend historique.
+        const { data, error } = await supabase
+          .from('proformas')
+          .delete()
+          .eq('numero', String(p.numero || ''))
+          .neq('statut', 'convertie')
+          .select('numero')
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        if (!data?.length) {
+          return NextResponse.json({ error: 'Introuvable, ou déjà convertie en facture' }, { status: 404 })
+        }
+        return NextResponse.json({ ok: true, etat: 'proforma supprimée' })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1310,6 +1371,7 @@ export async function POST(request: Request) {
               'zadarma_postes', 'zadarma_enregistrement',
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement',
+              'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
             ],
           },
           { status: 400 }
