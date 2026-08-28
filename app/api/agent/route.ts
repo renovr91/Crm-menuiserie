@@ -1254,6 +1254,48 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, virement: id, devis, montant: op.montant })
       }
 
+      case 'facture_paiement': {
+        // ENCAISSEMENT D'UNE FACTURE ÉMISE. Le moteur avait déjà la RPC
+        // `facture_saisir_paiement` et le garde-fou l'attendait — rien ne
+        // l'appelait. Sans elle, une facture de solde restait éternellement
+        // « à payer » et ne pouvait jamais devenir acquittée.
+        const numero = String(p.numero || '').trim()
+        const montant = Number(p.montant)
+        if (!numero) return NextResponse.json({ error: 'numero requis' }, { status: 400 })
+        if (!(montant > 0)) return NextResponse.json({ error: 'montant > 0 requis' }, { status: 400 })
+
+        const { data: f } = await supabase
+          .from('factures')
+          .select('id, statut, total_ttc')
+          .eq('numero', numero)
+          .maybeSingle()
+        if (!f) return NextResponse.json({ error: `Facture ${numero} introuvable` }, { status: 404 })
+        if (f.statut === 'brouillon') {
+          return NextResponse.json({ error: 'Un brouillon ne s’encaisse pas : émets-la d’abord' }, { status: 400 })
+        }
+
+        const { error } = await supabase.rpc('facture_saisir_paiement', {
+          p_facture_id: f.id,
+          p_montant: montant,
+          p_moyen: String(p.moyen || 'virement'),
+          p_date: String(p.date || new Date().toISOString().slice(0, 10)),
+          p_reference: p.reference ? String(p.reference) : null,
+          p_note: p.note ? String(p.note) : null,
+          p_acteur: 'hermes (ordre utilisateur Telegram)',
+        })
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+        // Le PDF archivé porte encore « à payer ». On efface son chemin (seul
+        // champ que le garde-fou laisse bouger sur une facture émise) : la
+        // prochaine consultation le regénère avec la mention d'acquittement et
+        // le ré-archive. Les montants, eux, n'ont pas bougé d'un centime.
+        await supabase.from('factures').update({ pdf_path: null }).eq('id', f.id)
+
+        const { data: apres } = await supabase
+          .from('factures').select('statut').eq('id', f.id).maybeSingle()
+        return NextResponse.json({ ok: true, numero, encaisse: montant, statut: apres?.statut })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1267,6 +1309,7 @@ export async function POST(request: Request) {
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
               'zadarma_postes', 'zadarma_enregistrement',
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
+              'facture_paiement',
             ],
           },
           { status: 400 }
