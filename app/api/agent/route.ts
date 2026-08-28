@@ -1110,7 +1110,13 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "statut : 'on' ou 'off'" }, { status: 400 })
         }
         try {
-          const r = await zadarma('/v1/pbx/internal/recording/', { id: poste, status: statut }, 'PUT')
+          // Certains postes (créés récemment) refusent status=on sans e-mail —
+          // Zadarma valide la config entière. L'e-mail sert aux notifications
+          // d'enregistrement, le stockage reste le cloud.
+          const params: Record<string, string> = { id: poste, status: statut }
+          const email = String(p.email || '').trim()
+          if (email) params.email = email
+          const r = await zadarma('/v1/pbx/internal/recording/', params, 'PUT')
           return NextResponse.json(r)
         } catch (e) {
           return NextResponse.json({ error: String(e instanceof Error ? e.message : e) }, { status: 502 })
