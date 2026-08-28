@@ -9,12 +9,13 @@ import { createAdminClient } from './supabase'
 import { listConversations, getAdInfo } from './lbc-messaging'
 
 // Types
-export type LeadStatut = 'nouveau' | 'a_repondre' | 'repondu' | 'devis_a_traiter' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
+export type LeadStatut = 'nouveau' | 'a_repondre' | 'repondu' | 'devis_a_traiter' | 'devis_hermes' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
 
-// Ordre du pipeline. ⚠️ La base contient aussi 'devis_hermes' (16 leads),
-// absent du type et de l'écran : ces leads ne sont donc pas affichés.
+// Ordre du pipeline — doit rester aligné sur STAGES/ALL_STATUTS de
+// app/(admin)/messagerie-lbc/page.tsx. Un statut oublié ici = leads non
+// comptés et invisibles dans le kanban.
 export const ALL_STATUTS: LeadStatut[] = [
-  'nouveau', 'a_repondre', 'repondu', 'devis_a_traiter', 'devis_envoye',
+  'nouveau', 'a_repondre', 'repondu', 'devis_a_traiter', 'devis_hermes', 'devis_envoye',
   'relance_1', 'relance_2', 'en_attente', 'gagne', 'perdu', 'pas_interesse',
 ]
 
