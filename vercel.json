@@ -11,6 +11,10 @@
     {
       "path": "/api/appels/purge",
       "schedule": "0 4 1 * *"
+    },
+    {
+      "path": "/api/zadarma/rattrapage",
+      "schedule": "20 * * * *"
     }
   ]
 }
