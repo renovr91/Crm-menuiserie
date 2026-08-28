@@ -841,6 +841,11 @@ export async function POST(request: Request) {
           lignes: Array.isArray(p.lignes) ? p.lignes : [],
           categorie_operation: p.categorie_operation || undefined,
           conditions_reglement: p.conditions_reglement || undefined,
+          // Un acompte est facturé APRÈS encaissement : ces deux champs
+          // impriment « FACTURE ACQUITTÉE » et un net à payer nul. Sans eux le
+          // client lit le total de la facture comme une somme réclamée.
+          regle_le: p.regle_le || undefined,
+          regle_par: p.regle_par || undefined,
           client: {
             nom: p.client_nom, adresse: p.client_adresse,
             cp: p.client_cp, ville: p.client_ville,

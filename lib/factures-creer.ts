@@ -102,7 +102,7 @@ export async function creerBrouillonFacture(
   // une avance, pas la vente d'articles), mais elle porte le descriptif complet,
   // et le récapitulatif de commande est figé dans `mentions`.
   const pct = Number(body.acompte_pct ?? 0)
-  let mentions: Record<string, unknown> | null = null
+  let mentions: Record<string, any> | null = null
   if (type === 'acompte') {
     if (!(pct > 0 && pct < 100)) {
       return reponse({ error: 'Un acompte demande un pourcentage entre 1 et 99' }, 400)
@@ -137,6 +137,25 @@ export async function creerBrouillonFacture(
         facture_ttc: acompteTtc,
         reste_ttc: arrondi(baseTtc - acompteTtc),
       },
+    }
+
+    // FACTURE ACQUITTÉE : un acompte est presque toujours facturé APRÈS
+    // encaissement (c'est l'encaissement qui rend la TVA exigible, art. 269-2-c
+    // CGI). Le document doit donc dire qu'il est payé et afficher un net à
+    // payer nul — sans quoi le client lit « TOTAL TTC 601,50 € » comme une
+    // somme réclamée. C'est aussi sa preuve de paiement.
+    const regleLe = String(body.regle_le || '').trim()
+    if (regleLe) {
+      const modes: Record<string, string> = {
+        virement: 'virement', cheque: 'chèque', especes: 'espèces',
+        cb: 'carte bancaire', prelevement: 'prélèvement',
+      }
+      mentions.reglement = {
+        acquittee: true,
+        date: regleLe,
+        mode: modes[String(body.regle_par || 'virement')] || String(body.regle_par),
+        montant_ttc: acompteTtc,
+      }
     }
 
     lignes = [{
