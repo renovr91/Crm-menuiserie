@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase'
 import { creerBrouillonFacture } from '@/lib/factures-creer'
 import { avancerCommande } from '@/lib/commandes-avancer'
 import { logActivity } from '@/lib/activity-log'
+import { zadarma } from '@/lib/zadarma'
 
 export const dynamic = 'force-dynamic'
 
@@ -1077,6 +1078,45 @@ export async function POST(request: Request) {
         })
       }
 
+      // ---- Zadarma : réglage de l'enregistrement des appels -------------
+      // POURQUOI ICI : la clé API Zadarma n'existe qu'en variable « Sensitive »
+      // sur Vercel (illisible même via env pull). Le seul endroit où elle est
+      // valide, c'est CE déploiement — le webhook s'en sert déjà pour
+      // télécharger les enregistrements. Panne du 26/08 : les postes ont changé
+      // (100 → 104) et l'enregistrement est un réglage PAR POSTE, perdu à la
+      // bascule. Ces deux actions permettent de constater et de corriger sans
+      // faire transiter la clé.
+
+      case 'zadarma_postes': {
+        // Lecture seule : la liste des numéros internes du standard.
+        try {
+          const r = await zadarma('/v1/pbx/internal/')
+          return NextResponse.json(r)
+        } catch (e) {
+          return NextResponse.json({ error: String(e instanceof Error ? e.message : e) }, { status: 502 })
+        }
+      }
+
+      case 'zadarma_enregistrement': {
+        // Écriture ENCADRÉE : active/coupe l'enregistrement d'UN poste.
+        // Geste réversible, sans effet sur les appels ni sur les données —
+        // c'est l'équivalent de la case à cocher de l'interface Zadarma.
+        const poste = String(p.poste || '').trim()
+        const statut = String(p.statut || 'on')
+        if (!/^\d{2,4}$/.test(poste)) {
+          return NextResponse.json({ error: 'poste requis (numéro interne, ex. 104)' }, { status: 400 })
+        }
+        if (!['on', 'off'].includes(statut)) {
+          return NextResponse.json({ error: "statut : 'on' ou 'off'" }, { status: 400 })
+        }
+        try {
+          const r = await zadarma('/v1/pbx/internal/recording/', { id: poste, status: statut }, 'PUT')
+          return NextResponse.json(r)
+        } catch (e) {
+          return NextResponse.json({ error: String(e instanceof Error ? e.message : e) }, { status: 502 })
+        }
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1088,6 +1128,7 @@ export async function POST(request: Request) {
               'draft_reply', 'list_drafts', 'send_draft', 'discard_draft',
               'update_lead_statut', 'upsert_contact', 'create_task',
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
+              'zadarma_postes', 'zadarma_enregistrement',
             ],
           },
           { status: 400 }
