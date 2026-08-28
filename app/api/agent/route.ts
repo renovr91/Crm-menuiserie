@@ -5,6 +5,7 @@ import { creerBrouillonFacture } from '@/lib/factures-creer'
 import { avancerCommande } from '@/lib/commandes-avancer'
 import { logActivity } from '@/lib/activity-log'
 import { zadarma } from '@/lib/zadarma'
+import { calculerPointage } from '@/lib/pointage'
 
 export const dynamic = 'force-dynamic'
 
@@ -1123,6 +1124,108 @@ export async function POST(request: Request) {
         }
       }
 
+      // ---- VEILLE DES VIREMENTS ----------------------------------------
+      // Le chaînon manquant : la banque était lue, les correspondances étaient
+      // calculées… mais rien ne le DISAIT. Le 28/08 un acompte est arrivé avec
+      // la référence du devis recopiée par le client, il a été rapproché — et
+      // l'utilisateur ne l'a appris qu'en le demandant. La machine propose
+      // maintenant d'elle-même ; l'humain tranche toujours.
+
+      case 'virements_a_signaler': {
+        // Utilise le MÊME moteur que l'écran de pointage (lib/pointage.ts) :
+        // une seconde heuristique dériverait, et une dérive ici rapproche un
+        // encaissement du mauvais client.
+        const jours = Math.min(Math.max(Number(p.jours) || 30, 1), 180)
+        const depuis = Date.now() - jours * 86400000
+        let lignes
+        try {
+          ;({ lignes } = await calculerPointage(supabase, false))
+        } catch (e) {
+          return NextResponse.json({ error: String(e instanceof Error ? e.message : e) }, { status: 500 })
+        }
+
+        const aProposer = lignes.filter(
+          (l) =>
+            l.montant > 0 &&
+            l.definitive &&
+            !l.signalee_le &&
+            l.suggestions.length > 0 &&
+            new Date(l.date_operation).getTime() >= depuis,
+        )
+
+        return NextResponse.json({
+          virements: aProposer.map((l) => ({
+            id: l.id,
+            date: l.date_operation,
+            montant: l.montant,
+            banque: l.source,
+            libelle: l.libelle,
+            // La MEILLEURE piste d'abord : c'est elle qu'on propose. Les
+            // suivantes restent visibles pour que l'agent puisse nuancer.
+            pistes: l.suggestions.slice(0, 3).map((s: Record<string, unknown>) => ({
+              devis: s.reference,
+              client: s.client,
+              montant_attendu: s.montant_attendu,
+              motif: s.motif,
+              certitude: s.certitude,
+            })),
+          })),
+        })
+      }
+
+      case 'virement_signale': {
+        // Empêche la répétition. Appelé APRÈS l'envoi Telegram, jamais avant :
+        // un message perdu doit pouvoir repartir au passage suivant.
+        const ids = Array.isArray(p.ids) ? p.ids.map(Number).filter(Boolean) : []
+        if (!ids.length) return NextResponse.json({ error: 'ids requis' }, { status: 400 })
+        const { error } = await supabase
+          .from('operations_bancaires')
+          .update({ signalee_le: new Date().toISOString() })
+          .in('id', ids)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ ok: true, marques: ids.length })
+      }
+
+      case 'virement_pointer': {
+        // Le geste que l'utilisateur autorise depuis Telegram : rattacher le
+        // virement au devis. Écriture BORNÉE — ni facture, ni devis touchés,
+        // et réversible depuis l'écran de pointage.
+        const id = Number(p.id)
+        const devis = String(p.devis_numero || '').toUpperCase().trim()
+        if (!id || !/^DC-\d{3,6}$/.test(devis)) {
+          return NextResponse.json({ error: 'id et devis_numero (DC-xxxxx) requis' }, { status: 400 })
+        }
+        const { data: op } = await supabase
+          .from('operations_bancaires')
+          .select('id, montant, definitive, pointee_le')
+          .eq('id', id)
+          .maybeSingle()
+        if (!op) return NextResponse.json({ error: 'Opération inconnue' }, { status: 404 })
+        if (op.pointee_le) return NextResponse.json({ error: 'Déjà pointée' }, { status: 409 })
+        if (!op.definitive) {
+          return NextResponse.json({ error: 'Écriture encore provisoire chez la banque' }, { status: 400 })
+        }
+        const { error } = await supabase
+          .from('operations_bancaires')
+          .update({
+            devis_numero: devis,
+            pointee_le: new Date().toISOString(),
+            pointee_par: 'hermes (ordre utilisateur Telegram)',
+          })
+          .eq('id', id)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+        // Le dossier suit : payé ⇒ à commander. C'est ce basculement qui
+        // déclenche le rappel quotidien jusqu'à la commande fournisseur.
+        await avancerCommande(supabase, {
+          devis_numero: devis,
+          etape: 'payee',
+          moyen: 'virement',
+        }).catch(() => null)
+
+        return NextResponse.json({ ok: true, virement: id, devis, montant: op.montant })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1135,6 +1238,7 @@ export async function POST(request: Request) {
               'update_lead_statut', 'upsert_contact', 'create_task',
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
               'zadarma_postes', 'zadarma_enregistrement',
+              'virements_a_signaler', 'virement_signale', 'virement_pointer',
             ],
           },
           { status: 400 }
