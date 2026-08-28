@@ -110,9 +110,21 @@ export async function POST(request: NextRequest) {
     try {
       const { data: devisComplet } = await supabase
         .from('devis_claudus')
-        .select('client_nom, client_telephone, client_email, client_ville, reference, montant_ttc')
+        .select('client_nom, client_telephone, client_email, client_adresse, client_cp, client_ville, reference, montant_ttc')
         .eq('numero', numero)
         .maybeSingle()
+
+      // L'adresse des devis est souvent TASSÉE dans le champ ville
+      // (« 333 Camin Dou Camp De Cesar, 30330 Saint-Paul-les-Fonts ») : les
+      // anciens outils ne séparaient pas. On découpe au code postal — motif
+      // fiable à 5 chiffres — plutôt que de créer des fiches client vides.
+      let adr = (devisComplet?.client_adresse || '').trim()
+      let cp = (devisComplet?.client_cp || '').trim()
+      let ville = (devisComplet?.client_ville || '').trim()
+      if (!adr && !cp && ville) {
+        const m = ville.match(/^(.*?),?\s*(\d{5})\s+(.+)$/)
+        if (m) { adr = m[1].replace(/,\s*$/, '').trim(); cp = m[2]; ville = m[3].trim() }
+      }
 
       let clientId: string | null = null
       if (devisComplet?.client_nom) {
@@ -128,7 +140,26 @@ export async function POST(request: NextRequest) {
           const { data } = await supabase.from('clients').select('id').eq('nom', devisComplet.client_nom).maybeSingle()
           existant = data
         }
-        if (existant) clientId = existant.id
+        if (existant) {
+          clientId = existant.id
+          // Compléter sans écraser : le devis signé est une source fiable pour
+          // les champs encore vides — jamais pour ceux déjà renseignés à la main.
+          const { data: fiche } = await supabase
+            .from('clients')
+            .select('adresse, code_postal, ville, email, montant_estime, pipeline_stage')
+            .eq('id', clientId).maybeSingle()
+          const complement: Record<string, unknown> = {}
+          if (fiche && !fiche.adresse && adr) complement.adresse = adr
+          if (fiche && !fiche.code_postal && cp) complement.code_postal = cp
+          if (fiche && !fiche.ville && ville) complement.ville = ville
+          if (fiche && !fiche.email && devisComplet.client_email) complement.email = devisComplet.client_email
+          if (fiche && fiche.montant_estime == null && devisComplet.montant_ttc != null)
+            complement.montant_estime = Number(devisComplet.montant_ttc)
+          if (fiche && fiche.pipeline_stage !== 'signe') complement.pipeline_stage = 'signe'
+          if (Object.keys(complement).length) {
+            await supabase.from('clients').update(complement).eq('id', clientId)
+          }
+        }
         else {
           const { data: cree } = await supabase
             .from('clients')
@@ -136,8 +167,14 @@ export async function POST(request: NextRequest) {
               nom: devisComplet.client_nom,
               telephone: tel || null,
               email: devisComplet.client_email || null,
-              ville: devisComplet.client_ville || null,
+              adresse: adr || null,
+              code_postal: cp || null,
+              ville: ville || null,
               source: 'signature devis',
+              // Un client qui vient de SIGNER n'est pas un « nouveau » prospect.
+              pipeline_stage: 'signe',
+              besoin: devisComplet.reference || null,
+              montant_estime: devisComplet.montant_ttc != null ? Number(devisComplet.montant_ttc) : null,
             })
             .select('id')
             .maybeSingle()

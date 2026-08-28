@@ -126,6 +126,8 @@ interface Activite {
 }
 
 interface Commande {
+  devis_numero?: string | null
+  montant_ttc?: number | null
   id: string
   client_id: string
   fournisseur: string
@@ -747,8 +749,17 @@ export default function ClientDetailPage() {
                         const status = COMMANDE_STATUS[c.status] || COMMANDE_STATUS.en_attente
                         return (
                           <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
-                            <td className="py-3 pr-4 text-sm font-medium">{c.fournisseur}</td>
-                            <td className="py-3 pr-4 text-sm text-gray-600">{c.designation || '--'}</td>
+                            <td className="py-3 pr-4 text-sm font-medium">{c.fournisseur || '—'}</td>
+                            <td className="py-3 pr-4 text-sm text-gray-600">
+                              {c.designation || '--'}
+                              {c.devis_numero && <span className="ml-1 font-mono text-xs text-gray-400">{c.devis_numero}</span>}
+                              {/* Le montant manquait : la commande vient d'un devis signé, il est connu. */}
+                              {c.montant_ttc != null && (
+                                <span className="ml-2 text-xs font-semibold text-gray-800">
+                                  {Number(c.montant_ttc).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                                </span>
+                              )}
+                            </td>
                             <td className="py-3 pr-4 text-sm text-gray-500">{formatDate(c.date_commande)}</td>
                             <td className="py-3 pr-4 text-sm text-gray-500">{formatDate(c.date_livraison_prevue)}</td>
                             <td className="py-3 text-center">
