@@ -158,13 +158,57 @@ export async function creerBrouillonFacture(
       }
     }
 
+    // La désignation doit IDENTIFIER LE PRODUIT, pas seulement le pourcentage :
+    // « Acompte 50 % sur devis DC-00925 » ne dit pas ce qui est vendu.
+    const objets = lignes.map((l) => l.designation).filter(Boolean)
+    const resume = objets.length > 2
+      ? `${objets.slice(0, 2).join(', ')} et ${objets.length - 2} autre(s) poste(s)`
+      : objets.join(' et ')
     lignes = [{
-      designation: `Acompte ${pct} %${devisNumero ? ` sur devis ${devisNumero}` : ''}`,
+      designation: `Acompte ${pct} % sur ${resume || 'la commande'}` +
+        `${devisNumero ? `, selon devis ${devisNumero} accepté` : ''}`,
       details: descriptif,
       quantite: 1,
       prix_unitaire_ht: montant,
       tva,
     }]
+  }
+
+  // FACTURE DE SOLDE : elle reprend la commande ENTIÈRE puis DÉDUIT les acomptes
+  // déjà facturés, en référençant leur numéro (BOFiP BOI-TVA-DECLA-30-20-20-10).
+  // Sans cette déduction le client serait facturé deux fois et la TVA payée deux
+  // fois : le type 'solde' n'était jusqu'ici qu'une étiquette.
+  if (type === 'solde' && devisNumero) {
+    const { data: acomptes } = await supabase
+      .from('factures')
+      .select('numero, emise_le, lignes')
+      .eq('devis_numero', devisNumero)
+      .eq('type', 'acompte')
+      .eq('statut', 'emise')
+      .eq('environnement', environnement)
+      .order('emise_le', { ascending: true })
+
+    for (const a of acomptes || []) {
+      for (const l of (a.lignes || []) as Ligne[]) {
+        const ht = (Number(l.quantite) || 1) * (Number(l.prix_unitaire_ht) || 0)
+        if (!ht) continue
+        lignes.push({
+          designation: `Acompte déjà facturé — ${a.numero}` +
+            `${a.emise_le ? ` du ${new Date(a.emise_le).toLocaleDateString('fr-FR')}` : ''}`,
+          quantite: 1,
+          prix_unitaire_ht: -Math.round(ht * 100) / 100,
+          tva: Number(l.tva ?? 20),
+        })
+      }
+    }
+    if (!(acomptes || []).length) {
+      // Silence dangereux évité : facturer un « solde » sans acompte trouvé
+      // reviendrait à refacturer la commande entière sous un titre trompeur.
+      return reponse(
+        { error: `Aucune facture d'acompte émise pour ${devisNumero} : ce n'est pas un solde, mais une facture.` },
+        400,
+      )
+    }
   }
 
   if (!lignes.length) {
