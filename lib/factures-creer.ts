@@ -162,8 +162,13 @@ export async function creerBrouillonFacture(
     //  - fourniture retirée sur place : au retrait de la marchandise.
     // Écrire « à la livraison » quand il n'y a pas de livraison, ou quand le
     // solde est en réalité exigible avant, engage l'entreprise à tort.
-    const aLivraison = !!devis?.livraison && Object.keys(devis.livraison as object).length > 0
-    const remise = aPoseDevis ? 'chantier' : aLivraison ? 'livraison' : 'retrait'
+    // DÉFAUT = AVEC LIVRAISON (règle du gérant, 29/08/2026). Le retrait en
+    // dépôt est l'exception et doit être DEMANDÉ explicitement : déduire
+    // « retrait » de l'absence de bloc livraison sur le devis serait faux —
+    // beaucoup de devis anciens n'ont simplement pas ce bloc, alors que la
+    // marchandise a bien été livrée.
+    const retraitDemande = body.retrait === true || String(body.remise || '') === 'retrait'
+    const remise = aPoseDevis ? 'chantier' : retraitDemande ? 'retrait' : 'livraison'
 
     mentions = {
       acompte: {

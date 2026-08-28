@@ -849,6 +849,8 @@ export async function POST(request: Request) {
           // client lit le total de la facture comme une somme réclamée.
           regle_le: p.regle_le || undefined,
           regle_par: p.regle_par || undefined,
+          // Retrait en dépôt = exception explicite ; sans mention, c'est livré.
+          retrait: p.retrait === true || undefined,
           client: {
             nom: p.client_nom, adresse: p.client_adresse,
             cp: p.client_cp, ville: p.client_ville,
