@@ -124,10 +124,20 @@ export async function creerBrouillonFacture(
     // Le descriptif de la commande passe SOUS la ligne d'acompte : la
     // désignation seule est trop vague pour l'art. 242 nonies A, et c'est la
     // règle que l'entreprise s'est donnée pour toutes ses factures.
+    // CE QUI IDENTIFIE le produit, PAS la fiche technique du fabricant.
+    // Le descriptif intégral (règle posée pour les factures) tient sur deux
+    // pages ici et recopie 20 lignes de specs : chaque ligne recopiée est une
+    // occasion de contredire le devis, qui reste LE document technique. On
+    // garde donc les caractéristiques qui distinguent CE produit d'un autre
+    // (cotes, coloris, motorisation) — c'est ce qu'exige l'art. 242 nonies A.
+    const IDENTIFIANT = /dimension|cote|largeur|hauteur|coloris|couleur|RAL|motoris|moteur|t[ée]l[ée]commande|manœuvre|manoeuvre|type de|vitrage|lame|remplissage|pose/i
     const descriptif = lignes
       .map((l) => {
         const q = l.quantite > 1 ? ` (× ${l.quantite})` : ''
-        return `— ${l.designation}${q}${l.details ? `\n${l.details}` : ''}`
+        const utiles = String(l.details || '')
+          .split('\n')
+          .filter((d) => IDENTIFIANT.test(d))
+        return `— ${l.designation}${q}` + (utiles.length ? `\n${utiles.join('\n')}` : '')
       })
       .join('\n')
 
@@ -296,9 +306,15 @@ export async function creerBrouillonFacture(
     lignes,
     date_vente: String(body.date_vente || aujourdhui),
     date_echeance: String(body.date_echeance || aujourdhui),
+    // « Paiement à réception de facture » sur une facture DÉJÀ RÉGLÉE est une
+    // absurdité qui contredit la mention ACQUITTÉE deux lignes plus bas : le
+    // défaut ne doit s'appliquer qu'à ce qui reste dû.
     conditions_reglement: avoirDe
       ? `Annule et remplace la facture ${avoirDe.numero}`
-      : body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
+      : mentions?.reglement
+        ? `Acompte réglé par ${mentions.reglement.mode} le ` +
+          new Date(mentions.reglement.date).toLocaleDateString('fr-FR')
+        : body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
     ...(mentions ? { mentions } : {}),
   }
 
