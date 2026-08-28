@@ -835,6 +835,9 @@ export async function POST(request: Request) {
         const { status, corps } = await creerBrouillonFacture(supabase, {
           environnement: p.environnement === 'prod' ? 'prod' : 'test',
           type: p.type_facture || 'facture',
+          // L'avoir est le seul moyen d'annuler une facture ÉMISE.
+          facture_annulee: p.facture_annulee || undefined,
+          motif: p.motif || undefined,
           devis_numero: p.devis_numero || '',
           reference_externe: p.reference_externe || '',
           acompte_pct: Number(p.acompte_pct) || 0,

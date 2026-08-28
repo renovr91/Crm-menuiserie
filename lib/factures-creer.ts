@@ -27,7 +27,7 @@ export async function creerBrouillonFacture(
   body: Record<string, any>,
 ): Promise<Reponse> {
   const environnement = body.environnement === 'prod' ? 'prod' : 'test'
-  const type = ['facture', 'acompte', 'solde'].includes(String(body.type)) ? String(body.type) : 'facture'
+  const type = ['facture', 'acompte', 'solde', 'avoir'].includes(String(body.type)) ? String(body.type) : 'facture'
   const devisNumero = String(body.devis_numero || '').trim()
 
   // ---- 1. Le devis, s'il existe en base : il préremplit, il ne contraint pas.
@@ -46,7 +46,7 @@ export async function creerBrouillonFacture(
 
   // ---- 2. Le client. Ce qui est fourni gagne toujours.
   const c = body.client || {}
-  const client = {
+  let client = {
     nom: String(c.nom || [devis?.client_civilite, devis?.client_nom].filter(Boolean).join(' ') || '').trim(),
     adresse: String(c.adresse || devis?.client_adresse || '').trim(),
     cp: String(c.cp || devis?.client_cp || '').trim(),
@@ -103,6 +103,7 @@ export async function creerBrouillonFacture(
   // et le récapitulatif de commande est figé dans `mentions`.
   const pct = Number(body.acompte_pct ?? 0)
   let mentions: Record<string, any> | null = null
+  let avoirDe: { id: string; numero: string; devis_numero: string; categorie: string } | null = null
   if (type === 'acompte') {
     if (!(pct > 0 && pct < 100)) {
       return reponse({ error: 'Un acompte demande un pourcentage entre 1 et 99' }, 400)
@@ -174,6 +175,56 @@ export async function creerBrouillonFacture(
     }]
   }
 
+  // AVOIR : le SEUL moyen d'annuler une facture émise (elle est numérotée,
+  // chaînée et comptabilisée — on ne la modifie ni ne la supprime). Il reprend
+  // les lignes de la facture annulée en NÉGATIF et la référence explicitement.
+  // Le client ne le reçoit que s'il avait reçu la facture d'origine ; sinon
+  // c'est une pièce interne qui solde le numéro consommé.
+  if (type === 'avoir') {
+    const ref = String(body.facture_annulee || '').trim()
+    if (!ref) {
+      return reponse({ error: 'Un avoir doit désigner la facture annulée (facture_annulee)' }, 400)
+    }
+    const { data: origine } = await supabase
+      .from('factures')
+      .select('id, numero, type, client, devis_numero, categorie_operation, lignes, emise_le, statut')
+      .eq('numero', ref)
+      .eq('environnement', environnement)
+      .maybeSingle()
+    if (!origine) return reponse({ error: `Facture ${ref} introuvable` }, 404)
+    if (origine.statut !== 'emise') {
+      return reponse({ error: `${ref} n'est pas émise : un brouillon se supprime, il ne s'annule pas` }, 400)
+    }
+    const { data: dejaAnnulee } = await supabase
+      .from('factures')
+      .select('numero').eq('type', 'avoir').eq('facture_liee', origine.id)
+      .eq('statut', 'emise').maybeSingle()
+    if (dejaAnnulee) {
+      return reponse({ error: `${ref} est déjà annulée par l'avoir ${dejaAnnulee.numero}` }, 409)
+    }
+
+    lignes = ((origine.lignes || []) as Ligne[]).map((l) => ({
+      designation: l.designation,
+      details: l.details,
+      quantite: Number(l.quantite) || 1,
+      prix_unitaire_ht: -Math.abs(Number(l.prix_unitaire_ht) || 0),
+      tva: Number(l.tva ?? 20),
+    }))
+    if (!lignes.length) return reponse({ error: `${ref} n'a aucune ligne à annuler` }, 400)
+
+    // Tout est repris de la facture annulée : mêmes client, même rattachement,
+    // même catégorie. Un avoir qui divergerait de son original ne prouverait
+    // plus qu'il l'annule.
+    client = (origine.client || {}) as typeof client
+    avoirDe = {
+      id: origine.id as string,
+      numero: origine.numero as string,
+      devis_numero: (origine.devis_numero as string) || '',
+      categorie: (origine.categorie_operation as string) || '',
+    }
+    mentions = { avoir: { annule: origine.numero, emise_le: origine.emise_le } }
+  }
+
   // FACTURE DE SOLDE : elle reprend la commande ENTIÈRE puis DÉDUIT les acomptes
   // déjà facturés, en référençant leur numéro (BOFiP BOI-TVA-DECLA-30-20-20-10).
   // Sans cette déduction le client serait facturé deux fois et la TVA payée deux
@@ -229,14 +280,21 @@ export async function creerBrouillonFacture(
     // Le lien vers l'origine, quelle qu'elle soit : un devis maison ou une
     // référence externe (ProDevis). Sans lui, la facture est orpheline et le
     // rapprochement avec l'encaissement devient une enquête.
-    devis_numero: devisNumero || String(body.reference_externe || '').trim() || null,
-    categorie_operation: body.categorie_operation || (aPose ? 'mixte' : 'biens'),
+    devis_numero: avoirDe?.devis_numero || devisNumero || String(body.reference_externe || '').trim() || null,
+    categorie_operation: avoirDe?.categorie || body.categorie_operation || (aPose ? 'mixte' : 'biens'),
+    ...(avoirDe
+      ? {
+          facture_liee: avoirDe.id,
+          motif: String(body.motif || `Annulation de la facture ${avoirDe.numero}`),
+        }
+      : {}),
     client,
     lignes,
     date_vente: String(body.date_vente || aujourdhui),
     date_echeance: String(body.date_echeance || aujourdhui),
-    conditions_reglement:
-      body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
+    conditions_reglement: avoirDe
+      ? `Annule et remplace la facture ${avoirDe.numero}`
+      : body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
     ...(mentions ? { mentions } : {}),
   }
 
