@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/zadarma/rattrapage",
-      "schedule": "20 * * * *"
+      "schedule": "20 5 * * *"
     }
   ]
 }
