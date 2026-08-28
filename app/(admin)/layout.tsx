@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/pointage', label: 'Pointage', icon: '🏷️' },
   { href: '/taches', label: 'Tâches', icon: '✅' },
   { href: '/messagerie-lbc', label: 'Messages LBC', icon: '💬' },
+  { href: '/sms', label: 'SMS', icon: '✉️' },
   // « Livraisons » est devenu « Commandes » : le registre des dossiers
   // clients (signé → payé → commandé → livré). L'ancienne page reste sur
   // /livraisons, hors menu.
