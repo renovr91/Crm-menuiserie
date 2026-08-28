@@ -1153,23 +1153,41 @@ export async function POST(request: Request) {
             new Date(l.date_operation).getTime() >= depuis,
         )
 
+        // UN DEVIS SIGNÉ N'EST PAS UN DEVIS PARMI D'AUTRES. Un dossier ouvert
+        // (table `commandes`) veut dire : signé, en attente de règlement —
+        // c'est très exactement ce qu'un virement vient solder. Proposer à côté
+        // les autres devis du même client (un ancien, un non signé) oblige
+        // l'utilisateur à trancher une question déjà tranchée.
+        const { data: dossiers } = await supabase
+          .from('commandes')
+          .select('devis_numero, stage')
+          .in('stage', ['signe', 'a_commander'])
+        const signes = new Set((dossiers || []).map((d) => d.devis_numero))
+
         return NextResponse.json({
-          virements: aProposer.map((l) => ({
-            id: l.id,
-            date: l.date_operation,
-            montant: l.montant,
-            banque: l.source,
-            libelle: l.libelle,
-            // La MEILLEURE piste d'abord : c'est elle qu'on propose. Les
-            // suivantes restent visibles pour que l'agent puisse nuancer.
-            pistes: l.suggestions.slice(0, 3).map((s: Record<string, unknown>) => ({
+          virements: aProposer.map((l) => {
+            const enrichies = l.suggestions.map((s: Record<string, unknown>) => ({
               devis: s.reference,
               client: s.client,
               montant_attendu: s.montant_attendu,
               motif: s.motif,
               certitude: s.certitude,
-            })),
-          })),
+              signe: signes.has(s.reference as string),
+            }))
+            // On ne garde que les devis signés dès qu'il y en a : le reste
+            // n'est pas une alternative, c'est du bruit.
+            const retenues = enrichies.some((s) => s.signe)
+              ? enrichies.filter((s) => s.signe)
+              : enrichies
+            return {
+              id: l.id,
+              date: l.date_operation,
+              montant: l.montant,
+              banque: l.source,
+              libelle: l.libelle,
+              pistes: retenues.slice(0, 3),
+            }
+          }),
         })
       }
 
