@@ -27,6 +27,9 @@ export async function creerBrouillonFacture(
   body: Record<string, any>,
 ): Promise<Reponse> {
   const environnement = body.environnement === 'prod' ? 'prod' : 'test'
+  // Fourniture seule ou chantier avec pose : la réponse change le vocabulaire
+  // ET l'exigibilité du solde. Calculée une fois, utilisée partout.
+  let aPoseDevis = false
   const type = ['facture', 'acompte', 'solde', 'avoir'].includes(String(body.type)) ? String(body.type) : 'facture'
   const devisNumero = String(body.devis_numero || '').trim()
 
@@ -35,7 +38,7 @@ export async function creerBrouillonFacture(
   if (devisNumero) {
     const { data } = await supabase
       .from('devis_claudus')
-      .select('numero, client_nom, client_civilite, client_adresse, client_cp, client_ville, montant_ht, tva_taux, acompte_pct, conditions_reglement, pose, lignes')
+      .select('numero, client_nom, client_civilite, client_adresse, client_cp, client_ville, montant_ht, tva_taux, acompte_pct, conditions_reglement, pose, livraison, lignes')
       .eq('numero', devisNumero)
       .maybeSingle()
     devis = data
@@ -68,6 +71,8 @@ export async function creerBrouillonFacture(
       },
       400)
   }
+
+  aPoseDevis = !!devis?.pose && Object.keys(devis.pose as object).length > 0
 
   // ---- 3. Les lignes. Celles fournies, sinon celles du devis.
   let lignes: Ligne[] = []
@@ -150,9 +155,20 @@ export async function creerBrouillonFacture(
 
     const arrondi = (n: number) => Math.round(n * 100) / 100
     const acompteTtc = arrondi(montant * (1 + tva / 100))
+    // QUAND LE SOLDE EST-IL DÛ ? Trois cas, et ils ne se disent pas pareil :
+    //  - chantier (pose) : à l'achèvement des travaux ;
+    //  - fourniture livrée : AVANT la livraison — la marchandise ne part pas
+    //    d'un entrepôt sans être soldée ;
+    //  - fourniture retirée sur place : au retrait de la marchandise.
+    // Écrire « à la livraison » quand il n'y a pas de livraison, ou quand le
+    // solde est en réalité exigible avant, engage l'entreprise à tort.
+    const aLivraison = !!devis?.livraison && Object.keys(devis.livraison as object).length > 0
+    const remise = aPoseDevis ? 'chantier' : aLivraison ? 'livraison' : 'retrait'
+
     mentions = {
       acompte: {
         pct,
+        remise,
         devis: devisNumero || null,
         commande_ht: arrondi(baseHt),
         commande_ttc: arrondi(baseTtc),
@@ -293,7 +309,7 @@ export async function creerBrouillonFacture(
   }
 
   const aujourdhui = new Date().toISOString().slice(0, 10)
-  const aPose = !!devis?.pose && Object.keys(devis.pose as object).length > 0
+  const aPose = aPoseDevis
 
   const payload = {
     environnement,
