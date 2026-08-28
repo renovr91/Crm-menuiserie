@@ -52,7 +52,11 @@ export async function creerBrouillonFacture(
     cp: String(c.cp || devis?.client_cp || '').trim(),
     ville: String(c.ville || devis?.client_ville || '').trim(),
   }
-  const manquants = (['nom', 'adresse', 'cp', 'ville'] as const).filter((k) => !client[k])
+  // Un AVOIR reprend le client de la facture qu'il annule : rien à fournir, et
+  // rien à valider ici — la branche 'avoir' plus bas écrase ce bloc.
+  const manquants = type === 'avoir'
+    ? []
+    : (['nom', 'adresse', 'cp', 'ville'] as const).filter((k) => !client[k])
   if (manquants.length) {
     // On nomme précisément ce qui manque : le moteur refuserait à l'émission,
     // beaucoup plus tard, avec un message bien moins clair.
