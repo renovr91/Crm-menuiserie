@@ -27,9 +27,12 @@ export async function POST(request: NextRequest) {
   let statut = 'envoye'
   let erreur: string | null = null
   let credits: number | null = null
+  let tag: string | null = null
   try {
     const res = await sendNotifSMS(telephone, message)
     credits = typeof res?.totalCreditsRemoved === 'number' ? res.totalCreditsRemoved : null
+    // OVH renvoie le même tag sur la réponse du client → permet de la rattacher
+    tag = typeof res?.tag === 'string' ? res.tag : null
   } catch (e) {
     statut = 'erreur'
     erreur = e instanceof Error ? e.message.slice(0, 300) : 'erreur inconnue'
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
     statut,
     erreur,
     credits,
+    tag,
   })
 
   if (statut === 'erreur') return NextResponse.json({ error: erreur }, { status: 502 })

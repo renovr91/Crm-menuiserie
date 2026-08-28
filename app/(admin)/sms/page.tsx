@@ -2,6 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+interface Reponse {
+  id: number
+  telephone: string
+  message: string
+  tag: string | null
+  recu_le: string
+}
+
 interface SmsLigne {
   id: string
   telephone: string
@@ -29,6 +37,7 @@ export default function SmsPage() {
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
   const [retour, setRetour] = useState<{ ok: boolean; texte: string } | null>(null)
   const [historique, setHistorique] = useState<SmsLigne[]>([])
+  const [reponses, setReponses] = useState<Reponse[]>([])
 
   useEffect(() => {
     try { setEnvoyePar(localStorage.getItem('sms_envoye_par') || '') } catch {}
@@ -42,7 +51,16 @@ export default function SmsPage() {
     } catch {}
   }, [])
 
-  useEffect(() => { chargerHistorique() }, [chargerHistorique])
+  // Relève les réponses clients chez OVH à l'ouverture de la page
+  const chargerReponses = useCallback(async () => {
+    try {
+      const r = await fetch('/api/sms/reponses', { cache: 'no-store' })
+      const j = await r.json()
+      if (r.ok) setReponses(j.reponses || [])
+    } catch {}
+  }, [])
+
+  useEffect(() => { chargerHistorique(); chargerReponses() }, [chargerHistorique, chargerReponses])
 
   async function envoyer() {
     setRetour(null)
@@ -115,6 +133,25 @@ export default function SmsPage() {
           </div>
         )}
       </div>
+
+      {reponses.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-gray-600 mb-2">💬 Réponses des clients</h2>
+          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {reponses.map((r) => (
+              <div key={r.id} className="px-4 py-3 flex gap-4">
+                <div className="text-xs text-gray-400 whitespace-nowrap w-24">
+                  {new Date(r.recu_le).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm text-gray-900">{r.message}</div>
+                  <a href={`tel:${r.telephone}`} className="text-xs text-blue-600 hover:underline">{r.telephone}</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h2 className="text-sm font-medium text-gray-600 mb-2">Derniers envois</h2>
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">

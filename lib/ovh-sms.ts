@@ -73,3 +73,32 @@ export async function sendNotifSMS(phone: string, message: string) {
     priority: 'high',
   })
 }
+
+// ---------------------------------------------------------------------------
+// Réponses des clients
+// ---------------------------------------------------------------------------
+
+export interface ReponseSms {
+  id: number
+  sender: string          // le numéro du client
+  message: string
+  tag: string | null      // identique au tag du SMS envoyé → corrélation
+  creationDatetime: string
+}
+
+/** Liste les réponses en attente chez OVH (gratuit, non facturé). */
+export async function listerReponses(): Promise<ReponseSms[]> {
+  const ids: number[] = await ovhRequest('GET', `/sms/${SERVICE}/incoming`)
+  if (!Array.isArray(ids) || ids.length === 0) return []
+  // Borné : une file anormalement longue ne doit pas faire expirer la fonction.
+  const lot = ids.slice(-50)
+  const details = await Promise.all(
+    lot.map((id) => ovhRequest('GET', `/sms/${SERVICE}/incoming/${id}`).catch(() => null)),
+  )
+  return details.filter(Boolean) as ReponseSms[]
+}
+
+/** Retire une réponse de la file OVH une fois archivée chez nous. */
+export async function supprimerReponse(id: number) {
+  return ovhRequest('DELETE', `/sms/${SERVICE}/incoming/${id}`)
+}
