@@ -256,7 +256,11 @@ export async function creerBrouillonFacture(
       designation: l.designation,
       details: l.details,
       quantite: Number(l.quantite) || 1,
-      prix_unitaire_ht: -Math.abs(Number(l.prix_unitaire_ht) || 0),
+      // POSITIF : dans ce moteur, un avoir porte les MÊMES montants que la
+      // facture qu'il annule — sa nature de note de crédit vient du type et de
+      // la série AV. Des lignes négatives donnent un total TTC négatif, que
+      // `facture_emettre` refuse (et il a raison : c'est sa règle).
+      prix_unitaire_ht: Math.abs(Number(l.prix_unitaire_ht) || 0),
       tva: Number(l.tva ?? 20),
     }))
     if (!lignes.length) return reponse({ error: `${ref} n'a aucune ligne à annuler` }, 400)
