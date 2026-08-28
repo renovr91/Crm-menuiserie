@@ -90,8 +90,9 @@ export default function SmsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">✉️ SMS clients</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Envoi via OVH — expéditeur affiché : <b>RENOVR91</b>. Le client ne peut pas répondre au SMS :
-          termine ton message par « Répondez au 06 32 30 59 72 » si tu attends une réponse.
+          Envoi via OVH — le client voit un <b>numéro court partagé</b> et peut <b>répondre directement</b> :
+          ses réponses remontent ici. (Le sender ID « RENOVR91 » a été refusé par OVH faute de Kbis + pièce
+          d’identité — tant qu’il n’est pas validé, c’est ce mode qui s’applique.)
         </p>
       </div>
 
