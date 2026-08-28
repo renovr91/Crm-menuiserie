@@ -11,6 +11,13 @@ import { listConversations, getAdInfo } from './lbc-messaging'
 // Types
 export type LeadStatut = 'nouveau' | 'a_repondre' | 'repondu' | 'devis_a_traiter' | 'devis_envoye' | 'relance_1' | 'relance_2' | 'en_attente' | 'gagne' | 'perdu' | 'pas_interesse'
 
+// Ordre du pipeline. ⚠️ La base contient aussi 'devis_hermes' (16 leads),
+// absent du type et de l'écran : ces leads ne sont donc pas affichés.
+export const ALL_STATUTS: LeadStatut[] = [
+  'nouveau', 'a_repondre', 'repondu', 'devis_a_traiter', 'devis_envoye',
+  'relance_1', 'relance_2', 'en_attente', 'gagne', 'perdu', 'pas_interesse',
+]
+
 export interface LBCLead {
   id: string
   conversation_id: string
@@ -211,39 +218,70 @@ export async function getLeads(filters?: {
 }): Promise<LeadWithCounts> {
   const supabase = createAdminClient()
 
-  // Requête de base
-  let query = supabase
-    .from('lbc_leads')
-    .select('*')
-    .order('dernier_message_date', { ascending: false, nullsFirst: false })
+  // ⚠️ PostgREST plafonne toute réponse à 1000 lignes. Avec >4000 leads, un
+  // `select('*')` sans limite ne ramenait que les 1000 plus récents — presque
+  // tous en "nouveau" — si bien que les colonnes "Devis envoyé", "Gagné", etc.
+  // apparaissaient quasi vides alors que la base était pleine. Idem pour les
+  // compteurs, calculés sur ce même échantillon tronqué.
+  // On récupère donc les comptages EXACTS séparément, et les leads PAR COLONNE.
+  const PAR_COLONNE = 200
 
+  // Les filtres département/recherche s'appliquent aussi bien au comptage
+  // qu'à la liste : on les pose sur chaque requête via ce petit assistant.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const appliquerFiltres = (q: any) => {
+    if (filters?.departement) q = q.eq('departement', filters.departement)
+    if (filters?.search) {
+      const t = `%${filters.search}%`
+      q = q.or(
+        `contact_name.ilike.${t},city.ilike.${t},zip_code.ilike.${t},ad_title.ilike.${t},telephone.ilike.${t},dernier_message.ilike.${t}`,
+      )
+    }
+    return q
+  }
+
+  // Comptages exacts (head: true → aucune donnée transférée, juste le total)
+  const comptages = await Promise.all(
+    ALL_STATUTS.map(async (st) => {
+      let q = supabase.from('lbc_leads').select('id', { count: 'exact', head: true }).eq('statut', st)
+      q = appliquerFiltres(q)
+      const { count } = await q
+      return [st, count || 0] as const
+    }),
+  )
+  const counts = Object.fromEntries(comptages) as Record<LeadStatut, number>
+
+  // Leads : soit une seule colonne demandée, soit les N plus récents de chacune.
+  let leads: LBCLead[] = []
   if (filters?.statut) {
-    query = query.eq('statut', filters.statut)
-  }
-  if (filters?.departement) {
-    query = query.eq('departement', filters.departement)
-  }
-  if (filters?.search) {
-    const s = `%${filters.search}%`
-    query = query.or(`contact_name.ilike.${s},city.ilike.${s},zip_code.ilike.${s},ad_title.ilike.${s},telephone.ilike.${s},dernier_message.ilike.${s}`)
+    let q = supabase
+      .from('lbc_leads')
+      .select('*')
+      .eq('statut', filters.statut)
+      .order('dernier_message_date', { ascending: false, nullsFirst: false })
+      .limit(1000)
+    q = appliquerFiltres(q)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    leads = (data || []) as LBCLead[]
+  } else {
+    const parColonne = await Promise.all(
+      ALL_STATUTS.map(async (st) => {
+        let q = supabase
+          .from('lbc_leads')
+          .select('*')
+          .eq('statut', st)
+          .order('dernier_message_date', { ascending: false, nullsFirst: false })
+          .limit(PAR_COLONNE)
+        q = appliquerFiltres(q)
+        const { data } = await q
+        return (data || []) as LBCLead[]
+      }),
+    )
+    leads = parColonne.flat()
   }
 
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-
-  // Comptage par statut (toujours sur tous les leads, pas filtré)
-  const { data: allLeads } = await supabase
-    .from('lbc_leads')
-    .select('statut')
-
-  const counts: Record<LeadStatut, number> = {
-    nouveau: 0, a_repondre: 0, repondu: 0, devis_a_traiter: 0, devis_envoye: 0, relance_1: 0, relance_2: 0, en_attente: 0, gagne: 0, perdu: 0, pas_interesse: 0
-  }
-  for (const l of (allLeads || [])) {
-    if (l.statut in counts) counts[l.statut as LeadStatut]++
-  }
-
-  return { leads: (data || []) as LBCLead[], counts }
+  return { leads, counts }
 }
 
 /**
