@@ -54,11 +54,24 @@ const numeroDansLibelle = (libelle: string): string | null => {
 const nomDansLibelle = (client: string | null, libelle: string) => {
   const c = normaliser(client || '')
   if (c.length < 4) return false          // « SCI », « ALM » : trop court, trop de faux positifs
-  const l = normaliser(libelle)
-  // Un seul mot du nom suffit s'il fait au moins 4 lettres — les libellés
-  // inversent souvent prénom et nom, ou n'en gardent qu'un.
-  return c.split(' ').some((mot) => mot.length >= 4 && l.includes(mot))
+  // Comparaison MOT À MOT, jamais en sous-chaîne. Mesuré le 28/08/2026 :
+  // `includes` rapprochait « Mme Isabelle ANDRIOT » du client « Abel »
+  // (ABEL ⊂ IS-ABEL-LE) — un encaissement attribué au mauvais client.
+  const motsLibelle = new Set(normaliser(libelle).split(' '))
+  return c.split(' ').some((mot) => mot.length >= 4 && !MOTS_METIER.has(mot) && motsLibelle.has(mot))
 }
+
+// Les libellés de virement DÉCRIVENT l'achat autant qu'ils nomment le payeur :
+// « Acompte 50 commande volet Roulant ». Et certains devis portent un intitulé
+// plutôt qu'un patronyme (« Kevin - Volet 2 »). Sans cette liste, le mot
+// « VOLET » suffisait à rapprocher deux dossiers étrangers l'un à l'autre.
+const MOTS_METIER = new Set([
+  'VOLET', 'VOLETS', 'PORTE', 'PORTES', 'FENETRE', 'FENETRES', 'GARAGE',
+  'PORTAIL', 'STORE', 'STORES', 'COULISSANT', 'BAIE', 'ROULANT', 'ROULANTS',
+  'MENUISERIE', 'MENUISERIES', 'ACOMPTE', 'SOLDE', 'COMMANDE', 'FACTURE',
+  'DEVIS', 'VIREMENT', 'PAIEMENT', 'REGLEMENT', 'TRAVAUX', 'CHANTIER',
+  'RENOV', 'POSE', 'FOURNITURE', 'REMISE', 'CHEQUE', 'INST', 'LIBELL',
+])
 
 export type LignePointage = Record<string, any> & {
   montant: number
