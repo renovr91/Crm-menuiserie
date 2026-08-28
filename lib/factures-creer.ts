@@ -137,6 +137,13 @@ export async function creerBrouillonFacture(
         const utiles = String(l.details || '')
           .split('\n')
           .filter((d) => IDENTIFIANT.test(d))
+          // Les devis déjà enregistrés portent les scories du libellé
+          // fournisseur (« Lisse Lisse ») : les corriger à la source ne répare
+          // que les devis À VENIR. Sur une facture, un mot doublé se lit comme
+          // une faute de saisie — on nettoie donc aussi ce qu'on recopie.
+          .map((d) => d.split(/\s+/)
+            .filter((mot, i, t) => mot.toLowerCase() !== (t[i - 1] || '').toLowerCase())
+            .join(' '))
         return `— ${l.designation}${q}` + (utiles.length ? `\n${utiles.join('\n')}` : '')
       })
       .join('\n')
