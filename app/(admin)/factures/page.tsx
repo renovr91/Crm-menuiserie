@@ -568,10 +568,8 @@ function OngletFactures() {
                   </td>
                   <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{r.emise_par || ''}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {r.pdf_path && (
-                      <a href={`/api/compta/factures/${r.numero}/pdf`} target="_blank" rel="noreferrer"
-                         className="mr-2" title="Télécharger le PDF">⬇️</a>
-                    )}
+                    <a href={`/api/compta/factures/${r.numero}/pdf`} target="_blank" rel="noreferrer"
+                       className="mr-2" title="Télécharger le PDF">⬇️</a>
                     {r.type !== 'avoir' && !r.annulee_par && r.statut !== 'payee' && (
                       <button onClick={() => setPaiementPour(r)} title="Saisir un paiement">💶</button>
                     )}

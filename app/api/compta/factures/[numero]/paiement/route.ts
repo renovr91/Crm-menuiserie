@@ -44,7 +44,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ numero: st
       p_note: corps.note || null,
       p_acteur: acteur,
     })
+
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // L'archive PDF date d'avant ce paiement : on la retire, quel que soit le
+    // statut résultant (payée OU partiellement payée — dans les deux cas le
+    // document archivé ment sur les règlements). Le prochain téléchargement
+    // regénère et ré-archive, via le repli de la route PDF.
+    await sb.from('factures').update({ pdf_path: null }).eq('id', f.id)
 
     await sb.from('facture_evenements').insert({
       facture_id: f.id, evenement: 'pdf_a_regenerer', acteur,
