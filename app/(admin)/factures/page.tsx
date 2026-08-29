@@ -9,6 +9,7 @@ interface FactureRow {
   total_ht: number; total_ttc: number; paye: number; reste: number
   date_echeance: string; emise_le: string; emise_par: string | null
   pdf_path: string | null; pdf_a_regenerer: boolean
+  annulee_par: string | null; avoir_de: string | null
 }
 interface MoisRow { mois: string; facture_ttc: number; encaisse: number; nb: number; marge_ht: number | null }
 interface TvaRow { taux: number; base_ht_facturee: number; tva_facturee: number; tva_encaissee: number }
@@ -196,11 +197,11 @@ function BlocProformas({ onConverti }: { onConverti: () => void }) {
     let regle_le: string | undefined
     if (action === 'convertir') {
       const saisie = window.prompt(
-        'Date de l’encaissement (AAAA-MM-JJ).\n\nC’est elle qui datera la facture d’acompte : la TVA est exigible à l’encaissement, pas à la saisie.',
+        'Quel jour l’argent est-il arrivé ? (AAAA-MM-JJ)\n\nC’est cette date qui figurera sur la facture.',
         new Date().toISOString().slice(0, 10))
       if (!saisie) return
       regle_le = saisie.trim()
-    } else if (!window.confirm('Supprimer cette proforma ? (aucune valeur comptable, aucune trace)')) return
+    } else if (!window.confirm('Supprimer cette demande de règlement ?\n\nRien n’a été facturé : aucune trace, rien à annuler.')) return
 
     setOccupe(numero); setMessage(null)
     try {
@@ -211,8 +212,8 @@ function BlocProformas({ onConverti }: { onConverti: () => void }) {
       const d = await r.json()
       if (!r.ok) { setMessage(`Refusé : ${d.error}`); return }
       setMessage(action === 'convertir'
-        ? 'Brouillon de facture créé — il reste à l’émettre ci-dessus.'
-        : 'Proforma supprimée.')
+        ? 'Facture préparée — elle vous attend juste en dessous, il reste à l’émettre.'
+        : 'Demande supprimée.')
       charger(); onConverti()
     } catch { setMessage('Erreur réseau') } finally { setOccupe(null) }
   }
@@ -221,11 +222,13 @@ function BlocProformas({ onConverti }: { onConverti: () => void }) {
   return (
     <div className="mb-5 rounded-lg border p-4" style={{ borderColor: 'var(--border-default)', background: 'var(--surface-2)' }}>
       <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-        Proformas — appels de fonds {rows.length ? `(${rows.length})` : ''}
+        Demandes de règlement (avant facture) {rows.length ? `(${rows.length})` : ''}
       </h3>
       <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
-        Ce ne sont pas des factures : aucun numéro de facture consommé, aucune TVA exigible.
-        Une fois le règlement encaissé, « Convertir » crée le brouillon de facture d’acompte.
+        Pour demander un paiement <b>avant</b> de livrer : on ne peut pas encore faire de facture,
+        alors on envoie ce document (une « proforma »). Le client paie, vous cliquez sur
+        « Le client a payé », et la facture se crée toute seule. S’il ne paie pas, vous supprimez :
+        rien n’a été facturé, rien à annuler.
       </p>
       {message && <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>{message}</p>}
       {rows.map((p) => (
@@ -254,7 +257,7 @@ function BlocProformas({ onConverti }: { onConverti: () => void }) {
               <>
                 <button onClick={() => agir(p.numero, 'convertir')} disabled={occupe === p.numero}
                         className="px-3 py-1 rounded text-xs font-semibold text-white bg-green-700 hover:bg-green-800 disabled:opacity-50">
-                  {occupe === p.numero ? '…' : 'Convertir en facture'}
+                  {occupe === p.numero ? '…' : 'Le client a payé → créer la facture'}
                 </button>
                 <button onClick={() => agir(p.numero, 'supprimer')} disabled={occupe === p.numero}
                         className="px-3 py-1 rounded text-xs border hover:bg-red-50"
@@ -418,24 +421,47 @@ function OngletFactures() {
             </thead>
             <tbody>
               {filtres.map((r) => (
-                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)' }}>
-                  <td className="px-3 py-2 font-mono whitespace-nowrap">{r.numero}</td>
+                <tr key={r.id} className="border-t"
+                    style={{ borderColor: 'var(--border-subtle)',
+                             color: r.annulee_par ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                  <td className="px-3 py-2 font-mono whitespace-nowrap">
+                    <span className={r.annulee_par ? 'line-through' : ''}>{r.numero}</span>
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">{dateFr(r.emise_le)}</td>
                   <td className="px-3 py-2">{TYPE_LABELS[r.type] || r.type}</td>
                   <td className="px-3 py-2">{r.client_nom}</td>
                   <td className="px-3 py-2 font-mono">{r.devis_numero || '—'}</td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{eur(r.type === 'avoir' ? -r.total_ttc : r.total_ttc)}</td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{r.type === 'avoir' ? '—' : eur(r.paye)}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <span className={r.annulee_par ? 'line-through' : ''}>
+                      {eur(r.type === 'avoir' ? -r.total_ttc : r.total_ttc)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">{r.type === 'avoir' || r.annulee_par ? '—' : eur(r.paye)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
-                    {r.type === 'avoir' ? '—' : eur(r.reste)}
+                    {r.type === 'avoir' || r.annulee_par ? '—' : eur(r.reste)}
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUT_STYLE[r.statut] || ''}`}>
-                      {r.type === 'avoir' ? 'Avoir' : (STATUT_LABELS[r.statut] || r.statut)}
-                    </span>
+                    {r.annulee_par ? (
+                      // « Émise » sur une facture annulée était le vrai piège :
+                      // elle apparaissait comme due, à côté de celle qui la
+                      // remplace. On dit maintenant par quoi elle est annulée.
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700"
+                            title={`Annulée par l'avoir ${r.annulee_par}`}>
+                        Annulée · {r.annulee_par}
+                      </span>
+                    ) : r.type === 'avoir' ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+                            title={r.avoir_de ? `Annule la facture ${r.avoir_de}` : undefined}>
+                        Avoir{r.avoir_de ? ` · annule ${r.avoir_de}` : ''}
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUT_STYLE[r.statut] || ''}`}>
+                        {STATUT_LABELS[r.statut] || r.statut}
+                      </span>
+                    )}
                     {r.pdf_a_regenerer && (
                       <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800"
-                            title={`PDF antérieur au dernier paiement — python3 facturer.py pdf ${r.numero}`}>
+                            title="PDF antérieur au dernier paiement : rouvrez-le, il se régénère avec la mention d'acquittement">
                         PDF à régénérer
                       </span>
                     )}
@@ -446,7 +472,7 @@ function OngletFactures() {
                       <a href={`/api/compta/factures/${r.numero}/pdf`} target="_blank" rel="noreferrer"
                          className="mr-2" title="Télécharger le PDF">⬇️</a>
                     )}
-                    {r.type !== 'avoir' && r.statut !== 'payee' && (
+                    {r.type !== 'avoir' && !r.annulee_par && r.statut !== 'payee' && (
                       <button onClick={() => setPaiementPour(r)} title="Saisir un paiement">💶</button>
                     )}
                   </td>

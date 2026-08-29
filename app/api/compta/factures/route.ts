@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const sb = admin()
     let query = sb
       .from('factures')
-      .select('id, numero, serie, type, statut, client, devis_numero, total_ht, total_ttc, date_echeance, emise_le, emise_par, pdf_path')
+      .select('id, numero, serie, type, statut, client, devis_numero, total_ht, total_ttc, date_echeance, emise_le, emise_par, pdf_path, facture_liee')
       .eq('environnement', envFacturation(req))
       .neq('statut', 'brouillon')
       .order('numero', { ascending: false })
@@ -50,8 +50,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // UNE FACTURE ANNULÉE PAR UN AVOIR N'EST PLUS DUE. Sans cette information,
+    // l'écran l'affichait comme impayée avec « reste : 601,50 € » à côté de la
+    // facture qui la remplace : deux créances pour un seul règlement, et un
+    // total à encaisser doublé. C'est ce qui rendait l'onglet illisible.
+    const annulees: Record<string, string> = {}
+    for (const a of factures || []) {
+      if (a.type === 'avoir' && a.facture_liee && a.numero) annulees[a.facture_liee] = a.numero
+    }
+
     const rows = (factures || []).map((f) => {
-      const paye = paiementsParFacture[f.id] || 0
+      const estAvoir = f.type === 'avoir'
+      const annuleePar = annulees[f.id] || null
+      // Un AVOIR n'est pas une créance : il ne se « règle » pas, il annule.
+      // Un « reste » sur un avoir laissait croire que le client devait ce montant.
+      const paye = estAvoir || annuleePar ? Number(f.total_ttc) : (paiementsParFacture[f.id] || 0)
       const client = (f.client || {}) as { civilite?: string; nom?: string; email?: string }
       return {
         id: f.id,
@@ -63,8 +76,13 @@ export async function GET(req: NextRequest) {
         devis_numero: f.devis_numero,
         total_ht: Number(f.total_ht),
         total_ttc: Number(f.total_ttc),
-        paye,
-        reste: somme([Number(f.total_ttc), -paye]),
+        paye: estAvoir || annuleePar ? 0 : paye,
+        // Ni un avoir ni une facture annulée n'attendent de règlement.
+        reste: estAvoir || annuleePar ? 0 : somme([Number(f.total_ttc), -paye]),
+        annulee_par: annuleePar,
+        avoir_de: estAvoir && f.facture_liee
+          ? (factures || []).find((x) => x.id === f.facture_liee)?.numero || null
+          : null,
         date_echeance: f.date_echeance,
         emise_le: f.emise_le,
         emise_par: f.emise_par,
