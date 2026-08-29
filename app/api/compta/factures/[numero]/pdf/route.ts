@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ numero: str
       .from('factures').select('pdf_path').eq('numero', numero)
       .eq('environnement', envFacturation(req)).single()
     if (!f?.pdf_path)
-      return NextResponse.json({ error: 'Aucun PDF archivé pour cette facture — la régénérer : python3 facturer.py pdf ' + numero }, { status: 404 })
+      return NextResponse.json({ error: `Aucun PDF archivé pour ${numero} : il se crée à la première consultation depuis le site (route admin ou porte de service).` }, { status: 404 })
 
     const [bucket, ...reste] = f.pdf_path.split('/')
     const { data: signed, error } = await sb.storage.from(bucket).createSignedUrl(reste.join('/'), 300)

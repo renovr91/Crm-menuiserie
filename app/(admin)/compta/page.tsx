@@ -170,6 +170,106 @@ type BrouillonRow = {
   cree_par: string | null; cree_le: string
 }
 
+type ProformaRow = {
+  id: string; numero: string; statut: string; client_nom: string | null
+  devis_numero: string | null; total_ttc: number; cree_le: string
+  expiree: boolean; facture: { numero: string | null; statut: string } | null
+}
+
+/** LES PROFORMAS — appels de fonds, PAS des factures.
+ *  Bloc distinct de la liste des factures, exprès : rien de ce qui est ici
+ *  n'a de valeur comptable, et rien ne doit entrer dans les totaux. */
+function BlocProformas({ onConverti }: { onConverti: () => void }) {
+  const [rows, setRows] = useState<ProformaRow[]>([])
+  const [occupe, setOccupe] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const charger = useCallback(() => {
+    fetch('/api/compta/proformas' + envQS('?'))
+      .then((r) => r.json())
+      .then((d) => setRows(Array.isArray(d) ? d : []))
+      .catch(console.error)
+  }, [])
+  useEffect(charger, [charger])
+
+  const agir = async (numero: string, action: 'convertir' | 'supprimer') => {
+    let regle_le: string | undefined
+    if (action === 'convertir') {
+      const saisie = window.prompt(
+        'Date de l’encaissement (AAAA-MM-JJ).\n\nC’est elle qui datera la facture d’acompte : la TVA est exigible à l’encaissement, pas à la saisie.',
+        new Date().toISOString().slice(0, 10))
+      if (!saisie) return
+      regle_le = saisie.trim()
+    } else if (!window.confirm('Supprimer cette proforma ? (aucune valeur comptable, aucune trace)')) return
+
+    setOccupe(numero); setMessage(null)
+    try {
+      const r = await fetch('/api/compta/proformas' + envQS('?'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero, action, regle_le }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setMessage(`Refusé : ${d.error}`); return }
+      setMessage(action === 'convertir'
+        ? 'Brouillon de facture créé — il reste à l’émettre ci-dessus.'
+        : 'Proforma supprimée.')
+      charger(); onConverti()
+    } catch { setMessage('Erreur réseau') } finally { setOccupe(null) }
+  }
+
+  if (!rows.length && !message) return null
+  return (
+    <div className="mb-5 rounded-lg border p-4" style={{ borderColor: 'var(--border-default)', background: 'var(--surface-2)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+        Proformas — appels de fonds {rows.length ? `(${rows.length})` : ''}
+      </h3>
+      <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+        Ce ne sont pas des factures : aucun numéro de facture consommé, aucune TVA exigible.
+        Une fois le règlement encaissé, « Convertir » crée le brouillon de facture d’acompte.
+      </p>
+      {message && <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>{message}</p>}
+      {rows.map((p) => (
+        <div key={p.id} className="flex flex-wrap items-center gap-3 py-2 border-t text-sm"
+             style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)' }}>
+          <span className="font-mono text-xs">{p.numero}</span>
+          <span className="font-medium">{p.client_nom || '(sans nom)'}</span>
+          {p.devis_numero && <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{p.devis_numero}</span>}
+          <span>{eur(p.total_ttc)} TTC</span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>du {dateFr(p.cree_le)}</span>
+          {p.expiree && (
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800">
+              expirée — ne pas encaisser sur ce prix
+            </span>
+          )}
+          {p.statut === 'convertie' && (
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 text-green-800">
+              convertie → {p.facture?.numero || 'brouillon'}
+            </span>
+          )}
+          <span className="ml-auto flex gap-2">
+            <a href={`/api/compta/proformas/${encodeURIComponent(p.numero)}/pdf`} target="_blank" rel="noreferrer"
+               className="px-3 py-1 rounded text-xs border"
+               style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>PDF</a>
+            {p.statut === 'active' && (
+              <>
+                <button onClick={() => agir(p.numero, 'convertir')} disabled={occupe === p.numero}
+                        className="px-3 py-1 rounded text-xs font-semibold text-white bg-green-700 hover:bg-green-800 disabled:opacity-50">
+                  {occupe === p.numero ? '…' : 'Convertir en facture'}
+                </button>
+                <button onClick={() => agir(p.numero, 'supprimer')} disabled={occupe === p.numero}
+                        className="px-3 py-1 rounded text-xs border hover:bg-red-50"
+                        style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+                  Supprimer
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function BlocBrouillons({ onEmis }: { onEmis: () => void }) {
   const [rows, setRows] = useState<BrouillonRow[]>([])
   const [occupe, setOccupe] = useState<string | null>(null)
@@ -272,6 +372,7 @@ function OngletFactures() {
 
   return (
     <div>
+      <BlocProformas onConverti={charger} />
       <BlocBrouillons onEmis={charger} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <Carte label="Factures" valeur={String(stats.nb)} />
