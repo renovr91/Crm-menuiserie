@@ -336,6 +336,106 @@ function BlocBrouillons({ onEmis }: { onEmis: () => void }) {
   )
 }
 
+
+// ---------- vue par affaire ----------
+type AffaireDoc = {
+  numero: string | null; type: string; statut: string; total_ttc: number
+  emise_le: string | null; annulee: boolean; encaisse: number; pdf: boolean
+}
+type Affaire = {
+  reference: string; client: string | null; montant_commande: number
+  encaisse: number; facture: number; reste: number; a_facturer: number
+  etape: string | null; documents: AffaireDoc[]
+}
+
+const ETAPE_LABELS: Record<string, string> = {
+  signe: 'signé, attente règlement', a_commander: 'payé → à commander',
+  commandee: 'commandé fournisseur', livree: 'livré',
+}
+
+/** L'AFFAIRE COMME LE GÉRANT LA LIT : « 1 203 €, 601,50 payés, reste 601,50 ».
+ *  La liste plate des documents répondait « reste 0 » sur un acompte soldé —
+ *  vrai pour le papier, faux pour l'affaire. Ici une ligne = un client, les
+ *  documents sont dépliables dessous, et les annulés restent visibles mais
+ *  hors des comptes. */
+function OngletAffaires() {
+  const [affaires, setAffaires] = useState<Affaire[]>([])
+  const [totaux, setTotaux] = useState<{ encaisse: number; reste: number; a_facturer: number } | null>(null)
+  const [ouvert, setOuvert] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/compta/dossiers' + envQS('?'))
+      .then((r) => r.json())
+      .then((d) => { setAffaires(d.affaires || []); setTotaux(d.totaux || null) })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Chargement…</p>
+  return (
+    <div>
+      {totaux && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          <Carte label="Encaissé" valeur={eur(totaux.encaisse)} />
+          <Carte label="Reste à encaisser" valeur={eur(totaux.reste)} accent />
+          <Carte label="Dont pas encore facturé (soldes à venir)" valeur={eur(totaux.a_facturer)} />
+        </div>
+      )}
+      {!affaires.length && (
+        <p className="text-sm py-8 text-center" style={{ color: 'var(--text-muted)' }}>Aucune affaire facturée pour l&apos;instant.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {affaires.map((a) => (
+          <div key={a.reference} className="rounded-lg border" style={{ borderColor: 'var(--border-default)', background: 'var(--surface-2)' }}>
+            <button onClick={() => setOuvert(ouvert === a.reference ? null : a.reference)}
+                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm">
+              <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{a.client || '(sans nom)'}</span>
+              <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{a.reference}</span>
+              {a.etape && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>· {ETAPE_LABELS[a.etape] || a.etape}</span>}
+              <span className="ml-auto flex items-center gap-4 whitespace-nowrap">
+                <span style={{ color: 'var(--text-secondary)' }}>{eur(a.montant_commande)}</span>
+                <span className="text-green-700 font-medium">payé {eur(a.encaisse)}</span>
+                {a.reste > 0 ? (
+                  <span className="font-semibold text-red-700">reste {eur(a.reste)}</span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">soldée</span>
+                )}
+                <span style={{ color: 'var(--text-muted)' }}>{ouvert === a.reference ? '▾' : '▸'}</span>
+              </span>
+            </button>
+            {ouvert === a.reference && (
+              <div className="px-4 pb-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+                {a.a_facturer > 0 && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                    Solde de {eur(a.a_facturer)} pas encore facturé — la facture de solde se fait à la livraison et déduira les acomptes.
+                  </p>
+                )}
+                {a.documents.map((d) => (
+                  <div key={d.numero || d.emise_le} className="flex flex-wrap items-center gap-3 py-1.5 text-sm"
+                       style={{ color: d.annulee ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                    <span className={`font-mono text-xs ${d.annulee ? 'line-through' : ''}`}>{d.numero}</span>
+                    <span className="text-xs">{TYPE_LABELS[d.type] || d.type}</span>
+                    <span className={d.annulee ? 'line-through' : ''}>{eur(d.type === 'avoir' ? -d.total_ttc : d.total_ttc)}</span>
+                    {d.annulee && <span className="text-xs">annulée</span>}
+                    {!d.annulee && d.type !== 'avoir' && d.encaisse > 0 && (
+                      <span className="text-xs text-green-700">encaissé {eur(d.encaisse)}</span>
+                    )}
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{dateFr(d.emise_le)}</span>
+                    {d.numero && (
+                      <a href={`/api/compta/factures/${d.numero}/pdf`} target="_blank" rel="noreferrer" className="text-xs">PDF</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ---------- onglets ----------
 function OngletFactures() {
   const [rows, setRows] = useState<FactureRow[]>([])
@@ -718,6 +818,7 @@ function OngletExports() {
 
 // ---------- page ----------
 const ONGLETS = [
+  { id: 'affaires', label: '👤 Par client' },
   { id: 'factures', label: '🧾 Factures' },
   { id: 'dashboard', label: '📊 Dashboard' },
   { id: 'tva', label: '💰 TVA' },
@@ -726,14 +827,14 @@ const ONGLETS = [
 ] as const
 
 export default function FacturesPage() {
-  const [onglet, setOnglet] = useState<(typeof ONGLETS)[number]['id']>('factures')
+  const [onglet, setOnglet] = useState<(typeof ONGLETS)[number]['id']>('affaires')
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Factures</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            Factures, encaissements, TVA — émission via Claude/Hermès (<code>facturer.py</code>)
+            Une ligne par client : le montant, ce qui est payé, ce qui reste. Le détail des documents est dedans.
           </p>
         </div>
         <div className="flex gap-1 flex-wrap">
@@ -746,6 +847,7 @@ export default function FacturesPage() {
           ))}
         </div>
       </div>
+      {onglet === 'affaires' && <OngletAffaires />}
       {onglet === 'factures' && <OngletFactures />}
       {onglet === 'dashboard' && <OngletDashboard />}
       {onglet === 'tva' && <OngletTva />}
