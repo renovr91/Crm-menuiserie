@@ -1357,6 +1357,63 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, etat: 'proforma supprimée' })
       }
 
+      // ---- Qonto : justificatifs de transactions -------------------------
+      // Lecture des DÉBITS derrière le jeton agent (les paiements fournisseurs
+      // ne passent JAMAIS par la route publique /api/qonto, qui ne sert que les
+      // crédits au pointage) + dépôt d'une pièce jointe sur une transaction.
+      case 'qonto_transactions': {
+        const login = (process.env.QONTO_LOGIN || '').trim()
+        const secret = (process.env.QONTO_SECRET_KEY || '').trim()
+        if (!login || !secret) return NextResponse.json({ error: 'qonto_non_configure' }, { status: 503 })
+        const days = Math.min(365, Math.max(1, parseInt(String(p.days ?? '60'), 10) || 60))
+        const side = p.side === 'debit' ? 'debit' : 'credit'
+        const from = new Date()
+        from.setDate(from.getDate() - days)
+        const txs: unknown[] = []
+        for (let page = 1; page <= 20; page++) {
+          const r = await fetch(
+            `https://thirdparty.qonto.com/v2/transactions?iban=FR7616958000011144672670309&status[]=completed&side=${side}&settled_at_from=${from.toISOString()}&sort_by=settled_at:desc&per_page=100&current_page=${page}`,
+            { headers: { Authorization: `${login}:${secret}` }, cache: 'no-store' }
+          )
+          if (!r.ok) return NextResponse.json({ error: `qonto_${r.status}` }, { status: 502 })
+          const d = await r.json()
+          txs.push(...(d.transactions || []).map((t: Record<string, unknown>) => ({
+            id: t.id,
+            montant: t.amount,
+            date: String(t.settled_at || '').slice(0, 10),
+            libelle: t.label,
+            reference: t.reference,
+            justificatifs: ((t.attachment_ids as unknown[] | undefined) || []).length,
+          })))
+          if (!d.meta?.next_page) break
+        }
+        return NextResponse.json({ transactions: txs })
+      }
+
+      case 'qonto_piece_jointe': {
+        const login = (process.env.QONTO_LOGIN || '').trim()
+        const secret = (process.env.QONTO_SECRET_KEY || '').trim()
+        if (!login || !secret) return NextResponse.json({ error: 'qonto_non_configure' }, { status: 503 })
+        const txId = String(p.transaction_id || '')
+        const nom = String(p.filename || 'facture.pdf').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120)
+        const b64 = String(p.contenu_base64 || '')
+        if (!txId || !b64) return NextResponse.json({ error: 'parametres_manquants' }, { status: 400 })
+        const bytes = Buffer.from(b64, 'base64')
+        // Vercel plafonne le corps ~4,5 Mo : le script côté VPS filtre déjà,
+        // ceci est la barrière serveur.
+        if (!bytes.length || bytes.length > 4 * 1024 * 1024) {
+          return NextResponse.json({ error: 'fichier_invalide' }, { status: 400 })
+        }
+        const fd = new FormData()
+        fd.append('file', new Blob([bytes], { type: 'application/pdf' }), nom)
+        const r = await fetch(
+          `https://thirdparty.qonto.com/v2/transactions/${encodeURIComponent(txId)}/attachments`,
+          { method: 'POST', headers: { Authorization: `${login}:${secret}` }, body: fd }
+        )
+        if (!r.ok) return NextResponse.json({ error: `qonto_${r.status}` }, { status: 502 })
+        return NextResponse.json({ ok: true })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1370,7 +1427,7 @@ export async function POST(request: Request) {
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
               'zadarma_postes', 'zadarma_enregistrement',
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
-              'facture_paiement',
+              'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
             ],
           },
