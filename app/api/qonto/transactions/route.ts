@@ -16,19 +16,26 @@ export async function GET(req: Request) {
   const from = new Date()
   from.setDate(from.getDate() - days)
 
-  const resp = await fetch(
-    `https://thirdparty.qonto.com/v2/transactions?iban=${QONTO_IBAN}&status[]=completed&side=credit&settled_at_from=${from.toISOString()}&sort_by=settled_at:desc&per_page=50`,
-    {
-      headers: { 'Authorization': `${QONTO_LOGIN}:${QONTO_SECRET}` },
-      cache: 'no-store',
+  // Qonto pagine à 100 max : sans la boucle, une fenêtre large rendait les 50
+  // plus récents EN SILENCE et les vieux acomptes semblaient ne pas exister.
+  const transactions: unknown[] = []
+  for (let page = 1; page <= 20; page++) {
+    const resp = await fetch(
+      `https://thirdparty.qonto.com/v2/transactions?iban=${QONTO_IBAN}&status[]=completed&side=credit&settled_at_from=${from.toISOString()}&sort_by=settled_at:desc&per_page=100&current_page=${page}`,
+      {
+        headers: { 'Authorization': `${QONTO_LOGIN}:${QONTO_SECRET}` },
+        cache: 'no-store',
+      }
+    )
+
+    if (!resp.ok) {
+      const err = await resp.text()
+      return NextResponse.json({ error: `Qonto ${resp.status}: ${err}` }, { status: 500 })
     }
-  )
 
-  if (!resp.ok) {
-    const err = await resp.text()
-    return NextResponse.json({ error: `Qonto ${resp.status}: ${err}` }, { status: 500 })
+    const data = await resp.json()
+    transactions.push(...(data.transactions || []))
+    if (!data.meta?.next_page) break
   }
-
-  const data = await resp.json()
-  return NextResponse.json(data.transactions || [])
+  return NextResponse.json(transactions)
 }
