@@ -1414,6 +1414,30 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
+      // ---- Leads partenaire (webhook externe) ---------------------------
+      case 'leads_a_signaler': {
+        // Les leads pas encore annoncés sur Telegram (cron veille-leads).
+        const { data, error } = await supabase
+          .from('leads_partenaire')
+          .select('id, source, nom, telephone, email, code_postal, type_porte, dimensions, message, created_at')
+          .is('signale_le', null)
+          .order('created_at', { ascending: true })
+          .limit(50)
+        if (error) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+        return NextResponse.json({ leads: data || [] })
+      }
+      case 'leads_signale': {
+        // Marqué APRÈS l'envoi Telegram : un message perdu repart au tour suivant.
+        const ids = Array.isArray(p.ids) ? p.ids.filter((x: unknown) => typeof x === 'string') : []
+        if (!ids.length) return NextResponse.json({ error: 'ids requis' }, { status: 400 })
+        const { error } = await supabase
+          .from('leads_partenaire')
+          .update({ signale_le: new Date().toISOString() })
+          .in('id', ids)
+        if (error) return NextResponse.json({ error: 'maj_impossible' }, { status: 500 })
+        return NextResponse.json({ ok: true, marques: ids.length })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1429,6 +1453,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
+              'leads_a_signaler', 'leads_signale',
             ],
           },
           { status: 400 }
