@@ -1438,6 +1438,50 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, marques: ids.length })
       }
 
+      case 'leads_recents': {
+        // Les leads du partenaire, du plus récent au plus ancien. `sans_devis`
+        // = ceux qui n'ont pas encore été chiffrés : c'est ce que l'assistant
+        // interroge quand on lui dit « le dernier lead » sans autre précision.
+        const limite = Math.min(100, Math.max(1, Number(p.limite ?? 20)))
+        let q = supabase
+          .from('leads_partenaire')
+          .select('id, nom, telephone, email, code_postal, type_porte, dimensions, message, payload, created_at, devis_numero, statut, note')
+          .order('created_at', { ascending: false })
+          .limit(limite)
+        if (p.sans_devis) q = q.is('devis_numero', null)
+        if (p.recherche) q = q.ilike('nom', `%${String(p.recherche)}%`)
+        const { data, error } = await q
+        if (error) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+        return NextResponse.json({ leads: data || [] })
+      }
+
+      case 'leads_journal': {
+        // Journal des appels du webhook (acceptés ET refusés) : répond à « le
+        // partenaire a-t-il envoyé ? » sans aller lire les logs de l'hébergeur.
+        // non_signales -> les appels NON aboutis pas encore annoncés (veille).
+        const limite = Math.min(200, Math.max(1, Number(p.limite ?? 30)))
+        let q = supabase
+          .from('leads_webhook_journal')
+          .select('id, created_at, statut_http, resultat, ip, user_agent, nom, telephone, lead_id, extrait, signale_le')
+          .order('created_at', { ascending: false })
+          .limit(limite)
+        if (p.non_signales) q = q.is('signale_le', null).neq('resultat', 'enregistre')
+        if (p.depuis) q = q.gte('created_at', String(p.depuis))
+        const { data, error } = await q
+        if (error) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+        return NextResponse.json({ appels: data || [] })
+      }
+      case 'leads_journal_signale': {
+        const ids = Array.isArray(p.ids) ? p.ids.filter((x: unknown) => typeof x === 'string') : []
+        if (!ids.length) return NextResponse.json({ error: 'ids requis' }, { status: 400 })
+        const { error } = await supabase
+          .from('leads_webhook_journal')
+          .update({ signale_le: new Date().toISOString() })
+          .in('id', ids)
+        if (error) return NextResponse.json({ error: 'maj_impossible' }, { status: 500 })
+        return NextResponse.json({ ok: true, marques: ids.length })
+      }
+
       case 'lead_maj': {
         // Mémorise le devis généré pour un lead (et son statut) : sans ça, une
         // relance de la veille regénérerait un devis et brûlerait un numéro.

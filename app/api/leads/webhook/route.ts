@@ -46,6 +46,37 @@ function secretFourni(req: NextRequest): string {
   return (new URL(req.url).searchParams.get('key') || '').trim()
 }
 
+/**
+ * JOURNAL DE TOUS LES APPELS, acceptés ou refusés. Sans lui, un envoi refusé
+ * (clé fausse, contact manquant) ne laissait AUCUNE trace hors des logs de
+ * l'hébergeur : impossible de répondre « le partenaire a-t-il envoyé ? »
+ * depuis le CRM (constat du 02/09, premier lead réel). Écrit AVANT de
+ * répondre : une écriture lancée après la réponse peut être gelée par
+ * l'hébergeur. Ne stocke jamais la clé fournie, seulement le verdict.
+ */
+async function journaliser(
+  sb: ReturnType<typeof createAdminClient>,
+  req: NextRequest,
+  statut: number,
+  resultat: string,
+  extra: { nom?: string | null; telephone?: string | null; lead_id?: string | null; extrait?: string | null } = {}
+) {
+  try {
+    await sb.from('leads_webhook_journal').insert({
+      statut_http: statut,
+      resultat,
+      ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null,
+      user_agent: (req.headers.get('user-agent') || '').slice(0, 200) || null,
+      nom: extra.nom ?? null,
+      telephone: extra.telephone ?? null,
+      lead_id: extra.lead_id ?? null,
+      extrait: extra.extrait ?? null,
+    })
+  } catch {
+    // Le journal ne doit JAMAIS faire échouer la prise du lead.
+  }
+}
+
 // Premier champ NON VIDE parmi une liste d'alias (le format du partenaire est
 // inconnu : on ratisse les noms courants FR/EN sans rien exiger).
 function champ(obj: Record<string, unknown>, ...alias: string[]): string | null {
@@ -83,10 +114,12 @@ export async function POST(req: NextRequest) {
   if (!attendu) {
     // Tant que le secret n'est pas posé en env, on REFUSE tout : jamais de
     // porte grande ouverte par défaut.
+    await journaliser(sb, req, 503, 'webhook_non_configure')
     return NextResponse.json({ error: 'webhook_non_configure' }, { status: 503 })
   }
   const fourni = secretFourni(req)
   if (!fourni || !comparaisonConstante(fourni, attendu)) {
+    await journaliser(sb, req, 401, 'non_autorise')
     return NextResponse.json({ error: 'non_autorise' }, { status: 401 })
   }
 
@@ -94,9 +127,11 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json()
   } catch {
+    await journaliser(sb, req, 400, 'json_invalide')
     return NextResponse.json({ error: 'json_invalide' }, { status: 400 })
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    await journaliser(sb, req, 400, 'objet_attendu')
     return NextResponse.json({ error: 'objet_attendu' }, { status: 400 })
   }
 
@@ -104,7 +139,11 @@ export async function POST(req: NextRequest) {
   const email = champ(body, 'email', 'mail', 'courriel')
   // Un lead sans AUCUN moyen de contact ne sert à rien : on le refuse (mais on
   // n'exige pas les deux — le partenaire n'a pas toujours l'email).
+  const nom = champ(body, 'nom', 'name', 'fullname', 'prenom', 'contact')
   if (!telephone && !email) {
+    // L'extrait du corps reçu sert à voir QUEL nom de champ le partenaire a
+    // utilisé (alias manquant chez nous ?) sans retourner lire ses logs.
+    await journaliser(sb, req, 422, 'contact_manquant', { nom, extrait: JSON.stringify(body).slice(0, 400) })
     return NextResponse.json({ error: 'contact_manquant' }, { status: 422 })
   }
 
@@ -134,6 +173,7 @@ export async function POST(req: NextRequest) {
       // 200 pour que l'émetteur ne réessaie pas en boucle, MAIS le corps dit
       // sans ambiguïté que RIEN n'a été créé (remarque du partenaire, 01/09 :
       // « un 200 ne prouve pas la prise en compte »).
+      await journaliser(sb, req, 200, 'doublon_ignore', { nom, telephone, lead_id: jumeau.id })
       return NextResponse.json({
         ok: true, enregistre: false, doublon: true,
         id: jumeau.id, statut: 'doublon_ignore',
@@ -146,7 +186,7 @@ export async function POST(req: NextRequest) {
     .from('leads_partenaire')
     .insert({
       source: champ(body, 'source') || 'partenaire',
-      nom: champ(body, 'nom', 'name', 'fullname', 'prenom', 'contact'),
+      nom,
       telephone,
       email,
       code_postal: champ(body, 'codepostal', 'cp', 'zip', 'zipcode', 'postalcode'),
@@ -160,7 +200,9 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     // Message générique au partenaire, jamais le détail interne (conventions §5).
+    await journaliser(sb, req, 500, 'enregistrement_impossible', { nom, telephone })
     return NextResponse.json({ error: 'enregistrement_impossible' }, { status: 500 })
   }
+  await journaliser(sb, req, 200, 'enregistre', { nom, telephone, lead_id: data?.id ?? null })
   return NextResponse.json({ ok: true, enregistre: true, doublon: false, id: data?.id, statut: 'enregistre' })
 }
