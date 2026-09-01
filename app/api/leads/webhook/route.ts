@@ -93,18 +93,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'contact_manquant' }, { status: 422 })
   }
 
-  // Dédoublonnage : même téléphone reçu dans les 24 h = déjà connu. On répond
-  // 200 (le partenaire ne doit pas ré-essayer en boucle) sans créer de doublon.
+  const type_porte = champ(body, 'typeporte', 'type', 'produit', 'product', 'categorie')
+  const dimensions = champ(body, 'dimensions', 'dimension', 'taille', 'size', 'cotes')
+  const message = champ(body, 'message', 'commentaire', 'comment', 'demande', 'notes', 'description')
+
+  // Dédoublonnage : un même téléphone AVEC LA MÊME DEMANDE dans les 24 h.
+  // Le téléphone seul ne suffit pas : un client peut légitimement demander deux
+  // portes (deux biens, deux dimensions) le même jour — les fondre ferait
+  // perdre une affaire en silence. On compare donc aussi le CONTENU.
+  const empreinte = [type_porte, dimensions, message]
+    .map((x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase())
+    .join('|')
   if (telephone) {
     const depuis = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    const { data: existant } = await sb
+    const { data: recents } = await sb
       .from('leads_partenaire')
-      .select('id')
+      .select('id, type_porte, dimensions, message')
       .eq('telephone', telephone)
       .gte('created_at', depuis)
-      .limit(1)
-    if (existant && existant.length) {
-      return NextResponse.json({ ok: true, statut: 'doublon_ignore' })
+      .limit(20)
+    const jumeau = (recents || []).find((r: { type_porte: string | null; dimensions: string | null; message: string | null; id: string }) => [r.type_porte, r.dimensions, r.message]
+      .map((x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase())
+      .join('|') === empreinte)
+    if (jumeau) {
+      // 200 pour que l'émetteur ne réessaie pas en boucle, MAIS le corps dit
+      // sans ambiguïté que RIEN n'a été créé (remarque du partenaire, 01/09 :
+      // « un 200 ne prouve pas la prise en compte »).
+      return NextResponse.json({
+        ok: true, enregistre: false, doublon: true,
+        id: jumeau.id, statut: 'doublon_ignore',
+        message: 'Demande identique déjà reçue pour ce téléphone dans les dernières 24 h — aucun nouveau lead créé.',
+      })
     }
   }
 
@@ -116,9 +135,9 @@ export async function POST(req: NextRequest) {
       telephone,
       email,
       code_postal: champ(body, 'codepostal', 'cp', 'zip', 'zipcode', 'postalcode'),
-      type_porte: champ(body, 'typeporte', 'type', 'produit', 'product', 'categorie'),
-      dimensions: champ(body, 'dimensions', 'dimension', 'taille', 'size', 'cotes'),
-      message: champ(body, 'message', 'commentaire', 'comment', 'demande', 'notes', 'description'),
+      type_porte,
+      dimensions,
+      message,
       payload: body,
     })
     .select('id')
@@ -128,5 +147,5 @@ export async function POST(req: NextRequest) {
     // Message générique au partenaire, jamais le détail interne (conventions §5).
     return NextResponse.json({ error: 'enregistrement_impossible' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, id: data?.id, statut: 'enregistre' })
+  return NextResponse.json({ ok: true, enregistre: true, doublon: false, id: data?.id, statut: 'enregistre' })
 }
