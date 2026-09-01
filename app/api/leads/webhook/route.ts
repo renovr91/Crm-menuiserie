@@ -25,6 +25,21 @@ function comparaisonConstante(a: string, b: string): boolean {
   return diff === 0
 }
 
+/**
+ * Téléphone NORMALISÉ, sinon « +33 6 60 11 69 68 », « 06.60.11.69.68 » et
+ * « 0660116968 » sont trois numéros différents pour le dédoublonnage (point
+ * relevé par le partenaire, 01/09 — on ne dépend pas de sa normalisation).
+ * +33 / 0033 -> 0 ; l'indicatif « + » est conservé pour l'étranger.
+ */
+function normaliserTelephone(brut: string | null): string | null {
+  if (!brut) return null
+  let t = String(brut).replace(/[\s.\-()]/g, '')
+  if (t.startsWith('0033')) t = '0' + t.slice(4)
+  else if (t.startsWith('+33')) t = '0' + t.slice(3)
+  else if (t.startsWith('33') && t.length === 11) t = '0' + t.slice(2)
+  return t || null
+}
+
 function secretFourni(req: NextRequest): string {
   const auth = req.headers.get('authorization') || ''
   if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim()
@@ -85,7 +100,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'objet_attendu' }, { status: 400 })
   }
 
-  const telephone = champ(body, 'telephone', 'phone', 'tel', 'mobile', 'numero')
+  const telephone = normaliserTelephone(champ(body, 'telephone', 'phone', 'tel', 'mobile', 'numero'))
   const email = champ(body, 'email', 'mail', 'courriel')
   // Un lead sans AUCUN moyen de contact ne sert à rien : on le refuse (mais on
   // n'exige pas les deux — le partenaire n'a pas toujours l'email).
