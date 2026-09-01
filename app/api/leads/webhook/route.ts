@@ -147,6 +147,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'contact_manquant' }, { status: 422 })
   }
 
+  // Adresse et ville : le devis les imprime, et le poseur en a besoin. Sans
+  // extraction elles restaient enfouies dans le payload (devis sans adresse,
+  // relevé le 02/09).
+  const ville = champ(body, 'ville', 'city', 'localite', 'commune')
+  const adresse = champ(body, 'adresse', 'address', 'rue', 'adresse1', 'addressline1')
   const type_porte = champ(body, 'typeporte', 'type', 'produit', 'product', 'categorie')
   const dimensions = champ(body, 'dimensions', 'dimension', 'taille', 'size', 'cotes')
   const message = champ(body, 'message', 'commentaire', 'comment', 'demande', 'notes', 'description')
@@ -190,6 +195,8 @@ export async function POST(req: NextRequest) {
       telephone,
       email,
       code_postal: champ(body, 'codepostal', 'cp', 'zip', 'zipcode', 'postalcode'),
+      ville,
+      adresse,
       type_porte,
       dimensions,
       message,

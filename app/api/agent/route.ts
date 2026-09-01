@@ -1419,7 +1419,7 @@ export async function POST(request: Request) {
         // Les leads pas encore annoncés sur Telegram (cron veille-leads).
         const { data, error } = await supabase
           .from('leads_partenaire')
-          .select('id, source, nom, telephone, email, code_postal, type_porte, dimensions, message, created_at')
+          .select('id, source, nom, telephone, email, code_postal, ville, adresse, type_porte, dimensions, message, payload, created_at')
           .is('signale_le', null)
           .order('created_at', { ascending: true })
           .limit(50)
@@ -1445,7 +1445,7 @@ export async function POST(request: Request) {
         const limite = Math.min(100, Math.max(1, Number(p.limite ?? 20)))
         let q = supabase
           .from('leads_partenaire')
-          .select('id, nom, telephone, email, code_postal, type_porte, dimensions, message, payload, created_at, devis_numero, statut, note')
+          .select('id, nom, telephone, email, code_postal, ville, adresse, type_porte, dimensions, message, payload, created_at, devis_numero, statut, note')
           .order('created_at', { ascending: false })
           .limit(limite)
         if (p.sans_devis) q = q.is('devis_numero', null)
@@ -1505,7 +1505,7 @@ export async function POST(request: Request) {
         const taux = Math.min(100, Math.max(0, Number(p.taux_pct ?? 5)))
         const { data: leads, error } = await supabase
           .from('leads_partenaire')
-          .select('id, nom, telephone, code_postal, devis_numero, created_at, source')
+          .select('id, nom, telephone, code_postal, ville, devis_numero, created_at, source')
           .not('devis_numero', 'is', null)
           .order('created_at', { ascending: false })
           .limit(500)
