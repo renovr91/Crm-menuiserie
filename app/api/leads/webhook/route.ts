@@ -45,8 +45,26 @@ function champ(obj: Record<string, unknown>, ...alias: string[]): string | null 
   return null
 }
 
+/**
+ * Le secret attendu : variable d'environnement EN PRIORITÉ, sinon la table
+ * `parametres_secrets` (RLS active, service_role uniquement). Ce second canal
+ * existe pour pouvoir configurer le webhook sans accès au tableau de bord de
+ * l'hébergeur ; poser l'env var plus tard la fera gagner, sans rien casser.
+ */
+async function secretAttendu(sb: ReturnType<typeof createAdminClient>): Promise<string> {
+  const env = (process.env.LEADS_WEBHOOK_SECRET || '').trim()
+  if (env) return env
+  const { data } = await sb
+    .from('parametres_secrets')
+    .select('valeur')
+    .eq('nom', 'LEADS_WEBHOOK_SECRET')
+    .maybeSingle()
+  return String(data?.valeur || '').trim()
+}
+
 export async function POST(req: NextRequest) {
-  const attendu = (process.env.LEADS_WEBHOOK_SECRET || '').trim()
+  const sb = createAdminClient()
+  const attendu = await secretAttendu(sb)
   if (!attendu) {
     // Tant que le secret n'est pas posé en env, on REFUSE tout : jamais de
     // porte grande ouverte par défaut.
@@ -74,8 +92,6 @@ export async function POST(req: NextRequest) {
   if (!telephone && !email) {
     return NextResponse.json({ error: 'contact_manquant' }, { status: 422 })
   }
-
-  const sb = createAdminClient()
 
   // Dédoublonnage : même téléphone reçu dans les 24 h = déjà connu. On répond
   // 200 (le partenaire ne doit pas ré-essayer en boucle) sans créer de doublon.
