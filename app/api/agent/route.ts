@@ -1453,6 +1453,63 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
+      case 'commissions_apporteur': {
+        // COMMISSION D'APPORT D'AFFAIRE (5 % par défaut) : les devis nés d'un
+        // lead partenaire, avec leur état. Seules les affaires SIGNÉES ouvrent
+        // droit à commission — les devis en attente sont listés à part pour
+        // que le gérant voie ce qui est en jeu, sans jamais les confondre.
+        const taux = Math.min(100, Math.max(0, Number(p.taux_pct ?? 5)))
+        const { data: leads, error } = await supabase
+          .from('leads_partenaire')
+          .select('id, nom, telephone, code_postal, devis_numero, created_at, source')
+          .not('devis_numero', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(500)
+        if (error) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+
+        const nums = (leads || []).map((l) => l.devis_numero as string)
+        const montants: Record<string, number> = {}
+        const clients: Record<string, string> = {}
+        if (nums.length) {
+          const { data: ds } = await supabase
+            .from('devis_claudus').select('numero, montant_ht, montant_ttc, client_nom').in('numero', nums)
+          for (const d of ds || []) {
+            montants[d.numero] = Number(d.montant_ht || 0)
+            clients[d.numero] = d.client_nom || ''
+          }
+        }
+        // L'affaire est signée quand un dossier existe pour ce devis.
+        const etapes: Record<string, string> = {}
+        if (nums.length) {
+          const { data: cs } = await supabase.from('commandes').select('devis_numero, stage').in('devis_numero', nums)
+          for (const c of cs || []) if (c.devis_numero) etapes[c.devis_numero] = c.stage
+        }
+        const SIGNE = new Set(['signe', 'a_commander', 'commandee', 'livree', 'posee', 'payee', 'terminee'])
+
+        const lignes = (leads || []).map((l) => {
+          const num = l.devis_numero as string
+          const ht = montants[num] || 0
+          const etape = etapes[num] || null
+          const signe = !!etape && SIGNE.has(etape)
+          return {
+            devis: num, client: clients[num] || l.nom, telephone: l.telephone,
+            code_postal: l.code_postal, source: l.source,
+            montant_ht: ht, etape, signe,
+            commission: signe ? Math.round(ht * (taux / 100) * 100) / 100 : 0,
+          }
+        })
+        const signes = lignes.filter((x) => x.signe)
+        return NextResponse.json({
+          taux_pct: taux,
+          total_devis: lignes.length,
+          signes: signes.length,
+          ca_signe_ht: Math.round(signes.reduce((s, x) => s + x.montant_ht, 0) * 100) / 100,
+          commission_due: Math.round(signes.reduce((s, x) => s + x.commission, 0) * 100) / 100,
+          en_attente: lignes.length - signes.length,
+          lignes,
+        })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1468,7 +1525,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'commissions_apporteur',
             ],
           },
           { status: 400 }
