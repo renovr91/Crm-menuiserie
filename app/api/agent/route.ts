@@ -1438,6 +1438,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, marques: ids.length })
       }
 
+      case 'lead_maj': {
+        // Mémorise le devis généré pour un lead (et son statut) : sans ça, une
+        // relance de la veille regénérerait un devis et brûlerait un numéro.
+        const id = String(p.id || '')
+        if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+        const maj: Record<string, unknown> = {}
+        if (p.devis_numero != null) maj.devis_numero = String(p.devis_numero)
+        if (p.statut != null) maj.statut = String(p.statut)
+        if (p.note != null) maj.note = String(p.note)
+        if (!Object.keys(maj).length) return NextResponse.json({ error: 'rien a mettre a jour' }, { status: 400 })
+        const { error } = await supabase.from('leads_partenaire').update(maj).eq('id', id)
+        if (error) return NextResponse.json({ error: 'maj_impossible' }, { status: 500 })
+        return NextResponse.json({ ok: true })
+      }
+
       default:
         return NextResponse.json(
           {
@@ -1453,7 +1468,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale',
+              'leads_a_signaler', 'leads_signale', 'lead_maj',
             ],
           },
           { status: 400 }
