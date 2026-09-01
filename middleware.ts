@@ -1,13 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/portail', '/api/portail', '/api/signature', '/d', '/api/d', '/api/gmail/fetch-pj', '/api/gmail', '/api/stripe', '/api/qonto', '/api/taches/rappels', '/api/zadarma/webhook', '/api/zadarma/rattrapage', '/api/docuseal/webhook', '/api/diag-edge', '/api/agent']
+// Chemins joignables SANS session : flux publics (signature client, portail),
+// webhooks entrants (chacun vérifie SA propre signature/jeton) et crons Vercel
+// (qui ne portent pas de cookie). Tout le reste exige une session admin.
+// ⚠️ Le rapprochement se fait par SEGMENT (voir estPublic) : '/api/d' ne doit
+// PAS ouvrir '/api/devis-claudus'. Bug corrigé le 01/09 — ces routes fuyaient
+// nom + téléphone client et marges sans authentification.
+const PUBLIC_PATHS = [
+  '/login', '/portail', '/api/portail', '/api/signature', '/d', '/api/d',
+  '/api/gmail/fetch-pj', '/api/stripe',
+  '/api/qonto/sync',            // cron seul (transactions/match = session admin)
+  '/api/taches/rappels',        // cron
+  '/api/zadarma/webhook', '/api/zadarma/rattrapage',
+  '/api/docuseal/webhook',
+  '/api/leads/webhook',         // partenaire externe (jeton vérifié dans la route)
+  '/api/agent',                 // jeton Bearer vérifié dans la route
+]
+
+// Rapprochement par SEGMENT de chemin, jamais par préfixe de texte : '/api/d'
+// autorise '/api/d' et '/api/d/<token>', mais PAS '/api/devis-claudus'.
+function estPublic(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Skip auth check for public paths
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Skip auth check for public paths (rapprochement par segment)
+  if (estPublic(pathname)) {
     return NextResponse.next()
   }
 
