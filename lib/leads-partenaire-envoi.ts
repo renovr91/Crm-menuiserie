@@ -64,9 +64,11 @@ interface Contenu {
   note?: string
 }
 
-/** Options d'envoi : `note` = phrase ajoutée au mail (texte brut, échappée en HTML). */
+/** Options d'envoi : `note` = phrase ajoutée au mail (texte brut, échappée en
+ *  HTML) ; `mode` = qui envoie ('auto' = automate VPS, 'manuel' = un clic). */
 export interface OptionsEnvoi {
   note?: string
+  mode?: 'auto' | 'manuel'
 }
 
 function escHtml(s: string) {
@@ -343,13 +345,19 @@ export async function envoyerDevisLead(leadId: string, options: OptionsEnvoi = {
 
     await supabase.from('leads_partenaire').update({
       envoi_statut: 'envoye', envoye_le: new Date().toISOString(), envoi_erreur: null,
+      envoi_mode: options.mode === 'auto' ? 'auto' : 'manuel', envoi_tentatives: 0,
     }).eq('id', leadId)
 
     return { ok: true, destinataire: prep.destinataire, sujet: prep.sujet, avec_catalogue: prep.avecCatalogue }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
+    // Compteur d'échecs : l'automate (cron envoi-leads) abandonne après 3
+    // tentatives et laisse la main au gérant (bouton « Réessayer »).
+    const { data: actuel } = await supabase.from('leads_partenaire')
+      .select('envoi_tentatives').eq('id', leadId).maybeSingle()
     await supabase.from('leads_partenaire').update({
       envoi_statut: 'erreur', envoi_erreur: message.slice(0, 2000),
+      envoi_tentatives: Number(actuel?.envoi_tentatives || 0) + 1,
     }).eq('id', leadId)
     return { ok: false, erreur: message }
   }

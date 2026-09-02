@@ -1454,8 +1454,54 @@ export async function POST(request: Request) {
         // `note` (optionnelle) : phrase ajoutée au mail — ex. « ce devis
         // remplace le devis DC-xxxxx » quand on renvoie une version corrigée.
         const note = typeof p.note === 'string' ? p.note : ''
-        const resultat = await envoyerDevisLead(id, { note })
+        // `mode: 'auto'` = envoi par l'automate (cron envoi-leads du VPS) —
+        // tracé dans envoi_mode pour que la page distingue clic et automate.
+        const resultat = await envoyerDevisLead(id, { note, mode: p.mode === 'auto' ? 'auto' : 'manuel' })
         return NextResponse.json(resultat, { status: resultat.ok ? 200 : 400 })
+      }
+
+      case 'leads_a_envoyer': {
+        // Candidats à l'ENVOI AUTOMATIQUE (décision gérant 02/09/2026 soir :
+        // « automatique, ça peut le faire »). Un lead est candidat si : devis
+        // généré avec PDF, e-mail présent, pas bloqué par le gérant
+        // (envoi_bloque), jamais envoyé — ou en échec moins de 3 fois — et
+        // devis vieux d'au moins `delai_min` minutes : le délai de grâce
+        // pendant lequel le gérant peut encore cliquer « Ne pas envoyer ».
+        // Le PAYS n'est pas filtré ici : la règle (France + Belgique
+        // seulement, tout le reste retenu) vit dans leads_garage.py, avec la
+        // lecture du lead — une seule définition du pays.
+        const delaiMin = Math.max(0, Number(p.delai_min ?? 120))
+        const limite = Math.min(200, Math.max(1, Number(p.limite ?? 50)))
+        const { data: cands, error: candErr } = await supabase
+          .from('leads_partenaire')
+          .select('id, nom, telephone, email, code_postal, ville, adresse, payload, created_at, devis_numero, envoi_statut, envoi_tentatives, envoi_bloque, source')
+          .not('devis_numero', 'is', null)
+          .not('email', 'is', null)
+          .eq('envoi_bloque', false)
+          .or('envoi_statut.is.null,and(envoi_statut.eq.erreur,envoi_tentatives.lt.3)')
+          .order('created_at', { ascending: true })
+          .limit(limite)
+        if (candErr) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+        const numsCand = (cands || []).map((l) => l.devis_numero as string)
+        const infos: Record<string, { cree_le: string; pdf: boolean; ttc: number | null; reference: string | null }> = {}
+        if (numsCand.length) {
+          const { data: ds } = await supabase
+            .from('devis_claudus').select('numero, created_at, pdf_path, montant_ttc, reference').in('numero', numsCand)
+          for (const d of ds || []) {
+            infos[d.numero] = { cree_le: d.created_at, pdf: !!d.pdf_path, ttc: d.montant_ttc, reference: d.reference }
+          }
+        }
+        const limiteDate = Date.now() - delaiMin * 60_000
+        const prets = (cands || [])
+          .filter((l) => {
+            const d = infos[l.devis_numero as string]
+            return !!d && d.pdf && l.source !== 'test_smtp' && new Date(d.cree_le).getTime() <= limiteDate
+          })
+          .map((l) => {
+            const d = infos[l.devis_numero as string]
+            return { ...l, devis_cree_le: d.cree_le, montant_ttc: d.ttc, reference: d.reference }
+          })
+        return NextResponse.json({ leads: prets, delai_min: delaiMin, candidats: (cands || []).length })
       }
 
       case 'leads_recents': {
@@ -1511,6 +1557,15 @@ export async function POST(request: Request) {
         if (p.devis_numero != null) maj.devis_numero = String(p.devis_numero)
         if (p.statut != null) maj.statut = String(p.statut)
         if (p.note != null) maj.note = String(p.note)
+        // Envoi automatique : « Ne pas envoyer » (Hermes : bloquer_envoi_lead),
+        // et « retenu » posé par l'automate (pays non géré) avec sa raison.
+        if (typeof p.envoi_bloque === 'boolean') maj.envoi_bloque = p.envoi_bloque
+        if (p.envoi_statut != null) {
+          const s = String(p.envoi_statut)
+          if (!['retenu', 'erreur'].includes(s) && s !== '') return NextResponse.json({ error: 'envoi_statut invalide' }, { status: 400 })
+          maj.envoi_statut = s || null
+        }
+        if (p.envoi_erreur != null) maj.envoi_erreur = String(p.envoi_erreur).slice(0, 2000) || null
         if (!Object.keys(maj).length) return NextResponse.json({ error: 'rien a mettre a jour' }, { status: 400 })
         const { error } = await supabase.from('leads_partenaire').update(maj).eq('id', id)
         if (error) return NextResponse.json({ error: 'maj_impossible' }, { status: 500 })
@@ -1589,7 +1644,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'commissions_apporteur',
             ],
           },
           { status: 400 }

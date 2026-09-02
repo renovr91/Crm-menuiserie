@@ -23,9 +23,11 @@ interface LeadPartenaire {
   signe: boolean
   stage: string | null
   note: string | null
-  envoi_statut: 'envoye' | 'erreur' | null
+  envoi_statut: 'envoye' | 'erreur' | 'retenu' | null
   envoye_le: string | null
   envoi_erreur: string | null
+  envoi_bloque: boolean
+  envoi_mode: 'auto' | 'manuel' | null
 }
 
 interface Apercu {
@@ -162,6 +164,26 @@ export default function LeadsPartenairePage() {
       alert('Erreur : ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setEnvoiEnCours(false)
+    }
+  }
+
+  // « Ne pas envoyer » / « Autoriser l'envoi » : l'automate (cron envoi-leads)
+  // saute les leads bloqués. Décision gérant 02/09/2026 : envoi automatique
+  // 2 h après la génération, France et Belgique seulement.
+  async function basculerBlocage(l: LeadPartenaire) {
+    const bloque = !l.envoi_bloque
+    try {
+      const res = await fetch(`/api/leads-partenaire/${l.id}/bloquer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bloque }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        alert('Impossible de modifier : ' + (data.erreur || 'erreur inconnue'))
+        return
+      }
+      setLeads((prev) => prev.map((x) => x.id === l.id ? { ...x, envoi_bloque: bloque } : x))
+    } catch (e) {
+      alert('Erreur : ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -358,7 +380,7 @@ export default function LeadsPartenairePage() {
                       ) : l.envoi_statut === 'envoye' ? (
                         <div>
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                            Envoyé
+                            Envoyé{l.envoi_mode === 'auto' ? ' · auto' : ''}
                           </span>
                           {l.envoye_le && (
                             <div className="text-xs text-gray-400 mt-0.5">{formatDateHeure(l.envoye_le)}</div>
@@ -374,14 +396,40 @@ export default function LeadsPartenairePage() {
                               Échec
                             </span>
                           )}
-                          <button
-                            onClick={() => ouvrirApercu(l)}
-                            disabled={!l.email}
-                            title={l.email ? 'Aperçu puis envoi' : 'Ce client n’a pas d’e-mail'}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-900 text-white text-xs font-medium rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                          >
-                            ✉️ {l.envoi_statut === 'erreur' ? 'Réessayer' : 'Envoyer'}
-                          </button>
+                          {l.envoi_statut === 'retenu' && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700"
+                              title={l.envoi_erreur || ''}
+                            >
+                              Retenu{l.envoi_erreur ? ` · ${l.envoi_erreur.slice(0, 40)}` : ''}
+                            </span>
+                          )}
+                          {l.envoi_bloque ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                              ⛔ Ne pas envoyer
+                            </span>
+                          ) : !l.envoi_statut && l.email ? (
+                            <span className="text-xs text-gray-400" title="Envoi automatique 2 h après la génération, lun–sam 9h–19h, France et Belgique">
+                              ⏳ part automatiquement
+                            </span>
+                          ) : null}
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => ouvrirApercu(l)}
+                              disabled={!l.email}
+                              title={l.email ? 'Aperçu puis envoi' : 'Ce client n’a pas d’e-mail'}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-900 text-white text-xs font-medium rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                            >
+                              ✉️ {l.envoi_statut === 'erreur' ? 'Réessayer' : 'Envoyer'}
+                            </button>
+                            <button
+                              onClick={() => basculerBlocage(l)}
+                              title={l.envoi_bloque ? 'Ré-autoriser l’envoi automatique' : 'Empêcher l’envoi automatique'}
+                              className="inline-flex items-center px-2 py-1 border border-gray-300 text-gray-700 text-xs rounded hover:bg-gray-100 transition-colors"
+                            >
+                              {l.envoi_bloque ? 'Autoriser' : 'Ne pas envoyer'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </td>
@@ -394,7 +442,9 @@ export default function LeadsPartenairePage() {
       )}
 
       <p className="text-xs text-gray-400 mt-3">
-        ℹ️ L&apos;envoi est manuel : rien ne part sans un clic sur &quot;Envoyer&quot; ci-dessus.
+        ℹ️ Envoi automatique : chaque devis part seul 2 h après sa génération (lun–sam, 9h–19h), sauf
+        &quot;Ne pas envoyer&quot;. France et Belgique seulement (Belgique : +70 € HT de livraison) ; les autres pays
+        sont retenus, à envoyer à la main si besoin.
       </p>
 
       {/* Modale d'aperçu — montre l'e-mail EXACT avant tout envoi réel */}
