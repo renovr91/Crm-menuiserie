@@ -342,6 +342,11 @@ export async function creerBrouillonFacture(
         }
       : {}),
     client,
+    // Souvent différente de l'adresse de facturation (copropriété, chantier
+    // pro) — à fournir explicitement, { nom?, adresse, cp, ville }. Pas de
+    // dérivation depuis le devis : sa forme varie trop d'une source à l'autre
+    // pour être devinée sans risque.
+    ...(body.adresse_livraison ? { adresse_livraison: body.adresse_livraison } : {}),
     lignes,
     date_vente: String(body.date_vente || aujourdhui),
     date_echeance: String(body.date_echeance || aujourdhui),
