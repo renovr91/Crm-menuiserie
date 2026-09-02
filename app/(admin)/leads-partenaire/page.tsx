@@ -23,6 +23,19 @@ interface LeadPartenaire {
   signe: boolean
   stage: string | null
   note: string | null
+  envoi_statut: 'envoye' | 'erreur' | null
+  envoye_le: string | null
+  envoi_erreur: string | null
+}
+
+interface Apercu {
+  ok: boolean
+  destinataire?: string
+  sujet?: string
+  html?: string
+  pieces_jointes?: string[]
+  avec_catalogue?: boolean
+  erreur?: string
 }
 
 const TAUX_COMMISSION = 5 // % — décision gérant 01/09, cf. app/api/agent/route.ts::commissions_apporteur
@@ -65,6 +78,10 @@ export default function LeadsPartenairePage() {
   const [search, setSearch] = useState('')
   const [statutFilter, setStatutFilter] = useState<string>('all')
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
+  const [apercuLead, setApercuLead] = useState<LeadPartenaire | null>(null)
+  const [apercu, setApercu] = useState<Apercu | null>(null)
+  const [apercuLoading, setApercuLoading] = useState(false)
+  const [envoiEnCours, setEnvoiEnCours] = useState(false)
 
   useEffect(() => {
     fetch('/api/leads-partenaire?limit=500')
@@ -111,6 +128,43 @@ export default function LeadsPartenairePage() {
     })
   }
 
+  async function ouvrirApercu(l: LeadPartenaire) {
+    setApercuLead(l)
+    setApercu(null)
+    setApercuLoading(true)
+    try {
+      const res = await fetch(`/api/leads-partenaire/${l.id}/apercu`)
+      const data = await res.json()
+      setApercu(data)
+    } catch (e) {
+      setApercu({ ok: false, erreur: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setApercuLoading(false)
+    }
+  }
+
+  async function confirmerEnvoi() {
+    if (!apercuLead) return
+    setEnvoiEnCours(true)
+    try {
+      const res = await fetch(`/api/leads-partenaire/${apercuLead.id}/envoyer`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        alert('Échec de l’envoi : ' + (data.erreur || 'erreur inconnue'))
+      } else {
+        setLeads((prev) => prev.map((x) => x.id === apercuLead.id
+          ? { ...x, envoi_statut: 'envoye', envoye_le: new Date().toISOString(), envoi_erreur: null }
+          : x))
+        setApercuLead(null)
+        setApercu(null)
+      }
+    } catch (e) {
+      alert('Erreur : ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setEnvoiEnCours(false)
+    }
+  }
+
   async function handleDownload(numero: string) {
     try {
       const res = await fetch(`/api/devis-claudus/${encodeURIComponent(numero)}/download`)
@@ -140,7 +194,7 @@ export default function LeadsPartenairePage() {
         <div>
           <h1 className="text-2xl font-bold">Leads partenaire</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Portes de garage reçues via le webhook partenaire — traitées automatiquement toutes les 15 min
+            Portes de garage reçues via le webhook partenaire — devis chiffrés automatiquement toutes les 15 min, envoi au client sur validation manuelle
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm flex-wrap">
@@ -224,6 +278,7 @@ export default function LeadsPartenairePage() {
                 <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Vente TTC</th>
                 <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Marge HT</th>
                 <th className="text-center p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">PDF</th>
+                <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Envoi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -297,6 +352,39 @@ export default function LeadsPartenairePage() {
                         <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
+                    <td className="p-3 text-sm">
+                      {!l.devis_numero ? (
+                        <span className="text-xs text-gray-300">—</span>
+                      ) : l.envoi_statut === 'envoye' ? (
+                        <div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                            Envoyé
+                          </span>
+                          {l.envoye_le && (
+                            <div className="text-xs text-gray-400 mt-0.5">{formatDateHeure(l.envoye_le)}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1 items-start">
+                          {l.envoi_statut === 'erreur' && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700"
+                              title={l.envoi_erreur || ''}
+                            >
+                              Échec
+                            </span>
+                          )}
+                          <button
+                            onClick={() => ouvrirApercu(l)}
+                            disabled={!l.email}
+                            title={l.email ? 'Aperçu puis envoi' : 'Ce client n’a pas d’e-mail'}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-900 text-white text-xs font-medium rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ✉️ {l.envoi_statut === 'erreur' ? 'Réessayer' : 'Envoyer'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -306,8 +394,80 @@ export default function LeadsPartenairePage() {
       )}
 
       <p className="text-xs text-gray-400 mt-3">
-        ℹ️ Lecture seule pour l&apos;instant — l&apos;envoi au client se fait toujours via Hermes / Telegram.
+        ℹ️ L&apos;envoi est manuel : rien ne part sans un clic sur &quot;Envoyer&quot; ci-dessus.
       </p>
+
+      {/* Modale d'aperçu — montre l'e-mail EXACT avant tout envoi réel */}
+      {apercuLead && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => { setApercuLead(null); setApercu(null) }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="font-semibold text-gray-900">Aperçu — {apercuLead.nom || 'Client'}</h2>
+                <p className="text-xs text-gray-500">Rien n&apos;est envoyé tant que tu ne cliques pas sur &quot;Envoyer&quot;.</p>
+              </div>
+              <button
+                onClick={() => { setApercuLead(null); setApercu(null) }}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none px-2"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {apercuLoading ? (
+                <div className="p-8 text-center text-gray-500 text-sm">Préparation de l&apos;aperçu...</div>
+              ) : !apercu?.ok ? (
+                <div className="p-8 text-center text-red-600 text-sm">
+                  {apercu?.erreur || 'Aperçu indisponible'}
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 py-3 border-b bg-gray-50 text-sm space-y-1">
+                    <div><span className="text-gray-500">À : </span><span className="font-medium">{apercu.destinataire}</span></div>
+                    <div><span className="text-gray-500">Objet : </span><span className="font-medium">{apercu.sujet}</span></div>
+                    <div>
+                      <span className="text-gray-500">Pièces jointes : </span>
+                      <span className="font-medium">{apercu.pieces_jointes?.join(' · ')}</span>
+                      {!apercu.avec_catalogue && (
+                        <span className="text-xs text-gray-400 ml-1">(pas de catalogue — famille non couverte)</span>
+                      )}
+                    </div>
+                  </div>
+                  <iframe
+                    title="Aperçu de l'e-mail"
+                    srcDoc={apercu.html}
+                    className="w-full"
+                    style={{ height: '420px', border: 'none' }}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t bg-gray-50">
+              <button
+                onClick={() => { setApercuLead(null); setApercu(null) }}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmerEnvoi}
+                disabled={!apercu?.ok || envoiEnCours}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {envoiEnCours ? 'Envoi...' : 'Envoyer maintenant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
