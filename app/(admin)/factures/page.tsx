@@ -52,9 +52,11 @@ const STATUT_STYLE: Record<string, string> = {
   emise: 'bg-blue-100 text-blue-800',
   partiellement_payee: 'bg-orange-100 text-orange-800',
   payee: 'bg-green-100 text-green-800',
+  annulee: 'bg-gray-200 text-gray-700 line-through',
 }
 const STATUT_LABELS: Record<string, string> = {
   emise: 'Émise', partiellement_payee: 'Partiellement payée', payee: 'Payée',
+  annulee: 'Annulée par avoir',
 }
 
 function Carte({ label, valeur, accent }: { label: string; valeur: string; accent?: boolean }) {
@@ -494,6 +496,7 @@ function OngletFactures() {
           <option value="emise">Émise</option>
           <option value="partiellement_payee">Partiellement payée</option>
           <option value="payee">Payée</option>
+          <option value="annulee">Annulée par avoir</option>
         </select>
         <select value={type} onChange={(e) => setType(e.target.value)}
                 className="rounded border px-2 py-1.5 text-sm bg-transparent"
