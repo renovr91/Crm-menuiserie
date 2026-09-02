@@ -77,18 +77,28 @@ function emailTexte(c: Contenu) {
 }
 
 // Charte NOIR + DORÉ (pas le rouge du site) : même identité que les documents
-// DocuSeal (logo extrait d'un mail de signature réel, 02/09/2026). Le logo est
-// servi en dur depuis le CRM (public/images/) — jamais depuis DocuSeal, dont
-// l'URL n'est pas censée être stable dans le temps.
+// DocuSeal (logo extrait d'un mail de signature réel, 02/09/2026).
+//
+// Le logo part EN PIÈCE JOINTE INTÉGRÉE (cid:) et non en lien externe : lors
+// du premier test, Gmail n'a pas affiché l'image chargée depuis le CRM (proxy
+// d'images, image bloquée, ou cache d'une réponse ratée) — une image intégrée
+// s'affiche toujours, sans dépendre d'un chargement distant. Le fichier vit
+// dans le bucket Storage `catalogues-pdf` (comme le catalogue) : lire
+// public/ par le système de fichiers n'est pas fiable sur Vercel (les fichiers
+// statiques ne sont pas embarqués dans la fonction).
 const OR = '#D4AF37'
 const OR_CLAIR = '#E8CE7A'
+const LOGO_FICHIER = 'renov-r-logo-noir-dore.jpg'
+const LOGO_CID = 'logo-renov-r'
 
-function logoUrl() {
+/** URL publique du logo — pour l'APERÇU seulement (un `cid:` ne s'affiche que
+ *  dans un vrai client mail). Le mail envoyé, lui, embarque le fichier. */
+function logoUrlPublique() {
   const base = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  return `${base}/images/renov-r-logo-noir-dore.jpg`
+  return `${base}/images/${LOGO_FICHIER}`
 }
 
-function emailHtml(c: Contenu) {
+function emailHtml(c: Contenu, logoSrc: string) {
   const montant = c.montantTtc != null ? ` : <strong>${eur(c.montantTtc)} TTC</strong>` : ''
   const p = (txt: string, dernier = false) =>
     `<p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 ${dernier ? 0 : 16}px;">${txt}</p>`
@@ -98,7 +108,7 @@ function emailHtml(c: Contenu) {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
     <div style="background: #0a0a0a; padding: 24px; text-align: center;">
-      <img src="${logoUrl()}" alt="Renov-R" width="72" height="72" style="display: block; margin: 0 auto 12px; border-radius: 8px;" />
+      <img src="${logoSrc}" alt="Renov-R" width="72" height="72" style="display: block; margin: 0 auto 12px; border-radius: 8px;" />
       <p style="color: ${OR_CLAIR}; margin: 0; font-size: 14px; letter-spacing: 0.02em;">Votre devis ${c.numero}</p>
     </div>
     <div style="height: 3px; background: linear-gradient(90deg, ${OR}, ${OR_CLAIR}, ${OR});"></div>
@@ -171,6 +181,16 @@ export async function preparerEnvoiLead(leadId: string) {
     if (!catErr && catBlob) catalogueBuffer = Buffer.from(await catBlob.arrayBuffer())
   }
 
+  // Logo intégré au mail (cid). Bonus comme le catalogue : s'il manque, le
+  // mail part sans logo, jamais bloqué pour ça.
+  let logoBuffer: Buffer | null = null
+  {
+    const { data: logoBlob, error: logoErr } = await supabase.storage
+      .from('catalogues-pdf')
+      .download(LOGO_FICHIER)
+    if (!logoErr && logoBlob) logoBuffer = Buffer.from(await logoBlob.arrayBuffer())
+  }
+
   const contenu: Contenu = {
     nom: nomAffiche(lead.nom),
     numero: devis.numero,
@@ -180,20 +200,27 @@ export async function preparerEnvoiLead(leadId: string) {
   }
   const sujet = `Votre devis ${devis.numero} — ${ENTREPRISE.nom}`
 
-  const attachments: { filename: string; content: Buffer }[] = [
+  const attachments: { filename: string; content: Buffer; cid?: string }[] = [
     { filename: devis.pdf_filename || `${devis.numero}.pdf`, content: devisBuffer },
   ]
   if (catalogueBuffer) {
     attachments.push({ filename: 'Catalogue portes de garage sectionnelles.pdf', content: catalogueBuffer })
+  }
+  if (logoBuffer) {
+    attachments.push({ filename: LOGO_FICHIER, content: logoBuffer, cid: LOGO_CID })
   }
 
   return {
     lead, devis,
     destinataire: lead.email,
     sujet,
-    html: emailHtml(contenu),
+    // Le mail envoyé embarque le logo ; l'aperçu (navigateur) le charge en URL.
+    html: emailHtml(contenu, logoBuffer ? `cid:${LOGO_CID}` : logoUrlPublique()),
+    htmlApercu: emailHtml(contenu, logoUrlPublique()),
     texte: emailTexte(contenu),
     attachments,
+    // Les VRAIES pièces jointes vues par le client (le logo intégré n'en est pas une).
+    piecesJointes: attachments.filter((a) => !a.cid).map((a) => a.filename),
     avecCatalogue: !!catalogueBuffer,
   }
 }

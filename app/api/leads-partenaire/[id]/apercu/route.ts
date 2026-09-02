@@ -13,8 +13,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ok: true,
       destinataire: prep.destinataire,
       sujet: prep.sujet,
-      html: prep.html,
-      pieces_jointes: prep.attachments.map((a) => a.filename),
+      html: prep.htmlApercu,
+      pieces_jointes: prep.piecesJointes,
       avec_catalogue: prep.avecCatalogue,
     })
   } catch (e) {
