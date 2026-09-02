@@ -28,6 +28,10 @@ const ENTREPRISE = {
   telephone: '01 79 72 52 25',
   email: 'contact@renov-r.com',
   site: 'www.renov-r.com',
+  // Ligne légale, reprise telle quelle du gabarit des mails de signature
+  // (validé par le gérant en août) : même pied de page sur tous les mails client.
+  legal1: 'E.U.R.L. au capital de 5000 € · SIRET 939 278 024 00012',
+  legal2: 'Assurance décennale QBE Europe · Certifié RGE',
 }
 
 function eur(v: number | null | undefined) {
@@ -73,6 +77,8 @@ function emailTexte(c: Contenu) {
     '',
     `${ENTREPRISE.nom} — ${ENTREPRISE.adresse}, ${ENTREPRISE.cp_ville}`,
     `Tél. ${ENTREPRISE.telephone} · ${ENTREPRISE.email} · ${ENTREPRISE.site}`,
+    ENTREPRISE.legal1,
+    ENTREPRISE.legal2,
   ].join('\n')
 }
 
@@ -86,8 +92,6 @@ function emailTexte(c: Contenu) {
 // dans le bucket Storage `catalogues-pdf` (comme le catalogue) : lire
 // public/ par le système de fichiers n'est pas fiable sur Vercel (les fichiers
 // statiques ne sont pas embarqués dans la fonction).
-const OR = '#D4AF37'
-const OR_CLAIR = '#E8CE7A'
 const LOGO_FICHIER = 'renov-r-logo-noir-dore.jpg'
 const LOGO_CID = 'logo-renov-r'
 
@@ -98,34 +102,98 @@ function logoUrlPublique() {
   return `${base}/images/${LOGO_FICHIER}`
 }
 
+// Même gabarit que les mails de signature électronique (DocuSeal, validé par
+// le gérant en août 2026) : tableau (rendu identique dans tous les clients
+// mail), bandeau noir + logo + liseré doré, sur-titre, titre, texte, bloc
+// doré, filet, pied de page complet. Seul le contenu change : ici le devis
+// est en pièce jointe, il n'y a pas de bouton de signature.
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+const NOIR = '#1a1a1a'
+const OR = '#c8a84e'
+const OR_FONCE = '#a6893a'
+
 function emailHtml(c: Contenu, logoSrc: string) {
-  const montant = c.montantTtc != null ? ` : <strong>${eur(c.montantTtc)} TTC</strong>` : ''
-  const p = (txt: string, dernier = false) =>
-    `<p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 ${dernier ? 0 : 16}px;">${txt}</p>`
-  return `
-<!DOCTYPE html>
+  const montant = c.montantTtc != null ? `${eur(c.montantTtc)} TTC` : ''
+  const texte = (txt: string, padding = '0 0 24px') =>
+    `<div style="font:400 16px/1.7 ${FONT};color:#333333;padding:${padding};">${txt}</div>`
+  return `<!DOCTYPE html>
 <html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px;">
-  <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
-    <div style="background: #0a0a0a; padding: 24px; text-align: center;">
-      <img src="${logoSrc}" alt="Renov-R" width="72" height="72" style="display: block; margin: 0 auto 12px; border-radius: 8px;" />
-      <p style="color: ${OR_CLAIR}; margin: 0; font-size: 14px; letter-spacing: 0.02em;">Votre devis ${c.numero}</p>
-    </div>
-    <div style="height: 3px; background: linear-gradient(90deg, ${OR}, ${OR_CLAIR}, ${OR});"></div>
-    <div style="padding: 28px 24px;">
-      <p style="font-size: 16px; color: #0a0a0a; margin: 0 0 16px;">Bonjour ${c.nom},</p>
-      ${p(`Merci pour votre demande. Voici votre devis <strong>${c.numero}</strong> pour votre ${c.produit}${montant}, en pièce jointe.`)}
-      ${c.avecCatalogue ? p('Nous y avons ajouté notre catalogue de portes sectionnelles, pour choisir finitions et coloris en toute tranquillité.') : ''}
-      ${p(`Une question, une cote à vérifier ? Répondez à cet e-mail ou appelez-nous au <strong>${ENTREPRISE.telephone}</strong> : nous vous accompagnons pour la suite.`)}
-      ${p(`Bien cordialement,<br>L'équipe ${ENTREPRISE.nom}`, true)}
-    </div>
-    <div style="background: #0a0a0a; padding: 18px 24px; border-top: 2px solid ${OR};">
-      <p style="font-size: 12px; color: #cbd5e1; margin: 0; text-align: center; line-height: 1.7;">
-        <strong style="color: ${OR_CLAIR};">${ENTREPRISE.nom}</strong> — ${ENTREPRISE.adresse}, ${ENTREPRISE.cp_ville}<br>
-        Tél. ${ENTREPRISE.telephone} · <a href="mailto:${ENTREPRISE.email}" style="color: #cbd5e1;">${ENTREPRISE.email}</a> · <a href="https://${ENTREPRISE.site}" style="color: #cbd5e1;">${ENTREPRISE.site}</a>
-      </p>
-    </div>
-  </div>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
+<title>Votre devis ${ENTREPRISE.nom}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f5f5;">
+<tr>
+<td align="center" style="padding:32px 16px;">
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;background:#ffffff;">
+
+<tr>
+<td style="background:${NOIR};padding:26px 34px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td width="58" valign="middle" style="padding-right:16px;">
+<img src="${logoSrc}" width="58" height="58" alt="RENOV-R" style="display:block;width:58px;height:58px;border:0;color:${OR};font:700 13px/58px ${FONT};letter-spacing:.06em;" />
+</td>
+<td valign="middle">
+<div style="font:700 17px/1.3 ${FONT};color:${OR};letter-spacing:.06em;">RENOV-R</div>
+<div style="font:400 13px/1.5 ${FONT};color:#9a9791;padding-top:3px;">Menuiseries sur mesure</div>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr><td style="background:${OR};font-size:0;line-height:0;height:3px;">&#160;</td></tr>
+
+<tr>
+<td style="padding:40px 34px 0;">
+
+<div style="font:600 11px/1.4 ${FONT};letter-spacing:.16em;text-transform:uppercase;color:${OR_FONCE};padding-bottom:16px;">Devis ${c.numero}</div>
+
+<div style="font:600 27px/1.28 ${FONT};color:${NOIR};padding-bottom:22px;">Votre devis est pr&#234;t</div>
+
+${texte(`Bonjour ${c.nom},`, '0 0 16px')}
+${texte(`Merci pour votre demande. Vous trouverez en pi&#232;ce jointe votre devis pour votre ${c.produit}.`, '0 0 28px')}
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td style="border-left:3px solid ${OR};background:#faf7ee;padding:16px 20px;">
+<div style="font:600 11px/1.4 ${FONT};letter-spacing:.12em;text-transform:uppercase;color:${OR_FONCE};padding-bottom:6px;">Montant</div>
+<div style="font:700 22px/1.3 ${FONT};color:${NOIR};">${montant || 'voir le devis joint'}</div>
+<div style="font:400 13px/1.6 ${FONT};color:#555555;padding-top:4px;">Devis ${c.numero} en pi&#232;ce jointe (PDF)${c.avecCatalogue ? ', accompagn&#233; de notre catalogue de portes sectionnelles' : ''}</div>
+</td>
+</tr>
+</table>
+
+${texte(`Une question, une cote &#224; v&#233;rifier&#160;? R&#233;pondez simplement &#224; ce message, ou appelez-nous au <strong style="color:${NOIR};">${ENTREPRISE.telephone}</strong>&#160;: nous vous accompagnons pour la suite.`, '34px 0 38px')}
+
+</td>
+</tr>
+
+<tr><td style="padding:0 34px;"><div style="border-top:1px solid ${OR};font-size:0;line-height:0;">&#160;</div></td></tr>
+<tr>
+<td style="padding:22px 34px 30px;">
+<div style="font:600 15px/1.6 ${FONT};color:${NOIR};">${ENTREPRISE.nom}</div>
+<div style="font:400 14px/1.8 ${FONT};color:#555555;">
+${ENTREPRISE.adresse} &#8212; ${ENTREPRISE.cp_ville}<br />
+${ENTREPRISE.telephone.replace(/ /g, '&#160;')} &#160;&#183;&#160; <a href="mailto:${ENTREPRISE.email}" style="color:${OR_FONCE};text-decoration:none;">${ENTREPRISE.email}</a> &#160;&#183;&#160; <a href="https://${ENTREPRISE.site}" style="color:${OR_FONCE};text-decoration:none;">${ENTREPRISE.site}</a>
+</div>
+<div style="font:400 12px/1.7 ${FONT};color:#8a8780;padding-top:14px;">
+${ENTREPRISE.legal1.replace(' · ', ' &#160;&#183;&#160; ')}<br />
+${ENTREPRISE.legal2.replace(' · ', ' &#160;&#183;&#160; ')}
+</div>
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
 </body>
 </html>`
 }
