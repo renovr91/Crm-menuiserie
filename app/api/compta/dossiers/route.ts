@@ -27,9 +27,24 @@ export async function GET(req: NextRequest) {
     .limit(1000)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Une facture annulée par un avoir ne compte ni comme facturée ni comme due.
+  // Une facture annulée par un avoir ne compte ni comme facturée ni comme due —
+  // mais seulement si le(s) avoir(s) COUVRENT SON MONTANT TOTAL. Un avoir
+  // partiel (ex. remise sur un reliquat de règlement) ne doit pas faire
+  // disparaître toute la facture : avant ce correctif, une facture de
+  // 9 995,92 € intégralement payée s'affichait « annulée » et barrée à cause
+  // d'un avoir de 216,30 € portant sur un simple arrondi.
+  const totalParFacture = new Map<string, number>()
+  for (const f of factures || []) totalParFacture.set(f.id, Number(f.total_ttc))
+  const avoirsParFacture = new Map<string, number>()
+  for (const f of factures || []) {
+    if (f.type === 'avoir' && f.facture_liee && f.statut !== 'brouillon') {
+      avoirsParFacture.set(f.facture_liee, (avoirsParFacture.get(f.facture_liee) || 0) + Number(f.total_ttc))
+    }
+  }
   const annulees = new Set(
-    (factures || []).filter((f) => f.type === 'avoir' && f.facture_liee).map((f) => f.facture_liee as string),
+    [...avoirsParFacture.entries()]
+      .filter(([id, montant]) => montant >= (totalParFacture.get(id) || 0) - 0.01)
+      .map(([id]) => id),
   )
 
   const ids = (factures || []).map((f) => f.id)
