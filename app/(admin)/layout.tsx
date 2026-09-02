@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/clients', label: 'Clients', icon: '👥' },
   { href: '/devis', label: 'Devis', icon: '📄' },
   { href: '/devis-claudus', label: 'Devis Claudus', icon: '⚡' },
+  { href: '/leads-partenaire', label: 'Leads partenaire', icon: '🚪' },
   { href: '/signatures', label: 'Signatures', icon: '✍️' },
   { href: '/factures', label: 'Factures', icon: '💶' },
   { href: '/pointage', label: 'Pointage', icon: '🏷️' },
