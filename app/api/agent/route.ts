@@ -856,6 +856,10 @@ export async function POST(request: Request) {
             nom: p.client_nom, adresse: p.client_adresse,
             cp: p.client_cp, ville: p.client_ville,
           },
+          // Souvent différente de l'adresse de facturation (copropriété,
+          // chantier pro) — { nom?, adresse, cp, ville }. Nécessaire pour les
+          // dossiers ANAH/MaPrimeRénov', qui exigent l'adresse du chantier.
+          adresse_livraison: p.adresse_livraison || undefined,
           acteur: 'hermes',
         })
         return NextResponse.json(corps, { status })
