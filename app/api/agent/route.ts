@@ -1511,7 +1511,7 @@ export async function POST(request: Request) {
         const limite = Math.min(100, Math.max(1, Number(p.limite ?? 20)))
         let q = supabase
           .from('leads_partenaire')
-          .select('id, nom, telephone, email, code_postal, ville, adresse, type_porte, dimensions, message, payload, created_at, devis_numero, statut, note')
+          .select('id, nom, telephone, email, code_postal, ville, adresse, type_porte, dimensions, message, payload, created_at, devis_numero, statut, note, envoi_statut, envoye_le, envoi_bloque')
           .order('created_at', { ascending: false })
           .limit(limite)
         if (p.sans_devis) q = q.is('devis_numero', null)
