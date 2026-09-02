@@ -58,6 +58,19 @@ interface Contenu {
   produit: string
   montantTtc: number | null
   avecCatalogue: boolean
+  /** Phrase libre ajoutée sous l'introduction — ex. « Ce devis remplace le
+   *  devis DC-01004… » quand on renvoie une version corrigée (02/09/2026,
+   *  supplément livraison Belgique oublié sur un premier envoi). */
+  note?: string
+}
+
+/** Options d'envoi : `note` = phrase ajoutée au mail (texte brut, échappée en HTML). */
+export interface OptionsEnvoi {
+  note?: string
+}
+
+function escHtml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function emailTexte(c: Contenu) {
@@ -66,6 +79,7 @@ function emailTexte(c: Contenu) {
     `Bonjour ${c.nom},`,
     '',
     `Merci pour votre demande. Voici votre devis ${c.numero} pour votre ${c.produit}${montant}, en pièce jointe.`,
+    ...(c.note ? ['', c.note] : []),
     ...(c.avecCatalogue
       ? ['', 'Nous y avons ajouté notre catalogue de portes sectionnelles, pour choisir finitions et coloris en toute tranquillité.']
       : []),
@@ -157,7 +171,8 @@ function emailHtml(c: Contenu, logoSrc: string) {
 <div style="font:600 27px/1.28 ${FONT};color:${NOIR};padding-bottom:22px;">Votre devis est pr&#234;t</div>
 
 ${texte(`Bonjour ${c.nom},`, '0 0 16px')}
-${texte(`Merci pour votre demande. Vous trouverez en pi&#232;ce jointe votre devis pour votre ${c.produit}.`, '0 0 28px')}
+${texte(`Merci pour votre demande. Vous trouverez en pi&#232;ce jointe votre devis pour votre ${c.produit}.`, c.note ? '0 0 16px' : '0 0 28px')}
+${c.note ? texte(escHtml(c.note), '0 0 28px') : ''}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
 <tr>
@@ -211,7 +226,7 @@ export interface EnvoiResultat {
  * pièces jointes) SANS rien envoyer — utilisé par l'aperçu ET par l'envoi réel,
  * pour que "ce qu'on montre" et "ce qui part" soient IDENTIQUES.
  */
-export async function preparerEnvoiLead(leadId: string) {
+export async function preparerEnvoiLead(leadId: string, options: OptionsEnvoi = {}) {
   const supabase = createAdminClient()
 
   const { data: lead, error: leadErr } = await supabase
@@ -265,6 +280,7 @@ export async function preparerEnvoiLead(leadId: string) {
     produit: produitAffiche(devis.reference),
     montantTtc: devis.montant_ttc,
     avecCatalogue: !!catalogueBuffer,
+    note: (options.note || '').trim().slice(0, 600) || undefined,
   }
   const sujet = `Votre devis ${devis.numero} — ${ENTREPRISE.nom}`
 
@@ -310,10 +326,10 @@ function transporteur() {
   })
 }
 
-export async function envoyerDevisLead(leadId: string): Promise<EnvoiResultat> {
+export async function envoyerDevisLead(leadId: string, options: OptionsEnvoi = {}): Promise<EnvoiResultat> {
   const supabase = createAdminClient()
   try {
-    const prep = await preparerEnvoiLead(leadId)
+    const prep = await preparerEnvoiLead(leadId, options)
 
     await transporteur().sendMail({
       from: `${ENTREPRISE.nom} <${ENTREPRISE.email}>`,

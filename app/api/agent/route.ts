@@ -1451,7 +1451,10 @@ export async function POST(request: Request) {
         // deux qui divergent.
         const id = String(p.id || '').trim()
         if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
-        const resultat = await envoyerDevisLead(id)
+        // `note` (optionnelle) : phrase ajoutée au mail — ex. « ce devis
+        // remplace le devis DC-xxxxx » quand on renvoie une version corrigée.
+        const note = typeof p.note === 'string' ? p.note : ''
+        const resultat = await envoyerDevisLead(id, { note })
         return NextResponse.json(resultat, { status: resultat.ok ? 200 : 400 })
       }
 
