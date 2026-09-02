@@ -76,6 +76,18 @@ function emailTexte(c: Contenu) {
   ].join('\n')
 }
 
+// Charte NOIR + DORÉ (pas le rouge du site) : même identité que les documents
+// DocuSeal (logo extrait d'un mail de signature réel, 02/09/2026). Le logo est
+// servi en dur depuis le CRM (public/images/) — jamais depuis DocuSeal, dont
+// l'URL n'est pas censée être stable dans le temps.
+const OR = '#D4AF37'
+const OR_CLAIR = '#E8CE7A'
+
+function logoUrl() {
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/+$/, '')
+  return `${base}/images/renov-r-logo-noir-dore.jpg`
+}
+
 function emailHtml(c: Contenu) {
   const montant = c.montantTtc != null ? ` : <strong>${eur(c.montantTtc)} TTC</strong>` : ''
   const p = (txt: string, dernier = false) =>
@@ -84,22 +96,23 @@ function emailHtml(c: Contenu) {
 <!DOCTYPE html>
 <html>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px;">
-  <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-    <div style="background: #0f172a; padding: 24px;">
-      <h1 style="color: white; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">RENOV-R</h1>
-      <p style="color: #94a3b8; margin: 4px 0 0; font-size: 14px;">Votre devis ${c.numero}</p>
+  <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <div style="background: #0a0a0a; padding: 24px; text-align: center;">
+      <img src="${logoUrl()}" alt="Renov-R" width="72" height="72" style="display: block; margin: 0 auto 12px; border-radius: 8px;" />
+      <p style="color: ${OR_CLAIR}; margin: 0; font-size: 14px; letter-spacing: 0.02em;">Votre devis ${c.numero}</p>
     </div>
+    <div style="height: 3px; background: linear-gradient(90deg, ${OR}, ${OR_CLAIR}, ${OR});"></div>
     <div style="padding: 28px 24px;">
-      <p style="font-size: 16px; color: #0f172a; margin: 0 0 16px;">Bonjour ${c.nom},</p>
+      <p style="font-size: 16px; color: #0a0a0a; margin: 0 0 16px;">Bonjour ${c.nom},</p>
       ${p(`Merci pour votre demande. Voici votre devis <strong>${c.numero}</strong> pour votre ${c.produit}${montant}, en pièce jointe.`)}
       ${c.avecCatalogue ? p('Nous y avons ajouté notre catalogue de portes sectionnelles, pour choisir finitions et coloris en toute tranquillité.') : ''}
       ${p(`Une question, une cote à vérifier ? Répondez à cet e-mail ou appelez-nous au <strong>${ENTREPRISE.telephone}</strong> : nous vous accompagnons pour la suite.`)}
       ${p(`Bien cordialement,<br>L'équipe ${ENTREPRISE.nom}`, true)}
     </div>
-    <div style="background: #f8fafc; padding: 16px 24px; border-top: 1px solid #e2e8f0;">
-      <p style="font-size: 12px; color: #64748b; margin: 0; text-align: center; line-height: 1.6;">
-        <strong style="color: #0f172a;">${ENTREPRISE.nom}</strong> — ${ENTREPRISE.adresse}, ${ENTREPRISE.cp_ville}<br>
-        Tél. ${ENTREPRISE.telephone} · <a href="mailto:${ENTREPRISE.email}" style="color: #64748b;">${ENTREPRISE.email}</a> · <a href="https://${ENTREPRISE.site}" style="color: #64748b;">${ENTREPRISE.site}</a>
+    <div style="background: #0a0a0a; padding: 18px 24px; border-top: 2px solid ${OR};">
+      <p style="font-size: 12px; color: #cbd5e1; margin: 0; text-align: center; line-height: 1.7;">
+        <strong style="color: ${OR_CLAIR};">${ENTREPRISE.nom}</strong> — ${ENTREPRISE.adresse}, ${ENTREPRISE.cp_ville}<br>
+        Tél. ${ENTREPRISE.telephone} · <a href="mailto:${ENTREPRISE.email}" style="color: #cbd5e1;">${ENTREPRISE.email}</a> · <a href="https://${ENTREPRISE.site}" style="color: #cbd5e1;">${ENTREPRISE.site}</a>
       </p>
     </div>
   </div>
