@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer'
 import { createAdminClient } from '@/lib/supabase'
 
 /**
@@ -143,10 +144,10 @@ export async function preparerEnvoiLead(leadId: string) {
     .from('devis-claudus-pdfs')
     .download(devis.pdf_path)
   if (pdfErr || !pdfBlob) throw new Error('Téléchargement du PDF du devis impossible')
-  const devisBase64 = Buffer.from(await pdfBlob.arrayBuffer()).toString('base64')
+  const devisBuffer = Buffer.from(await pdfBlob.arrayBuffer())
 
   const catalogueFichier = devis.reference ? CATALOGUES[devis.reference] : undefined
-  let catalogueBase64: string | null = null
+  let catalogueBuffer: Buffer | null = null
   if (catalogueFichier) {
     const { data: catBlob, error: catErr } = await supabase.storage
       .from('catalogues-pdf')
@@ -154,7 +155,7 @@ export async function preparerEnvoiLead(leadId: string) {
     // Le catalogue manquant ne doit JAMAIS bloquer l'envoi du devis : on
     // l'omet silencieusement de la pièce jointe plutôt que de faire échouer
     // tout l'envoi pour un bonus.
-    if (!catErr && catBlob) catalogueBase64 = Buffer.from(await catBlob.arrayBuffer()).toString('base64')
+    if (!catErr && catBlob) catalogueBuffer = Buffer.from(await catBlob.arrayBuffer())
   }
 
   const contenu: Contenu = {
@@ -162,15 +163,15 @@ export async function preparerEnvoiLead(leadId: string) {
     numero: devis.numero,
     produit: produitAffiche(devis.reference),
     montantTtc: devis.montant_ttc,
-    avecCatalogue: !!catalogueBase64,
+    avecCatalogue: !!catalogueBuffer,
   }
   const sujet = `Votre devis ${devis.numero} — ${ENTREPRISE.nom}`
 
-  const attachments: { filename: string; content: string }[] = [
-    { filename: devis.pdf_filename || `${devis.numero}.pdf`, content: devisBase64 },
+  const attachments: { filename: string; content: Buffer }[] = [
+    { filename: devis.pdf_filename || `${devis.numero}.pdf`, content: devisBuffer },
   ]
-  if (catalogueBase64) {
-    attachments.push({ filename: 'Catalogue portes de garage sectionnelles.pdf', content: catalogueBase64 })
+  if (catalogueBuffer) {
+    attachments.push({ filename: 'Catalogue portes de garage sectionnelles.pdf', content: catalogueBuffer })
   }
 
   return {
@@ -180,8 +181,25 @@ export async function preparerEnvoiLead(leadId: string) {
     html: emailHtml(contenu),
     texte: emailTexte(contenu),
     attachments,
-    avecCatalogue: !!catalogueBase64,
+    avecCatalogue: !!catalogueBuffer,
   }
+}
+
+// Envoi via la VRAIE boîte IONOS (contact@renov-r.com), pas Resend : le SPF du
+// domaine n'autorise que _spf-eu.ionos.com et aucun DKIM n'y est configuré
+// pour Resend (vérifié le 02/09/2026 — dig SPF/DKIM/MX sur renov-r.com). Un
+// mail "From: contact@renov-r.com" envoyé par Resend échoue l'alignement SPF
+// et atterrit probablement en spam. En passant par le vrai SMTP IONOS, le mail
+// est authentifié exactement comme un envoi manuel depuis cette boîte.
+function transporteur() {
+  const host = process.env.SMTP_HOST || 'smtp.ionos.fr'
+  const port = Number(process.env.SMTP_PORT || 587)
+  const user = process.env.SMTP_USER || ENTREPRISE.email
+  const pass = process.env.SMTP_PASSWORD
+  if (!pass) throw new Error('SMTP_PASSWORD manquante (variable d\'environnement)')
+  return nodemailer.createTransport({
+    host, port, secure: port === 465, auth: { user, pass },
+  })
 }
 
 export async function envoyerDevisLead(leadId: string): Promise<EnvoiResultat> {
@@ -189,23 +207,15 @@ export async function envoyerDevisLead(leadId: string): Promise<EnvoiResultat> {
   try {
     const prep = await preparerEnvoiLead(leadId)
 
-    const apiKey = (process.env.RESEND_API_KEY || '').trim()
-    if (!apiKey) throw new Error('RESEND_API_KEY manquante')
-
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: `${ENTREPRISE.nom} <${ENTREPRISE.email}>`,
-        reply_to: ENTREPRISE.email,
-        to: [prep.destinataire],
-        subject: prep.sujet,
-        html: prep.html,
-        text: prep.texte,
-        attachments: prep.attachments,
-      }),
+    await transporteur().sendMail({
+      from: `${ENTREPRISE.nom} <${ENTREPRISE.email}>`,
+      replyTo: ENTREPRISE.email,
+      to: prep.destinataire,
+      subject: prep.sujet,
+      html: prep.html,
+      text: prep.texte,
+      attachments: prep.attachments,
     })
-    if (!resp.ok) throw new Error(`Resend : ${await resp.text()}`)
 
     await supabase.from('leads_partenaire').update({
       envoi_statut: 'envoye', envoye_le: new Date().toISOString(), envoi_erreur: null,
