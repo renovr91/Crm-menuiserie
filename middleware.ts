@@ -109,7 +109,13 @@ function utilisateurDepuisCookie(request: NextRequest): { id: string } | null {
 }
 
 export const config = {
+  // ⚠️ `images` ajouté le 02/09 : le logo servi depuis public/images/ pour les
+  // mails leads-partenaire était redirigé vers /login (content-type text/html
+  // au lieu du JPEG) — le dossier public/images/ n'existait pas avant ce
+  // jour-là, donc rien ne l'avait révélé jusque-là. Tout public/<dossier>
+  // futur devra être ajouté ici de la même façon (le middleware ne sait pas
+  // qu'un chemin sert un fichier statique, seul son nom le dit).
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|portail|api/portail|api/signature|api/stripe|d/|api/d/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|images|login|portail|api/portail|api/signature|api/stripe|d/|api/d/).*)',
   ],
 }
