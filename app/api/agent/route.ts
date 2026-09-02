@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/activity-log'
 import { zadarma } from '@/lib/zadarma'
 import { calculerPointage } from '@/lib/pointage'
 import { creerProforma, convertirProforma } from '@/lib/proformas'
+import { envoyerDevisLead } from '@/lib/leads-partenaire-envoi'
 
 export const dynamic = 'force-dynamic'
 
@@ -1442,6 +1443,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, marques: ids.length })
       }
 
+      case 'leads_envoyer': {
+        // Envoi RÉEL du devis au client d'un lead partenaire, via jeton — pour
+        // une campagne d'envoi pilotée depuis un script (pas de session admin
+        // disponible). Même fonction que le bouton "Envoyer" du back-office
+        // (lib/leads-partenaire-envoi.ts) : une seule logique d'envoi, jamais
+        // deux qui divergent.
+        const id = String(p.id || '').trim()
+        if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+        const resultat = await envoyerDevisLead(id)
+        return NextResponse.json(resultat, { status: resultat.ok ? 200 : 400 })
+      }
+
       case 'leads_recents': {
         // Les leads du partenaire, du plus récent au plus ancien. `sans_devis`
         // = ceux qui n'ont pas encore été chiffrés : c'est ce que l'assistant
@@ -1573,7 +1586,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'commissions_apporteur',
             ],
           },
           { status: 400 }
