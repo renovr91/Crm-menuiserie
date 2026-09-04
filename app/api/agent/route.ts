@@ -1463,6 +1463,28 @@ export async function POST(request: Request) {
         return NextResponse.json(resultat, { status: resultat.ok ? 200 : 400 })
       }
 
+      case 'sms_credits': {
+        // État du compte SMS OVH (crédits restants, expéditeurs) — question
+        // gérant 04/09/2026 : « combien de crédits SMS on a ».
+        const { infosCompteSms } = await import('@/lib/ovh-sms')
+        try {
+          return NextResponse.json({ ok: true, ...(await infosCompteSms()) })
+        } catch (e) {
+          return NextResponse.json({ ok: false, erreur: e instanceof Error ? e.message : String(e) }, { status: 502 })
+        }
+      }
+
+      case 'leads_sms_rattrapage': {
+        // SMS de suivi pour les devis déjà envoyés par mail AVANT l'activation
+        // (par lots, le script boucle tant que `restants` > 0).
+        const { rattraperSmsDevis } = await import('@/lib/leads-partenaire-envoi')
+        try {
+          return NextResponse.json({ ok: true, ...(await rattraperSmsDevis(Math.min(30, Math.max(1, Number(p.limite ?? 15))))) })
+        } catch (e) {
+          return NextResponse.json({ ok: false, erreur: e instanceof Error ? e.message : String(e) }, { status: 500 })
+        }
+      }
+
       case 'sms_envoyer': {
         // SMS depuis un script (jeton) — d'abord pour TESTER le SMS de suivi des
         // devis partenaire sur le mobile du gérant (04/09/2026), même journal
@@ -1672,7 +1694,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'sms_envoyer', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
             ],
           },
           { status: 400 }

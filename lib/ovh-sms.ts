@@ -62,6 +62,14 @@ export async function sendSMS(phone: string, message: string) {
   })
 }
 
+/** État du compte SMS OVH : crédits restants, seuil d'alerte, expéditeurs… */
+export async function infosCompteSms(): Promise<Record<string, unknown>> {
+  const compte = await ovhRequest('GET', `/sms/${SERVICE}`)
+  let senders: unknown = null
+  try { senders = await ovhRequest('GET', `/sms/${SERVICE}/senders`) } catch { /* facultatif */ }
+  return { service: SERVICE, ...compte, senders, sender_configure: process.env.OVH_SMS_SENDER || null }
+}
+
 /** Mobile français (06/07, +336/+337, 00336/00337) ? Les fixes et l'étranger
  *  ne reçoivent pas de SMS : on ne tente même pas. */
 export function estMobileFrancais(phone: string | null | undefined) {

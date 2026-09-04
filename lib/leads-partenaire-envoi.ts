@@ -344,12 +344,12 @@ export function texteSmsDevis(numero: string, produit: string) {
  * pas calculer »). Actif seulement si LEADS_SMS_AUTO=1 (test validé d'abord).
  * Ne fait JAMAIS échouer l'envoi du mail : journal + statut sur le lead.
  */
-async function notifierParSms(supabase: ReturnType<typeof createAdminClient>, leadId: string,
-                              telephone: string | null, nom: string | null, numero: string, produit: string) {
-  if (process.env.LEADS_SMS_AUTO !== '1') return
+export async function notifierParSms(supabase: ReturnType<typeof createAdminClient>, leadId: string,
+                                     telephone: string | null, nom: string | null, numero: string, produit: string) {
+  if (process.env.LEADS_SMS_AUTO !== '1') return 'inactif'
   if (!estMobileFrancais(telephone)) {
     await supabase.from('leads_partenaire').update({ sms_statut: 'sans_mobile' }).eq('id', leadId)
-    return
+    return 'sans_mobile'
   }
   const message = texteSmsDevis(numero, produit)
   let statut = 'envoye', erreur: string | null = null, credits: number | null = null, tag: string | null = null
@@ -368,6 +368,46 @@ async function notifierParSms(supabase: ReturnType<typeof createAdminClient>, le
   await supabase.from('leads_partenaire').update({
     sms_statut: statut, sms_envoye_le: statut === 'envoye' ? new Date().toISOString() : null, sms_erreur: erreur,
   }).eq('id', leadId)
+  return statut
+}
+
+/**
+ * RATTRAPAGE (gérant 04/09/2026 : « envoyer les SMS sur tous les devis qu'on a
+ * envoyés ») : les leads dont le mail est parti AVANT l'activation du SMS.
+ * Par lots (`limite`) pour tenir dans le temps d'une fonction Vercel ; le
+ * script appelant boucle tant que `restants` > 0.
+ */
+export async function rattraperSmsDevis(limite = 15) {
+  const supabase = createAdminClient()
+  const { data: leads, error } = await supabase
+    .from('leads_partenaire')
+    .select('id, nom, telephone, devis_numero, source')
+    .eq('envoi_statut', 'envoye')
+    .is('sms_statut', null)
+    .not('devis_numero', 'is', null)
+    .not('telephone', 'is', null)
+    .order('envoye_le', { ascending: true })
+    .limit(200)
+  if (error) throw new Error(error.message)
+  const cands = (leads || []).filter((l) => l.source !== 'test_smtp')
+  const lot = cands.slice(0, Math.max(1, limite))
+  const nums = lot.map((l) => l.devis_numero as string)
+  const refs: Record<string, string | null> = {}
+  if (nums.length) {
+    const { data: ds } = await supabase.from('devis_claudus').select('numero, reference').in('numero', nums)
+    for (const d of ds || []) refs[d.numero] = d.reference
+  }
+  const bilan = { traites: 0, envoyes: 0, erreurs: 0, sans_mobile: 0, inactif: 0, restants: 0 }
+  for (const l of lot) {
+    const r = await notifierParSms(supabase, l.id, l.telephone, l.nom, l.devis_numero as string, produitAffiche(refs[l.devis_numero as string]))
+    bilan.traites += 1
+    if (r === 'envoye') bilan.envoyes += 1
+    else if (r === 'erreur') bilan.erreurs += 1
+    else if (r === 'sans_mobile') bilan.sans_mobile += 1
+    else bilan.inactif += 1
+  }
+  bilan.restants = Math.max(0, cands.length - lot.length)
+  return bilan
 }
 
 export async function envoyerDevisLead(leadId: string, options: OptionsEnvoi = {}): Promise<EnvoiResultat> {
