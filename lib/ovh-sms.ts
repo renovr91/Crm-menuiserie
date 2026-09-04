@@ -65,8 +65,16 @@ export async function sendSMS(phone: string, message: string) {
 /** État du compte SMS OVH : crédits restants, seuil d'alerte, expéditeurs… */
 export async function infosCompteSms(): Promise<Record<string, unknown>> {
   const compte = await ovhRequest('GET', `/sms/${SERVICE}`)
+  // Détail de chaque expéditeur : un nom listé n'est pas forcément VALIDÉ
+  // (status enable / waitingValidation / refused, et la validation par OVH).
   let senders: unknown = null
-  try { senders = await ovhRequest('GET', `/sms/${SERVICE}/senders`) } catch { /* facultatif */ }
+  try {
+    const noms: string[] = await ovhRequest('GET', `/sms/${SERVICE}/senders`)
+    senders = await Promise.all((noms || []).map(async (n) => {
+      try { return await ovhRequest('GET', `/sms/${SERVICE}/senders/${encodeURIComponent(n)}`) }
+      catch (e) { return { sender: n, erreur: e instanceof Error ? e.message : String(e) } }
+    }))
+  } catch { /* facultatif */ }
   return { service: SERVICE, ...compte, senders, sender_configure: process.env.OVH_SMS_SENDER || null }
 }
 
