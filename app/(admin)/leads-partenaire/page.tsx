@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 interface LeadPartenaire {
   id: string
@@ -23,6 +23,7 @@ interface LeadPartenaire {
   signe: boolean
   stage: string | null
   note: string | null
+  note_relance: string | null
   envoi_statut: 'envoye' | 'erreur' | 'retenu' | null
   envoye_le: string | null
   envoi_erreur: string | null
@@ -83,6 +84,9 @@ export default function LeadsPartenairePage() {
   const [search, setSearch] = useState('')
   const [statutFilter, setStatutFilter] = useState<string>('all')
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
+  const [notesLocal, setNotesLocal] = useState<Record<string, string>>({})
+  const [notesSaving, setNotesSaving] = useState<Set<string>>(new Set())
+  const notesTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [apercuLead, setApercuLead] = useState<LeadPartenaire | null>(null)
   const [apercu, setApercu] = useState<Apercu | null>(null)
   const [apercuLoading, setApercuLoading] = useState(false)
@@ -91,7 +95,17 @@ export default function LeadsPartenairePage() {
   useEffect(() => {
     fetch('/api/leads-partenaire?limit=500')
       .then((res) => res.json())
-      .then((data) => setLeads(Array.isArray(data) ? data : []))
+      .then((data) => {
+        const rows: LeadPartenaire[] = Array.isArray(data) ? data : []
+        setLeads(rows)
+        // Ne pose que les id absents : ne pas écraser une saisie en cours si
+        // la liste se recharge (ex. après un envoi de devis sur un autre lead).
+        setNotesLocal((prev) => {
+          const next = { ...prev }
+          for (const l of rows) if (!(l.id in next)) next[l.id] = l.note_relance || ''
+          return next
+        })
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -212,6 +226,26 @@ export default function LeadsPartenairePage() {
     }
   }
 
+  function handleNoteChange(id: string, value: string) {
+    setNotesLocal((prev) => ({ ...prev, [id]: value }))
+    clearTimeout(notesTimers.current[id])
+    notesTimers.current[id] = setTimeout(() => saveNote(id, value), 800)
+  }
+
+  async function saveNote(id: string, value: string) {
+    setNotesSaving((prev) => new Set(prev).add(id))
+    try {
+      await fetch(`/api/leads-partenaire/${id}/note`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: value }),
+      })
+      setLeads((prev) => prev.map((x) => x.id === id ? { ...x, note_relance: value } : x))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setNotesSaving((prev) => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -304,6 +338,7 @@ export default function LeadsPartenairePage() {
                 <th className="text-right p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Marge HT</th>
                 <th className="text-center p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">PDF</th>
                 <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Envoi</th>
+                <th className="text-left p-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Suivi / relance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -441,6 +476,20 @@ export default function LeadsPartenairePage() {
                           </div>
                         </div>
                       )}
+                    </td>
+                    <td className="p-3 text-sm">
+                      <div className="relative">
+                        <textarea
+                          value={notesLocal[l.id] ?? ''}
+                          onChange={(e) => handleNoteChange(l.id, e.target.value)}
+                          placeholder="Relancé le… / à recontacter…"
+                          rows={2}
+                          className="w-40 text-xs border rounded px-2 py-1 resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {notesSaving.has(l.id) && (
+                          <span className="absolute -top-1 -right-1 text-[10px] text-gray-400">…</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
