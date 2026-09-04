@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const supabase = createAdminClient()
     const { data: leads, error } = await supabase
       .from('leads_partenaire')
-      .select('id, created_at, nom, telephone, email, adresse, code_postal, ville, type_porte, dimensions, message, devis_numero, statut, note, envoi_statut, envoye_le, envoi_erreur, envoi_bloque, envoi_mode')
+      .select('id, created_at, nom, telephone, email, adresse, code_postal, ville, type_porte, dimensions, message, devis_numero, statut, note, envoi_statut, envoye_le, envoi_erreur, envoi_bloque, envoi_mode, sms_statut, sms_envoye_le, sms_erreur')
       .order('created_at', { ascending: false })
       .limit(limit)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -78,6 +78,9 @@ export async function GET(req: NextRequest) {
         envoi_erreur: l.envoi_erreur,
         envoi_bloque: !!l.envoi_bloque,
         envoi_mode: l.envoi_mode,
+        sms_statut: l.sms_statut,
+        sms_envoye_le: l.sms_envoye_le,
+        sms_erreur: l.sms_erreur,
       }
     })
 

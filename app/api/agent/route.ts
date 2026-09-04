@@ -1460,6 +1460,31 @@ export async function POST(request: Request) {
         return NextResponse.json(resultat, { status: resultat.ok ? 200 : 400 })
       }
 
+      case 'sms_envoyer': {
+        // SMS depuis un script (jeton) — d'abord pour TESTER le SMS de suivi des
+        // devis partenaire sur le mobile du gérant (04/09/2026), même journal
+        // que la page /sms. Mobile français seulement, message ≤ 3 SMS.
+        const { sendDevisSMS, estMobileFrancais } = await import('@/lib/ovh-sms')
+        const telephone = String(p.telephone || '').replace(/[\s.\-()]/g, '')
+        const message = String(p.message || '').trim()
+        if (!estMobileFrancais(telephone)) return NextResponse.json({ error: 'mobile français requis (06/07)' }, { status: 400 })
+        if (!message || message.length > 459) return NextResponse.json({ error: 'message vide ou > 459 caractères' }, { status: 400 })
+        let statut = 'envoye', erreur: string | null = null, credits: number | null = null, tag: string | null = null
+        try {
+          const res = await sendDevisSMS(telephone, message)
+          credits = typeof res?.totalCreditsRemoved === 'number' ? res.totalCreditsRemoved : null
+          tag = typeof res?.tag === 'string' ? res.tag : null
+        } catch (e) {
+          statut = 'erreur'
+          erreur = (e instanceof Error ? e.message : String(e)).slice(0, 300)
+        }
+        await supabase.from('sms_envoyes').insert({
+          telephone, message, envoye_par: String(p.envoye_par || 'agent (test)').slice(0, 40),
+          client_nom: p.client_nom ? String(p.client_nom).slice(0, 80) : null, statut, erreur, credits, tag,
+        })
+        return NextResponse.json({ ok: statut === 'envoye', statut, erreur, credits, longueur: message.length }, { status: statut === 'envoye' ? 200 : 502 })
+      }
+
       case 'leads_a_envoyer': {
         // Candidats à l'ENVOI AUTOMATIQUE (décision gérant 02/09/2026 soir :
         // « automatique, ça peut le faire »). Un lead est candidat si : devis
@@ -1644,7 +1669,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'sms_envoyer', 'commissions_apporteur',
             ],
           },
           { status: 400 }

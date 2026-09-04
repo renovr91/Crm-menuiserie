@@ -28,6 +28,9 @@ interface LeadPartenaire {
   envoi_erreur: string | null
   envoi_bloque: boolean
   envoi_mode: 'auto' | 'manuel' | null
+  sms_statut: 'envoye' | 'erreur' | 'sans_mobile' | null
+  sms_envoye_le: string | null
+  sms_erreur: string | null
 }
 
 interface Apercu {
@@ -384,6 +387,12 @@ export default function LeadsPartenairePage() {
                           </span>
                           {l.envoye_le && (
                             <div className="text-xs text-gray-400 mt-0.5">{formatDateHeure(l.envoye_le)}</div>
+                          )}
+                          {l.sms_statut === 'envoye' && (
+                            <div className="text-xs text-green-700 mt-0.5" title={l.sms_envoye_le ? formatDateHeure(l.sms_envoye_le) : ''}>📱 SMS envoyé</div>
+                          )}
+                          {l.sms_statut === 'erreur' && (
+                            <div className="text-xs text-red-600 mt-0.5" title={l.sms_erreur || ''}>📱 SMS en échec</div>
                           )}
                         </div>
                       ) : (

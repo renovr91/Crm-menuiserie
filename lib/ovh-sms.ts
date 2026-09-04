@@ -62,6 +62,28 @@ export async function sendSMS(phone: string, message: string) {
   })
 }
 
+/** Mobile français (06/07, +336/+337, 00336/00337) ? Les fixes et l'étranger
+ *  ne reçoivent pas de SMS : on ne tente même pas. */
+export function estMobileFrancais(phone: string | null | undefined) {
+  const t = String(phone || '').replace(/[\s.\-()]/g, '')
+  return /^(\+33|0033|0)[67]\d{8}$/.test(t)
+}
+
+// SMS TRANSACTIONNEL de suivi (« votre devis vous a été envoyé par e-mail ») :
+// le client a demandé ce devis, ce n'est pas de la prospection → pas de clause
+// STOP (elle mangerait 11 caractères et ferait passer le message à 2 SMS).
+// Demande gérant 04/09/2026. Priorité normale (rien d'urgent).
+export async function sendDevisSMS(phone: string, message: string) {
+  const sender = process.env.OVH_SMS_SENDER
+  return ovhRequest('POST', `/sms/${SERVICE}/jobs`, {
+    message,
+    receivers: [formatPhone(phone)],
+    ...(sender ? { sender } : { senderForResponse: true }),
+    noStopClause: true,
+    priority: 'medium',
+  })
+}
+
 // SMS notification (envoi devis, relances) — avec URL possible
 export async function sendNotifSMS(phone: string, message: string) {
   const sender = process.env.OVH_SMS_SENDER

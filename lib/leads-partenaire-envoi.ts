@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { createAdminClient } from '@/lib/supabase'
+import { estMobileFrancais, sendDevisSMS } from '@/lib/ovh-sms'
 
 /**
  * ENVOI DU DEVIS AU CLIENT (lead partenaire) — fonction UNIQUE, partagée entre
@@ -328,6 +329,47 @@ function transporteur() {
   })
 }
 
+/**
+ * Texte du SMS de suivi. Alphabet GSM-7 uniquement (é è à ù passent, mais pas
+ * ê â î ô û ç) pour rester dans UN SMS de 160 caractères : un caractère hors
+ * alphabet ferait basculer tout le message en 70 caractères par segment.
+ */
+export function texteSmsDevis(numero: string, produit: string) {
+  return `Renov-R : votre devis ${numero} (${produit}) vous a été envoyé par e-mail. Pensez à vérifier vos spams. Une question ? 01 79 72 52 25`
+}
+
+/**
+ * SMS « votre devis vous a été envoyé par e-mail » juste après le mail
+ * (demande gérant 04/09/2026 : « sur la boîte mail, peut-être qu'ils ne vont
+ * pas calculer »). Actif seulement si LEADS_SMS_AUTO=1 (test validé d'abord).
+ * Ne fait JAMAIS échouer l'envoi du mail : journal + statut sur le lead.
+ */
+async function notifierParSms(supabase: ReturnType<typeof createAdminClient>, leadId: string,
+                              telephone: string | null, nom: string | null, numero: string, produit: string) {
+  if (process.env.LEADS_SMS_AUTO !== '1') return
+  if (!estMobileFrancais(telephone)) {
+    await supabase.from('leads_partenaire').update({ sms_statut: 'sans_mobile' }).eq('id', leadId)
+    return
+  }
+  const message = texteSmsDevis(numero, produit)
+  let statut = 'envoye', erreur: string | null = null, credits: number | null = null, tag: string | null = null
+  try {
+    const res = await sendDevisSMS(String(telephone), message)
+    credits = typeof res?.totalCreditsRemoved === 'number' ? res.totalCreditsRemoved : null
+    tag = typeof res?.tag === 'string' ? res.tag : null
+  } catch (e) {
+    statut = 'erreur'
+    erreur = (e instanceof Error ? e.message : String(e)).slice(0, 300)
+  }
+  await supabase.from('sms_envoyes').insert({
+    telephone: String(telephone).replace(/[\s.\-()]/g, ''), message, envoye_par: 'devis partenaire (auto)',
+    client_nom: nom ? String(nom).slice(0, 80) : null, statut, erreur, credits, tag,
+  })
+  await supabase.from('leads_partenaire').update({
+    sms_statut: statut, sms_envoye_le: statut === 'envoye' ? new Date().toISOString() : null, sms_erreur: erreur,
+  }).eq('id', leadId)
+}
+
 export async function envoyerDevisLead(leadId: string, options: OptionsEnvoi = {}): Promise<EnvoiResultat> {
   const supabase = createAdminClient()
   try {
@@ -347,6 +389,13 @@ export async function envoyerDevisLead(leadId: string, options: OptionsEnvoi = {
       envoi_statut: 'envoye', envoye_le: new Date().toISOString(), envoi_erreur: null,
       envoi_mode: options.mode === 'auto' ? 'auto' : 'manuel', envoi_tentatives: 0,
     }).eq('id', leadId)
+
+    // SMS de suivi (si LEADS_SMS_AUTO=1) — jamais bloquant pour le mail.
+    try {
+      const { data: l2 } = await supabase.from('leads_partenaire').select('telephone, nom').eq('id', leadId).maybeSingle()
+      await notifierParSms(supabase, leadId, l2?.telephone ?? null, l2?.nom ?? null,
+                           prep.devis.numero, produitAffiche(prep.devis.reference))
+    } catch { /* le mail est parti : le SMS ne doit jamais faire échouer l'envoi */ }
 
     return { ok: true, destinataire: prep.destinataire, sujet: prep.sujet, avec_catalogue: prep.avecCatalogue }
   } catch (e) {
