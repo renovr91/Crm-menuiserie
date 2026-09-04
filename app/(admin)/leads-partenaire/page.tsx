@@ -86,6 +86,8 @@ export default function LeadsPartenairePage() {
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const [notesLocal, setNotesLocal] = useState<Record<string, string>>({})
   const [notesSaving, setNotesSaving] = useState<Set<string>>(new Set())
+  const [notesSavedAt, setNotesSavedAt] = useState<Record<string, string>>({})
+  const [notesError, setNotesError] = useState<Record<string, boolean>>({})
   const notesTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [apercuLead, setApercuLead] = useState<LeadPartenaire | null>(null)
   const [apercu, setApercu] = useState<Apercu | null>(null)
@@ -228,6 +230,7 @@ export default function LeadsPartenairePage() {
 
   function handleNoteChange(id: string, value: string) {
     setNotesLocal((prev) => ({ ...prev, [id]: value }))
+    setNotesError((prev) => { if (!(id in prev)) return prev; const next = { ...prev }; delete next[id]; return next })
     clearTimeout(notesTimers.current[id])
     notesTimers.current[id] = setTimeout(() => saveNote(id, value), 800)
   }
@@ -235,12 +238,15 @@ export default function LeadsPartenairePage() {
   async function saveNote(id: string, value: string) {
     setNotesSaving((prev) => new Set(prev).add(id))
     try {
-      await fetch(`/api/leads-partenaire/${id}/note`, {
+      const res = await fetch(`/api/leads-partenaire/${id}/note`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: value }),
       })
+      if (!res.ok) throw new Error(String(res.status))
       setLeads((prev) => prev.map((x) => x.id === id ? { ...x, note_relance: value } : x))
+      setNotesSavedAt((prev) => ({ ...prev, [id]: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }))
     } catch (e) {
       console.error(e)
+      setNotesError((prev) => ({ ...prev, [id]: true }))
     } finally {
       setNotesSaving((prev) => { const next = new Set(prev); next.delete(id); return next })
     }
@@ -478,17 +484,25 @@ export default function LeadsPartenairePage() {
                       )}
                     </td>
                     <td className="p-3 text-sm">
-                      <div className="relative">
-                        <textarea
-                          value={notesLocal[l.id] ?? ''}
-                          onChange={(e) => handleNoteChange(l.id, e.target.value)}
-                          placeholder="Relancé le… / à recontacter…"
-                          rows={2}
-                          className="w-40 text-xs border rounded px-2 py-1 resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        {notesSaving.has(l.id) && (
-                          <span className="absolute -top-1 -right-1 text-[10px] text-gray-400">…</span>
-                        )}
+                      <textarea
+                        value={notesLocal[l.id] ?? ''}
+                        onChange={(e) => handleNoteChange(l.id, e.target.value)}
+                        onBlur={() => {
+                          clearTimeout(notesTimers.current[l.id])
+                          saveNote(l.id, notesLocal[l.id] ?? '')
+                        }}
+                        placeholder="Relancé le… / à recontacter…"
+                        rows={2}
+                        className="w-40 text-xs border rounded px-2 py-1 resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <div className="w-40 text-[11px] mt-0.5 h-4">
+                        {notesSaving.has(l.id) ? (
+                          <span className="text-gray-500">Enregistrement…</span>
+                        ) : notesError[l.id] ? (
+                          <span className="text-red-600">❌ échec — réessaie</span>
+                        ) : notesSavedAt[l.id] ? (
+                          <span className="text-green-600">✓ Enregistré à {notesSavedAt[l.id]}</span>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
