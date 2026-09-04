@@ -642,9 +642,12 @@ export async function POST(request: Request) {
           .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'client'
         const d = new Date()
         const path = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${numero}_${safe}.pdf`
+        // upsert : un devis regénéré SOUS LE MÊME NUMÉRO (présentation corrigée, DC-01095 le
+        // 04/09/2026) doit pouvoir remplacer son PDF — sans upsert, Supabase refuse l'URL
+        // dès que l'objet existe (« URL d'upload indisponible »).
         const { data, error } = await supabase.storage
           .from('devis-claudus-pdfs')
-          .createSignedUploadUrl(path)
+          .createSignedUploadUrl(path, { upsert: true })
         if (error || !data) {
           return NextResponse.json({ error: 'URL d\'upload indisponible' }, { status: 500 })
         }
