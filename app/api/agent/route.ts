@@ -237,6 +237,35 @@ export async function POST(request: Request) {
         if (q) req = req.ilike('client_nom', `%${q}%`)
         const { data, error, count } = await req
         if (error) throw error
+
+        // RECHERCHE ÉLARGIE : la recherche exacte rend 0 résultat dès qu'une
+        // lettre change — « Avard » ne trouvait pas « Avarre », et l'assistant
+        // en concluait que le devis n'existait pas (constat gérant 05/09/2026).
+        // On retente donc sur le PRÉFIXE du mot le plus long (4 lettres), et on
+        // le DIT dans la réponse : un résultat approché ne doit jamais passer
+        // pour une correspondance exacte.
+        if (q && !offset && (data?.length ?? 0) === 0) {
+          const mot = q.split(/[\s-]+/).sort((a, b) => b.length - a.length)[0] || q
+          const prefixe = mot.slice(0, 4)
+          if (prefixe.length >= 3) {
+            const { data: approches } = await supabase
+              .from('devis_claudus')
+              .select('numero, created_at, created_by, client_nom, client_ville, reference, montant_ht, montant_ttc, marge_ht, taux_marge_pct')
+              .ilike('client_nom', `%${prefixe}%`)
+              .order('created_at', { ascending: false })
+              .limit(limit)
+            if (approches?.length) {
+              return NextResponse.json({
+                devis_claudus: approches,
+                recherche_elargie: true,
+                terme_demande: q,
+                terme_utilise: prefixe,
+                note: `Aucun devis au nom exact « ${q} ». Voici les devis dont le nom commence par « ${prefixe} » — vérifie que c'est bien le bon client avant de répondre.`,
+                ...pageMeta(approches.length, approches.length, 0, limit),
+              })
+            }
+          }
+        }
         return NextResponse.json({ devis_claudus: data, ...pageMeta(data?.length ?? 0, count, offset, limit) })
       }
 
