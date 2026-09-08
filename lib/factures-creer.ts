@@ -85,8 +85,12 @@ export async function creerBrouillonFacture(
     // c'est le même produit, au même prix, décrit pareil (décision 27/08/2026).
     // Seuls les visuels restent au devis : chemins de fichiers du VPS,
     // illisibles d'ici, et sans place sur un document comptable.
+    // > 0 excluait aussi les remises (lignes à prix négatif, ex. « Remise
+    // exceptionnelle -20% » à -523,10 €) : le brouillon perdait la remise du
+    // devis sans rien signaler (DC-01059, 08/09/2026). Seules les lignes à
+    // prix EXACTEMENT nul (offert/inclus) doivent sauter.
     lignes = (devis.lignes as Record<string, any>[])
-      .filter((l) => Number(l.prix_unitaire_ht) > 0)
+      .filter((l) => Number(l.prix_unitaire_ht) !== 0)
       .map((l) => ({
         designation: String(l.designation || 'Prestation'),
         ...(l.details ? { details: String(l.details) } : {}),
