@@ -1600,6 +1600,58 @@ export async function POST(request: Request) {
         return NextResponse.json({ leads: data || [] })
       }
 
+      case 'lead_du_devis': {
+        // « À QUI ce devis a-t-il été envoyé ? » — le PDF ne porte jamais l'e-mail
+        // (nom, adresse postale et téléphone seulement) et le lien client↔devis vit
+        // sur le LEAD, souvent resté sur un numéro de devis ANTÉRIEUR : chercher par
+        // le numéro du jour ne donne rien. On remonte donc par le CLIENT (téléphone
+        // d'abord, à défaut le nom) et on renvoie TOUTES ses demandes partenaire avec
+        // leur trace d'envoi. LECTURE SEULE : rien ne part d'ici (décision gérant
+        // 09/09/2026 — l'assistant consulte, c'est l'humain qui envoie).
+        const numero = String(p.devis || '').trim()
+        const tel = normalisePhone(String(p.telephone || ''))
+        const nom = String(p.client || '').trim()
+        if (!numero && !tel && !nom) {
+          return NextResponse.json({ error: 'devis, telephone ou client requis' }, { status: 400 })
+        }
+
+        let devis: Record<string, unknown> | null = null
+        if (numero) {
+          const { data } = await supabase
+            .from('devis_claudus')
+            .select('numero, client_nom, client_telephone, client_email, client_ville, client_cp, reference, montant_ttc, created_at')
+            .eq('numero', numero)
+            .maybeSingle()
+          devis = data || null
+          if (!devis) return NextResponse.json({ devis: null, leads: [], motif: 'devis_introuvable' })
+        }
+
+        const telCherche = tel || normalisePhone(String(devis?.client_telephone || ''))
+        const nomCherche = nom || String(devis?.client_nom || '')
+        let q = supabase
+          .from('leads_partenaire')
+          .select('id, created_at, source, nom, email, telephone, adresse, code_postal, ville, type_porte, dimensions, devis_numero, statut, envoi_statut, envoye_le, envoi_mode, envoi_bloque, sms_statut, sms_envoye_le')
+          .order('created_at', { ascending: false })
+          .limit(20)
+        // le téléphone identifie mieux qu'un nom (casse, accents, « (saidi) »…)
+        if (telCherche) q = q.eq('telephone', telCherche)
+        else if (nomCherche) q = q.ilike('nom', `%${nomCherche}%`)
+        const { data: leads, error } = await q
+        if (error) return NextResponse.json({ error: 'lecture_impossible' }, { status: 500 })
+
+        // Le destinataire déjà utilisé : la SEULE adresse qu'on peut affirmer,
+        // celle d'un lead à qui un devis est réellement parti.
+        const envoyes = (leads || []).filter((l) => l.envoi_statut === 'envoye' && l.email)
+        return NextResponse.json({
+          devis,
+          leads: leads || [],
+          destinataire_connu: envoyes[0]?.email ?? null,
+          destinataire_source: envoyes[0]
+            ? { lead_id: envoyes[0].id, devis_numero: envoyes[0].devis_numero, envoye_le: envoyes[0].envoye_le }
+            : null,
+        })
+      }
+
       case 'leads_journal': {
         // Journal des appels du webhook (acceptés ET refusés) : répond à « le
         // partenaire a-t-il envoyé ? » sans aller lire les logs de l'hébergeur.
@@ -1723,7 +1775,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'lead_du_devis', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
             ],
           },
           { status: 400 }
