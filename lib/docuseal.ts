@@ -65,6 +65,15 @@ async function get(path: string) {
 }
 
 /**
+ * UNE submission par son id. Sert au webhook : le payload d'un événement DocuSeal
+ * ne porte PAS le nom de la demande (donc pas le n° de devis) — il faut aller le
+ * lire à la source. Lecture seule, comme tout ce module.
+ */
+export async function getSubmission(id: number): Promise<Submission> {
+  return get(`/submissions/${id}`)
+}
+
+/**
  * Liste les submissions (pagination par curseur `after`).
  * maxPages borne l'appel : le compte tourne à ~15 envois, on ne boucle pas à l'infini.
  */

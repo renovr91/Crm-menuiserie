@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const submissionId = Number(data.submission_id ?? submission.id ?? data.id ?? 0)
   const nom = String(submission.name ?? data.name ?? data.template_name ?? '')
   const titre = String(submission.name ?? (data.template as Record<string, unknown>)?.name ?? nom ?? '')
-  const numero = (/DC-\d+/i.exec(titre || nom || '') || [])[0]?.toUpperCase() || null
+  let numero = (/DC-\d+/i.exec(titre || nom || '') || [])[0]?.toUpperCase() || null
 
   // On ne notifie qu'à la signature effective.
   const estSigne =
@@ -46,6 +46,24 @@ export async function POST(request: NextRequest) {
     submission.status === 'completed'
   if (!estSigne) {
     return NextResponse.json({ ok: true, ignore: evenement || 'evenement non pertinent' })
+  }
+
+  // LE NUMÉRO DE DEVIS NE VIENT PAS DU PAYLOAD (constat 10/09/2026) : sur
+  // `form.completed`, `data` est le SIGNATAIRE et `data.submission` ne porte ni
+  // `name` ni template — le nom de la demande (« Devis DC-01059 — … »), lui, n'existe
+  // que chez DocuSeal. Sans numéro, la signature n'était rattachée à rien : aucun
+  // dossier ne s'ouvrait, le pointage bancaire n'avait rien à faire avancer, et
+  // rien n'annonçait qu'il y avait à facturer. On va donc le lire à la source.
+  if (!numero && submissionId) {
+    try {
+      const { getSubmission, extractNumero } = await import('@/lib/docuseal')
+      numero = extractNumero((await getSubmission(submissionId))?.name)
+    } catch (e) {
+      // DocuSeal injoignable ou clé absente : on continue SANS numéro — la
+      // notification de signature doit partir quoi qu'il arrive. Le défaut de
+      // rattachement est signalé plus bas comme les autres soucis.
+      console.error('[docuseal webhook] numéro illisible', submissionId, e)
+    }
   }
 
   const supabase = createAdminClient()
