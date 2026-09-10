@@ -1292,6 +1292,72 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, virement: id, devis, montant: op.montant })
       }
 
+      case 'dossier_ouvrir': {
+        // RATTRAPAGE : ouvrir le dossier d'un devis SIGNÉ dont la signature n'a
+        // pas ouvert de dossier. Le cas est arrivé en masse : le webhook DocuSeal
+        // enregistrait les signatures sans numéro de devis (le payload ne le porte
+        // pas), donc sans dossier — et sans dossier, le pointage bancaire n'avance
+        // rien et plus rien n'annonce qu'il y a à facturer (constat 10/09/2026).
+        // La cause est corrigée ; ceci répare l'existant et servira au prochain
+        // trou de la chaîne.
+        //
+        // FAIL-CLOSED : pas de signature enregistrée = pas de dossier. Un dossier
+        // ouvert sans contrat signé ferait commander de la marchandise pour rien.
+        const ref = String(p.devis_numero || '').toUpperCase().trim()
+        if (!/^DC-\d{3,6}$/.test(ref)) {
+          return NextResponse.json({ error: 'devis_numero (DC-xxxxx) requis' }, { status: 400 })
+        }
+        const { data: existe } = await supabase
+          .from('commandes').select('id, stage').eq('devis_numero', ref).maybeSingle()
+        if (existe) {
+          return NextResponse.json({ ok: true, deja_ouvert: true, devis_numero: ref, etape: existe.stage })
+        }
+        const { data: devis } = await supabase
+          .from('devis_claudus')
+          .select('numero, client_nom, reference, montant_ttc')
+          .eq('numero', ref).maybeSingle()
+        if (!devis) return NextResponse.json({ error: `Devis ${ref} introuvable` }, { status: 404 })
+
+        const { data: sig } = await supabase
+          .from('devis_signatures')
+          .select('submission_id, statut, signed_at')
+          .eq('numero', ref).eq('statut', 'signe').maybeSingle()
+        if (!sig && !p.forcer) {
+          return NextResponse.json(
+            { error: `Aucune signature enregistrée pour ${ref}. Un dossier s'ouvre à la signature.` },
+            { status: 409 })
+        }
+
+        // Déjà payé ? Le dossier naît alors directement « à commander » : c'est
+        // l'étape qui déclenche le rappel quotidien jusqu'à la commande fournisseur.
+        const { data: virement } = await supabase
+          .from('operations_bancaires')
+          .select('date_operation, montant')
+          .eq('devis_numero', ref).not('pointee_le', 'is', null).gt('montant', 0)
+          .order('date_operation', { ascending: true }).limit(1).maybeSingle()
+
+        const { data: client } = await supabase
+          .from('clients').select('id').ilike('nom', devis.client_nom || '').limit(1).maybeSingle()
+
+        const { error } = await supabase.from('commandes').insert({
+          devis_numero: ref,
+          client_id: client?.id ?? null,
+          designation: devis.reference || `Devis ${ref}`,
+          montant_ttc: devis.montant_ttc != null ? Number(devis.montant_ttc) : null,
+          stage: virement ? 'a_commander' : 'signe',
+          status: 'en_attente',
+          ...(virement ? { paye_le: virement.date_operation, paye_via: 'virement' } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({
+          ok: true, devis_numero: ref, client: devis.client_nom,
+          etape: virement ? 'a_commander' : 'signe',
+          signe_le: sig?.signed_at ?? null,
+          paiement_pointe: virement ? Number(virement.montant) : null,
+        })
+      }
+
       case 'facture_paiement': {
         // ENCAISSEMENT D'UNE FACTURE ÉMISE. Le moteur avait déjà la RPC
         // `facture_saisir_paiement` et le garde-fou l'attendait — rien ne
@@ -1775,7 +1841,7 @@ export async function POST(request: Request) {
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
               'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
-              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'lead_du_devis', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
+              'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'lead_du_devis', 'dossier_ouvrir', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
             ],
           },
           { status: 400 }
