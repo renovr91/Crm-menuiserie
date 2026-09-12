@@ -1517,6 +1517,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
+      case 'qonto_justificatifs': {
+        // LECTURE des pièces jointes d'une opération : c'est là que vivent les
+        // factures clientes, attachées au virement et non stockées dans le CRM.
+        // Sans cette action, rapprocher devis / facture / encaissement obligeait
+        // à ouvrir Qonto opération par opération à la main.
+        const login = (process.env.QONTO_LOGIN || '').trim()
+        const secret = (process.env.QONTO_SECRET_KEY || '').trim()
+        if (!login || !secret) return NextResponse.json({ error: 'qonto_non_configure' }, { status: 503 })
+        const txId = String(p.transaction_id || '').trim()
+        if (!txId) return NextResponse.json({ error: 'transaction_id requis' }, { status: 400 })
+        const r = await fetch(
+          `https://thirdparty.qonto.com/v2/transactions/${encodeURIComponent(txId)}/attachments`,
+          { headers: { Authorization: `${login}:${secret}` }, cache: 'no-store' }
+        )
+        if (!r.ok) return NextResponse.json({ error: `qonto_${r.status}` }, { status: 502 })
+        const d = await r.json()
+        return NextResponse.json({
+          justificatifs: ((d.attachments as Record<string, unknown>[] | undefined) || []).map((a) => ({
+            id: a.id,
+            nom: a.file_name,
+            taille: a.file_size,
+            cree_le: a.created_at,
+            url: a.url,
+          })),
+        })
+      }
+
       // ---- Leads partenaire (webhook externe) ---------------------------
       case 'leads_a_signaler': {
         // Les leads pas encore annoncés sur Telegram (cron veille-leads).
@@ -1839,7 +1866,7 @@ export async function POST(request: Request) {
               'next_devis_claudus_number', 'devis_claudus_upload_url', 'visuel_devis_upload_url', 'create_devis_claudus',
               'zadarma_postes', 'zadarma_enregistrement',
               'virements_a_signaler', 'virement_signale', 'virement_pointer',
-              'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe',
+              'facture_paiement', 'qonto_transactions', 'qonto_piece_jointe', 'qonto_justificatifs',
               'proforma_creer', 'proforma_convertir', 'proforma_lister', 'proforma_supprimer',
               'leads_a_signaler', 'leads_signale', 'lead_maj', 'leads_envoyer', 'leads_a_envoyer', 'lead_du_devis', 'dossier_ouvrir', 'sms_envoyer', 'sms_credits', 'leads_sms_rattrapage', 'commissions_apporteur',
             ],
