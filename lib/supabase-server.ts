@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { fetchAvecRelance } from './supabase-fetch'
 
 export async function createServerSupabase() {
   const cookieStore = await cookies()
@@ -7,6 +8,7 @@ export async function createServerSupabase() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: fetchAvecRelance },
       cookies: {
         getAll() {
           return cookieStore.getAll()
