@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { timingSafeEqual, createHash } from 'crypto'
 import { createAdminClient } from '@/lib/supabase'
-import { creerBrouillonFacture } from '@/lib/factures-creer'
+import { creerBrouillonFacture, refaireBrouillonFacture } from '@/lib/factures-creer'
 import { avancerCommande } from '@/lib/commandes-avancer'
 import { logActivity } from '@/lib/activity-log'
 import { zadarma } from '@/lib/zadarma'
@@ -1005,6 +1005,20 @@ export async function POST(request: Request) {
 
       // Suppression d'un BROUILLON — le « annule » du flux secrétaire. Le WHERE
       // sur le statut rend l'action inoffensive sur une facture émise.
+      // REFAIRE un brouillon avec les règles actuelles (rang et solde des
+      // acomptes, formule du solde, mention ACQUITTÉE) : le nouveau est créé à
+      // côté de l'ancien, qu'on supprime APRÈS avoir vérifié le PDF. Jamais
+      // une facture émise.
+      case 'facture_brouillon_refaire': {
+        const { status, corps } = await refaireBrouillonFacture(supabase, {
+          facture_id: p.facture_id,
+          regle_le: p.regle_le || undefined,
+          regle_par: p.regle_par || undefined,
+          acteur: 'hermes',
+        })
+        return NextResponse.json(corps, { status })
+      }
+
       case 'facture_brouillon_supprimer': {
         const fid = String(p.facture_id || '')
         if (!fid) return NextResponse.json({ error: 'facture_id requis' }, { status: 400 })

@@ -24,6 +24,121 @@ const TVA_ADMISES = [0, 5.5, 10, 20]
 export const MOTIF_AUTOLIQUIDATION =
   'Autoliquidation : TVA due par le preneur assujetti (article 283-2 nonies du CGI)'
 
+const arr2 = (n: number) => Math.round(n * 100) / 100
+
+/** Pourcentage à la française : virgule, 2 décimales au plus (« 30,32 »). */
+export function pctFr(v: number): string {
+  return arr2(Number(v) || 0).toFixed(2).replace(/\.?0+$/, '').replace('.', ',')
+}
+
+/** L'intitulé d'une ligne d'acompte : rang, pourcentage à la française, objet. */
+export function intituleAcompte(rang: number, pct: number, resume: string, devisNumero = ''): string {
+  return `Acompte n° ${rang} de ${pctFr(pct)} % sur ${resume || 'la commande'}` +
+    `${devisNumero ? `, selon devis ${devisNumero} accepté` : ''}`
+}
+
+/** CHANTIER (solde à l'achèvement des travaux) ou simple fourniture ?
+ *  Le devis en base ne suffit pas : une commande d'une référence externe
+ *  (ProDevis, COM…) n'en a pas, et ses acomptes sortaient « avant la
+ *  livraison », pose comprise (KAB, 21/10/2026). Sont un chantier : un devis
+ *  avec pose, une catégorie mixte ou prestation, l'autoliquidation
+ *  (sous-traitance de travaux), ou une ligne de pose. */
+export function estChantier(o: {
+  aPoseDevis?: boolean; categorie?: string | null; autoliquidation?: boolean
+  motifTvaZero?: string | null; lignes?: { designation?: string }[]
+}): boolean {
+  if (o.aPoseDevis) return true
+  if (o.categorie === 'mixte' || o.categorie === 'services') return true
+  if (o.autoliquidation || /autoliquidation|283-2 nonies/i.test(String(o.motifTvaZero || ''))) return true
+  return (o.lignes || []).some((l) => {
+    const d = String(l.designation || '')
+    return /\bpose\b|\binstallation\b|main[- ]d['’](œ|oe)uvre/i.test(d) && !/\b(hors|sans) pose\b/i.test(d)
+  })
+}
+
+const MODES_REGLEMENT: Record<string, string> = {
+  virement: 'virement', cheque: 'chèque', 'chèque': 'chèque', especes: 'espèces', 'espèces': 'espèces',
+  cb: 'carte bancaire', cb_monetico: 'carte bancaire', prelevement: 'prélèvement',
+}
+
+/** Règlement DÉJÀ ENCAISSÉ déclaré à la création (regle_le / regle_par) :
+ *  imprime « FACTURE ACQUITTÉE le … par … » au lieu d'un net à payer. */
+export function reglementDeclare(
+  regleLe: unknown, reglePar: unknown, montantTtc: number,
+): { reglement?: Record<string, unknown>; erreur?: string } {
+  const date = String(regleLe || '').trim()
+  if (!date) return {}
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+    return { erreur: `regle_le invalide : ${date} (AAAA-MM-JJ attendu)` }
+  }
+  if (date > new Date().toISOString().slice(0, 10)) {
+    return { erreur: `regle_le dans le futur (${date}) : un règlement à venir n'acquitte pas la facture` }
+  }
+  const par = String(reglePar || 'virement').trim()
+  return {
+    reglement: {
+      acquittee: true, date,
+      mode: MODES_REGLEMENT[par.toLowerCase()] || par,
+      montant_ttc: arr2(montantTtc),
+    },
+  }
+}
+
+export function conditionsAcquittee(type: string, r: { date?: unknown; mode?: unknown }): string {
+  const quand = new Date(String(r.date)).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' })
+  return `${type === 'acompte' ? 'Acompte réglé' : 'Facture réglée'} par ${r.mode} le ${quand}`
+}
+
+type Precedent = { rang: number; numero: string | null; date: string | null; ttc: number; id: string }
+
+/** LES ACOMPTES DÉJÀ FACTURÉS sur la même origine (devis ou référence
+ *  externe), avant celui qu'on crée : émis ou encore en brouillon (un
+ *  brouillon supprimé n'existe plus), sauf ceux annulés par un avoir émis.
+ *  Ordre : date du versement, puis date de création. Sans eux le « solde
+ *  restant » d'un 2e ou 3e acompte ignorait les précédents (KAB COM00475). */
+export async function acomptesPrecedents(
+  supabase: SupabaseClient,
+  o: { origine: string; environnement: string; dateVente: string; exclure?: string; creeAvant?: string },
+): Promise<{ precedents: Precedent[]; deja: number }> {
+  if (!o.origine) return { precedents: [], deja: 0 }
+  const { data, error } = await supabase
+    .from('factures')
+    .select('id, numero, statut, date_vente, created_at, total_ttc, mentions, lignes')
+    .eq('devis_numero', o.origine)
+    .eq('type', 'acompte')
+    .eq('environnement', o.environnement)
+  if (error) throw new Error(`Lecture des acomptes précédents impossible : ${error.message}`)
+  const rows = (data || []).filter((f) => f.id !== o.exclure)
+  let annulees = new Set<string>()
+  if (rows.length) {
+    const { data: av } = await supabase
+      .from('factures').select('facture_liee')
+      .eq('type', 'avoir').neq('statut', 'brouillon')
+      .in('facture_liee', rows.map((f) => f.id))
+    annulees = new Set((av || []).map((a) => String(a.facture_liee)))
+  }
+  const avant = rows
+    .filter((f) => !annulees.has(f.id))
+    .filter((f) => {
+      const d = String(f.date_vente || String(f.created_at).slice(0, 10))
+      if (d !== o.dateVente) return d < o.dateVente
+      return !o.creeAvant || String(f.created_at) < o.creeAvant
+    })
+    .sort((a, b) =>
+      String(a.date_vente || '').localeCompare(String(b.date_vente || '')) ||
+      String(a.created_at).localeCompare(String(b.created_at)))
+  const precedents = avant.map((f, i) => {
+    const ttc = f.total_ttc != null
+      ? Number(f.total_ttc)
+      : f.mentions?.acompte?.facture_ttc != null
+        ? Number(f.mentions.acompte.facture_ttc)
+        : ((f.lignes || []) as Ligne[]).reduce(
+            (s, l) => s + (Number(l.quantite) || 1) * Number(l.prix_unitaire_ht) * (1 + Number(l.tva ?? 20) / 100), 0)
+    return { rang: i + 1, id: f.id as string, numero: (f.numero as string) || null, date: (f.date_vente as string) || null, ttc: arr2(ttc) }
+  })
+  return { precedents, deja: arr2(precedents.reduce((s, p) => s + p.ttc, 0)) }
+}
+
 
 export async function creerBrouillonFacture(
   supabase: SupabaseClient,
@@ -183,7 +298,31 @@ export async function creerBrouillonFacture(
     // beaucoup de devis anciens n'ont simplement pas ce bloc, alors que la
     // marchandise a bien été livrée.
     const retraitDemande = body.retrait === true || String(body.remise || '') === 'retrait'
-    const remise = aPoseDevis ? 'chantier' : retraitDemande ? 'retrait' : 'livraison'
+    const chantier = estChantier({
+      aPoseDevis, categorie: body.categorie_operation, autoliquidation: body.autoliquidation === true,
+      motifTvaZero: body.motif_tva_zero, lignes,
+    })
+    const remise = chantier ? 'chantier' : retraitDemande ? 'retrait' : 'livraison'
+
+    // Les acomptes DÉJÀ facturés sur la même origine : ils fixent le rang
+    // (« Acompte n° 2 ») et se déduisent du reste dû.
+    const origine = devisNumero || String(body.reference_externe || '').trim()
+    let prec: Awaited<ReturnType<typeof acomptesPrecedents>>
+    try {
+      prec = await acomptesPrecedents(supabase, {
+        origine, environnement,
+        dateVente: String(body.date_vente || new Date().toISOString().slice(0, 10)),
+      })
+    } catch (e) {
+      return reponse({ error: e instanceof Error ? e.message : String(e) }, 500)
+    }
+    const rang = prec.precedents.length + 1
+    const resteTtc = arrondi(baseTtc - prec.deja - acompteTtc)
+    if (resteTtc < -0.01) {
+      return reponse({
+        error: `Acompte n° ${rang} : ${acompteTtc} € + ${prec.deja} € déjà facturés dépassent la commande (${arrondi(baseTtc)} € TTC)`,
+      }, 400)
+    }
 
     mentions = {
       acompte: {
@@ -193,7 +332,10 @@ export async function creerBrouillonFacture(
         commande_ht: arrondi(baseHt),
         commande_ttc: arrondi(baseTtc),
         facture_ttc: acompteTtc,
-        reste_ttc: arrondi(baseTtc - acompteTtc),
+        rang,
+        precedents: prec.precedents.map(({ rang: r, numero, date, ttc }) => ({ rang: r, numero, date, ttc })),
+        deja_facture_ttc: prec.deja,
+        reste_ttc: resteTtc,
       },
     }
 
@@ -202,19 +344,9 @@ export async function creerBrouillonFacture(
     // CGI). Le document doit donc dire qu'il est payé et afficher un net à
     // payer nul — sans quoi le client lit « TOTAL TTC 601,50 € » comme une
     // somme réclamée. C'est aussi sa preuve de paiement.
-    const regleLe = String(body.regle_le || '').trim()
-    if (regleLe) {
-      const modes: Record<string, string> = {
-        virement: 'virement', cheque: 'chèque', especes: 'espèces',
-        cb: 'carte bancaire', prelevement: 'prélèvement',
-      }
-      mentions.reglement = {
-        acquittee: true,
-        date: regleLe,
-        mode: modes[String(body.regle_par || 'virement')] || String(body.regle_par),
-        montant_ttc: acompteTtc,
-      }
-    }
+    const regl = reglementDeclare(body.regle_le, body.regle_par, acompteTtc)
+    if (regl.erreur) return reponse({ error: regl.erreur }, 400)
+    if (regl.reglement) mentions.reglement = regl.reglement
 
     // La désignation doit IDENTIFIER LE PRODUIT, pas seulement le pourcentage :
     // « Acompte 50 % sur devis DC-00925 » ne dit pas ce qui est vendu.
@@ -241,8 +373,7 @@ export async function creerBrouillonFacture(
     const resume = objets.length > 2
       ? `${objets.slice(0, 2).join(', ')} et ${objets.length - 2} autre(s) poste(s)`
       : objets.join(' et ')
-    const intitule = `Acompte ${pct} % sur ${resume || 'la commande'}` +
-      `${devisNumero ? `, selon devis ${devisNumero} accepté` : ''}`
+    const intitule = intituleAcompte(rang, pct, resume, devisNumero)
     lignes = taux.map((t, i) => ({
       designation: plusieursTaux ? `${intitule} — part TVA ${t} %` : intitule,
       // Le descriptif ne se répète pas : il porte sur la commande entière.
@@ -383,6 +514,15 @@ export async function creerBrouillonFacture(
     }, 400)
   }
 
+  // FACTURE DÉJÀ RÉGLÉE (petite facture soldée, encaissement antérieur) :
+  // même mécanique que l'acompte — « FACTURE ACQUITTÉE le … par … ».
+  if (type !== 'acompte' && type !== 'avoir' && body.regle_le) {
+    const ttc = lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht * (1 + Number(l.tva) / 100), 0)
+    const regl = reglementDeclare(body.regle_le, body.regle_par, ttc)
+    if (regl.erreur) return reponse({ error: regl.erreur }, 400)
+    if (regl.reglement) mentions = { ...(mentions || {}), reglement: regl.reglement }
+  }
+
   const aujourdhui = new Date().toISOString().slice(0, 10)
   const aPose = aPoseDevis
 
@@ -416,8 +556,7 @@ export async function creerBrouillonFacture(
     conditions_reglement: avoirDe
       ? `Annule et remplace la facture ${avoirDe.numero}`
       : mentions?.reglement
-        ? `Acompte réglé par ${mentions.reglement.mode} le ` +
-          new Date(mentions.reglement.date).toLocaleDateString('fr-FR')
+        ? conditionsAcquittee(type, mentions.reglement)
         : body.conditions_reglement || devis?.conditions_reglement || 'Paiement à réception de facture',
     ...(mentions ? { mentions } : {}),
   }
@@ -442,4 +581,122 @@ export async function creerBrouillonFacture(
     total_ht: Math.round(totalHt * 100) / 100,
     total_ttc: Math.round(totalTtc * 100) / 100,
     message: 'Brouillon créé. Il n’a PAS de numéro : il reste à émettre.',
-  }, 200)}
+  }, 200)
+}
+
+/**
+ * REFAIRE UN BROUILLON avec les règles actuelles (rang et solde des acomptes,
+ * formule du solde, mention ACQUITTÉE), sans rien perdre de ce qu'il porte.
+ *
+ * POURQUOI : un brouillon d'acompte ne garde pas les lignes de la commande
+ * (seulement l'avance et son descriptif) — on ne peut donc pas le recréer par
+ * `creerBrouillonFacture`. Ici, montants, client, dates et descriptif sont
+ * repris À L'IDENTIQUE ; seuls l'intitulé, le récapitulatif (`mentions`) et
+ * les conditions de règlement sont recalculés. Le nouveau brouillon est créé
+ * À CÔTÉ de l'ancien : l'appelant vérifie le PDF, PUIS supprime l'ancien —
+ * l'ancien est exclu du calcul des acomptes précédents.
+ */
+export async function refaireBrouillonFacture(
+  supabase: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<Reponse> {
+  const id = String(body.facture_id || '').trim()
+  if (!id) return reponse({ error: 'facture_id requis' }, 400)
+  const { data: f, error } = await supabase.from('factures').select('*').eq('id', id).maybeSingle()
+  if (error) return reponse({ error: error.message }, 500)
+  if (!f) return reponse({ error: `Brouillon ${id} introuvable` }, 404)
+  if (f.statut !== 'brouillon') {
+    return reponse({ error: `${f.numero || id} est émise : elle ne se refait pas (avoir)` }, 400)
+  }
+  if (!['facture', 'acompte', 'solde'].includes(f.type)) {
+    return reponse({ error: `Type ${f.type} : non pris en charge` }, 400)
+  }
+
+  let lignes = ((f.lignes || []) as Ligne[]).map((l) => ({ ...l }))
+  type Recap = Record<string, unknown> & { pct?: number; commande_ttc?: number; facture_ttc?: number; remise?: string; rang?: number; reste_ttc?: number }
+  const mentions: { acompte?: Recap; reglement?: Record<string, unknown>; [k: string]: unknown } = { ...(f.mentions || {}) }
+  const ttcLignes = lignes.reduce(
+    (s, l) => s + (Number(l.quantite) || 1) * Number(l.prix_unitaire_ht) * (1 + Number(l.tva ?? 20) / 100), 0)
+
+  if (f.type === 'acompte') {
+    const a = { ...(mentions.acompte || {}) }
+    if (!a.commande_ttc) return reponse({ error: 'Acompte sans récapitulatif de commande (mentions.acompte)' }, 400)
+    let prec: Awaited<ReturnType<typeof acomptesPrecedents>>
+    try {
+      prec = await acomptesPrecedents(supabase, {
+        origine: String(f.devis_numero || ''), environnement: f.environnement,
+        dateVente: String(f.date_vente || String(f.created_at).slice(0, 10)),
+        exclure: f.id, creeAvant: f.created_at,
+      })
+    } catch (e) {
+      return reponse({ error: e instanceof Error ? e.message : String(e) }, 500)
+    }
+    const rang = prec.precedents.length + 1
+    const factureTtc = arr2(Number(a.facture_ttc ?? ttcLignes))
+    const reste = arr2(Number(a.commande_ttc) - prec.deja - factureTtc)
+    if (reste < -0.01) {
+      return reponse({ error: `Acompte n° ${rang} : le cumul des acomptes dépasse la commande (${a.commande_ttc} € TTC)` }, 400)
+    }
+    const chantier = a.remise === 'chantier' || estChantier({
+      categorie: f.categorie_operation, motifTvaZero: f.motif_tva_zero, lignes,
+    })
+    a.remise = chantier ? 'chantier' : a.remise === 'retrait' ? 'retrait' : 'livraison'
+    a.rang = rang
+    a.precedents = prec.precedents.map(({ rang: r, numero, date, ttc }) => ({ rang: r, numero, date, ttc }))
+    a.deja_facture_ttc = prec.deja
+    a.facture_ttc = factureTtc
+    a.reste_ttc = reste
+    mentions.acompte = a
+    // L'intitulé suit le rang ; le pourcentage s'écrit à la française.
+    const PREFIXE = /^Acompte(?: n° \d+)?(?: de)? [\d.,]+ ?%/
+    lignes = lignes.map((l) => ({
+      ...l,
+      designation: PREFIXE.test(l.designation)
+        ? l.designation.replace(PREFIXE, `Acompte n° ${rang} de ${pctFr(Number(a.pct))} %`)
+        : l.designation,
+    }))
+  }
+
+  if (body.regle_le) {
+    const montant = f.type === 'acompte' ? Number(mentions.acompte?.facture_ttc) : ttcLignes
+    const regl = reglementDeclare(body.regle_le, body.regle_par, montant)
+    if (regl.erreur) return reponse({ error: regl.erreur }, 400)
+    mentions.reglement = regl.reglement
+  }
+
+  const payload = {
+    environnement: f.environnement,
+    type: f.type,
+    devis_numero: f.devis_numero,
+    categorie_operation: f.categorie_operation,
+    ...(f.facture_liee ? { facture_liee: f.facture_liee } : {}),
+    ...(f.motif ? { motif: f.motif } : {}),
+    client: f.client,
+    ...(f.adresse_livraison ? { adresse_livraison: f.adresse_livraison } : {}),
+    lignes,
+    ...(f.motif_tva_zero ? { motif_tva_zero: f.motif_tva_zero } : {}),
+    date_vente: f.date_vente,
+    date_echeance: f.date_echeance,
+    conditions_reglement: mentions.reglement
+      ? conditionsAcquittee(f.type, mentions.reglement)
+      : f.conditions_reglement,
+    ...(Object.keys(mentions).length ? { mentions } : {}),
+  }
+  const { data: nouveau, error: eRpc } = await supabase.rpc('facture_creer_brouillon', {
+    payload, acteur: String(body.acteur || 'CRM'),
+  })
+  if (eRpc) return reponse({ error: eRpc.message }, 500)
+  return reponse({
+    ok: true,
+    facture_id: nouveau,
+    remplace: f.id,
+    type: f.type,
+    environnement: f.environnement,
+    origine: f.devis_numero,
+    ...(f.type === 'acompte'
+      ? { rang: mentions.acompte?.rang, reste_ttc: mentions.acompte?.reste_ttc, remise: mentions.acompte?.remise }
+      : {}),
+    acquittee: !!mentions.reglement,
+    message: "Nouveau brouillon créé à côté de l'ancien : vérifie son PDF, PUIS supprime l'ancien.",
+  }, 200)
+}
