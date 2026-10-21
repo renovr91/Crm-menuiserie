@@ -76,6 +76,14 @@ function borne(n: unknown, defaut: number): number {
   return Math.min(v, MAX_LIMIT)
 }
 
+// Date calendaire AAAA-MM-JJ réelle, sinon undefined (le moteur garde son défaut).
+function dateIso(v: unknown): string | undefined {
+  const s = String(v ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
+  const d = new Date(s + 'T00:00:00Z')
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? undefined : s
+}
+
 // Décalage de pagination (>= 0). Permet de remonter au-delà d'une page.
 function borneOffset(n: unknown): number {
   const v = typeof n === 'number' ? n : parseInt(String(n ?? ''), 10)
@@ -883,6 +891,13 @@ export async function POST(request: Request) {
           // client lit le total de la facture comme une somme réclamée.
           regle_le: p.regle_le || undefined,
           regle_par: p.regle_par || undefined,
+          // Date de vente — sur un acompte, c'est la date du VERSEMENT que le
+          // PDF imprime (« Versement de l'acompte : … », art. 269-2-c CGI).
+          // Sans elle, le moteur prend la date du jour : un acompte encaissé
+          // le 07/09 et facturé le 21/10 affichait 21/10 (vu le 21/10/2026).
+          // Format AAAA-MM-JJ seul accepté ; sinon défaut du moteur.
+          date_vente: dateIso(p.date_vente),
+          date_echeance: dateIso(p.date_echeance),
           // Retrait en dépôt = exception explicite ; sans mention, c'est livré.
           retrait: p.retrait === true || undefined,
           client: {
