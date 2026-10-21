@@ -21,6 +21,9 @@ type Ligne = { designation: string; details?: string; quantite: number; prix_uni
 
 const TVA_ADMISES = [0, 5.5, 10, 20]
 
+export const MOTIF_AUTOLIQUIDATION =
+  'Autoliquidation : TVA due par le preneur assujetti (article 283-2 nonies du CGI)'
+
 
 export async function creerBrouillonFacture(
   supabase: SupabaseClient,
@@ -49,11 +52,33 @@ export async function creerBrouillonFacture(
 
   // ---- 2. Le client. Ce qui est fourni gagne toujours.
   const c = body.client || {}
-  let client = {
+  // Client PROFESSIONNEL : SIREN (et TVA intracommunautaire) sont des mentions
+  // obligatoires de la facture B2B, et l'émission refuse un pro sans SIREN.
+  // Jusqu'ici ils étaient silencieusement retirés ici : aucun brouillon pro
+  // (autoliquidation KAB ISOBAT, 21/10/2026) ne pouvait donc être émis.
+  const siren = String(c.siren || '').replace(/\s/g, '')
+  const tvaIntra = String(c.tva_intra || '').replace(/\s/g, '').toUpperCase()
+  const professionnel = c.professionnel === true || !!siren
+  let client: {
+    nom: string; adresse: string; cp: string; ville: string
+    professionnel?: boolean; siren?: string; tva_intra?: string
+  } = {
     nom: String(c.nom || [devis?.client_civilite, devis?.client_nom].filter(Boolean).join(' ') || '').trim(),
     adresse: String(c.adresse || devis?.client_adresse || '').trim(),
     cp: String(c.cp || devis?.client_cp || '').trim(),
     ville: String(c.ville || devis?.client_ville || '').trim(),
+    ...(professionnel ? { professionnel: true } : {}),
+    ...(siren ? { siren } : {}),
+    ...(tvaIntra ? { tva_intra: tvaIntra } : {}),
+  }
+  if (siren && !/^\d{9}$/.test(siren)) {
+    return reponse({ error: `SIREN invalide : ${siren} (9 chiffres attendus)` }, 400)
+  }
+  if (tvaIntra && !/^FR[0-9A-Z]{2}\d{9}$/.test(tvaIntra)) {
+    return reponse({ error: `N° de TVA intracommunautaire invalide : ${tvaIntra}` }, 400)
+  }
+  if (siren && tvaIntra && tvaIntra.slice(4) !== siren) {
+    return reponse({ error: `Le n° de TVA ${tvaIntra} ne correspond pas au SIREN ${siren}` }, 400)
   }
   // Un AVOIR reprend le client de la facture qu'il annule : rien à fournir, et
   // rien à valider ici — la branche 'avoir' plus bas écrase ce bloc.
@@ -116,7 +141,7 @@ export async function creerBrouillonFacture(
   // et le récapitulatif de commande est figé dans `mentions`.
   const pct = Number(body.acompte_pct ?? 0)
   let mentions: Record<string, any> | null = null
-  let avoirDe: { id: string; numero: string; devis_numero: string; categorie: string } | null = null
+  let avoirDe: { id: string; numero: string; devis_numero: string; categorie: string; motif_tva_zero: string } | null = null
   if (type === 'acompte') {
     if (!(pct > 0 && pct < 100)) {
       return reponse({ error: 'Un acompte demande un pourcentage entre 1 et 99' }, 400)
@@ -240,7 +265,7 @@ export async function creerBrouillonFacture(
     }
     const { data: origine } = await supabase
       .from('factures')
-      .select('id, numero, type, client, devis_numero, categorie_operation, lignes, emise_le, statut')
+      .select('id, numero, type, client, devis_numero, categorie_operation, lignes, emise_le, statut, motif_tva_zero')
       .eq('numero', ref)
       .eq('environnement', environnement)
       .maybeSingle()
@@ -278,6 +303,8 @@ export async function creerBrouillonFacture(
       numero: origine.numero as string,
       devis_numero: (origine.devis_numero as string) || '',
       categorie: (origine.categorie_operation as string) || '',
+      // Un avoir d'une facture autoliquidée reste à TVA 0 : même justification.
+      motif_tva_zero: (origine.motif_tva_zero as string) || '',
     }
     mentions = { avoir: { annule: origine.numero, emise_le: origine.emise_le } }
   }
@@ -328,6 +355,34 @@ export async function creerBrouillonFacture(
       400)
   }
 
+  // TVA 0 % : le moteur d'émission exige le texte légal qui la justifie
+  // (motif_tva_zero), mais rien ne permettait de le fournir — le brouillon se
+  // créait, puis l'émission échouait. On l'exige ici, quand l'erreur se
+  // corrige encore sans rien défaire.
+  // AUTOLIQUIDATION (sous-traitance de travaux immobiliers, art. 283-2 nonies
+  // CGI) : la TVA est due par le preneur, assujetti identifié par son SIREN.
+  // `autoliquidation: true` pose la mention légale et exige ce SIREN.
+  const autoliquidation = body.autoliquidation === true
+  let motifTvaZero = avoirDe ? avoirDe.motif_tva_zero : String(body.motif_tva_zero || '').trim()
+  if (autoliquidation && !avoirDe) {
+    if (!client.siren) {
+      return reponse({ error: 'Autoliquidation : SIREN du client obligatoire (preneur assujetti)' }, 400)
+    }
+    const taxee = lignes.find((l) => Number(l.tva) !== 0)
+    if (taxee) {
+      return reponse({
+        error: `Autoliquidation : toutes les lignes doivent être à TVA 0 (« ${taxee.designation} » à ${taxee.tva} %)`,
+      }, 400)
+    }
+    motifTvaZero = motifTvaZero || MOTIF_AUTOLIQUIDATION
+  }
+  if (lignes.some((l) => Number(l.tva) === 0) && !motifTvaZero) {
+    return reponse({
+      error: 'Ligne à TVA 0 % : motif_tva_zero obligatoire',
+      aide: 'Passe autoliquidation: true (sous-traitance BTP, SIREN requis) ou le texte légal dans motif_tva_zero.',
+    }, 400)
+  }
+
   const aujourdhui = new Date().toISOString().slice(0, 10)
   const aPose = aPoseDevis
 
@@ -352,6 +407,7 @@ export async function creerBrouillonFacture(
     // pour être devinée sans risque.
     ...(body.adresse_livraison ? { adresse_livraison: body.adresse_livraison } : {}),
     lignes,
+    ...(motifTvaZero ? { motif_tva_zero: motifTvaZero } : {}),
     date_vente: String(body.date_vente || aujourdhui),
     date_echeance: String(body.date_echeance || aujourdhui),
     // « Paiement à réception de facture » sur une facture DÉJÀ RÉGLÉE est une

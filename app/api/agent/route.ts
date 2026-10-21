@@ -900,9 +900,20 @@ export async function POST(request: Request) {
           date_echeance: dateIso(p.date_echeance),
           // Retrait en dépôt = exception explicite ; sans mention, c'est livré.
           retrait: p.retrait === true || undefined,
+          // TVA 0 % : texte légal obligatoire à l'émission. `autoliquidation`
+          // (sous-traitance BTP, art. 283-2 nonies CGI) pose la mention et
+          // exige le SIREN du client. Sans ces champs, aucun brouillon
+          // autoliquidé créé par l'agent ne pouvait être émis (KAB, 21/10/2026).
+          motif_tva_zero: p.motif_tva_zero || undefined,
+          autoliquidation: p.autoliquidation === true || undefined,
           client: {
             nom: p.client_nom, adresse: p.client_adresse,
             cp: p.client_cp, ville: p.client_ville,
+            // Client professionnel : SIREN et TVA intracom sont des mentions
+            // B2B ; l'émission refuse un pro sans SIREN.
+            professionnel: p.client_professionnel === true || undefined,
+            siren: p.client_siren || undefined,
+            tva_intra: p.client_tva_intra || undefined,
           },
           // Souvent différente de l'adresse de facturation (copropriété,
           // chantier pro) — { nom?, adresse, cp, ville }. Nécessaire pour les
