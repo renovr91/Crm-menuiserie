@@ -1,14 +1,15 @@
 /**
  * Mistral AI client.
  * - Voxtral for audio transcription
- * - Mistral Small for summarization + structured extraction
+ * - Mistral Nemo for summarization + structured extraction
  *
  * Used server-side only.
  */
 
 const MISTRAL_API = 'https://api.mistral.ai/v1'
 const VOXTRAL_MODEL = 'voxtral-mini-2507'
-const SUMMARY_MODEL = 'mistral-small-latest'
+// mistral-small-latest est à 0 req/min sur notre offre depuis le 04/09/2026 (429 systématique)
+const SUMMARY_MODEL = 'open-mistral-nemo'
 
 function apiKey(): string {
   const k = process.env.MISTRAL_API_KEY

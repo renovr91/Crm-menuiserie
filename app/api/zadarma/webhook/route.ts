@@ -115,6 +115,12 @@ async function processRecording(pbxCallId: string, recId: string) {
 
     const tr = await transcribeAudio(audio, path)
     const source = tr.diarized || tr.text
+    // Sauvegarde la transcription avant le résumé : un échec du résumé ne doit pas la faire perdre
+    await supabase
+      .from('calls')
+      .update({ recording_url: path, transcript: source })
+      .eq('pbx_call_id', pbxCallId)
+
     let transcript = source
     let summary = ''
     let extracted: unknown = null
